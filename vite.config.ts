@@ -39,20 +39,6 @@ export default defineConfig(({mode}) => {
               icons: [{ src: 'pwa-192x192.png', sizes: '192x192', type: 'image/png', purpose: 'any' }]
             }
           ],
-          screenshots: [
-            {
-              src: 'screenshot-desktop.svg',
-              sizes: '1920x1080',
-              type: 'image/svg+xml',
-              form_factor: 'wide'
-            },
-            {
-              src: 'screenshot-mobile.svg',
-              sizes: '1080x1920',
-              type: 'image/svg+xml',
-              form_factor: 'narrow'
-            }
-          ],
           icons: [
             {
               src: 'pwa-192x192.png',
