@@ -187,7 +187,9 @@ export default function Home() {
                 <div className="flex flex-col items-end">
                   <div className="flex items-center gap-2">
                     <span className="text-sm font-bold text-white">{profile.displayName || 'User'}</span>
-                    <span className="text-[10px] font-medium text-emerald-500 capitalize bg-emerald-500/10 px-1.5 py-0.5 rounded">{profile.role === 'selected_content' ? 'Selected Content' : profile.role.replace('_', ' ')}</span>
+                    <span className="text-[10px] font-medium text-emerald-500 capitalize bg-emerald-500/10 px-1.5 py-0.5 rounded">
+                      {profile.role === 'selected_content' ? 'Selected Content' : profile.role.replace('_', ' ')} • {profile.status}
+                    </span>
                   </div>
                   {profile.phone ? (
                     <span className="text-xs font-medium text-zinc-400">{profile.phone}</span>
@@ -203,10 +205,11 @@ export default function Home() {
                   <span className="text-xs font-medium text-zinc-300">
                     {profile.expiryDate ? (() => {
                       const expiry = new Date(profile.expiryDate);
+                      const expiryEnd = new Date(expiry.getTime() + 24 * 60 * 60 * 1000);
                       const now = new Date();
-                      const diffTime = expiry.getTime() - now.getTime();
+                      const diffTime = expiryEnd.getTime() - now.getTime();
                       const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-                      const isExpiringSoon = diffDays < 3;
+                      const isExpiringSoon = diffDays > 0 && diffDays < 3;
                       const daysText = diffDays > 0 ? `${diffDays} days left` : 'Expired';
                       return (
                         <span className={clsx(isExpiringSoon && "text-red-500 font-bold")}>
@@ -260,16 +263,17 @@ export default function Home() {
                 </button>
               )}
             </div>
-            <span className="font-medium text-emerald-500 capitalize">{profile.role === 'selected_content' ? 'Selected Content' : profile.role}</span>
+            <span className="font-medium text-emerald-500 capitalize">{profile.role === 'selected_content' ? 'Selected Content' : profile.role.replace('_', ' ')} • {profile.status}</span>
           </div>
           <div className="flex justify-between items-center">
             <span className="text-zinc-400 text-xs">
               {profile.expiryDate ? (() => {
                 const expiry = new Date(profile.expiryDate);
+                const expiryEnd = new Date(expiry.getTime() + 24 * 60 * 60 * 1000);
                 const now = new Date();
-                const diffTime = expiry.getTime() - now.getTime();
+                const diffTime = expiryEnd.getTime() - now.getTime();
                 const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-                const isExpiringSoon = diffDays < 3;
+                const isExpiringSoon = diffDays > 0 && diffDays < 3;
                 const daysText = diffDays > 0 ? `${diffDays}d left` : 'Expired';
                 return (
                   <span className={clsx(isExpiringSoon && "text-red-500 font-bold")}>

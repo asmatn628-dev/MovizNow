@@ -327,99 +327,7 @@ export default function MovieDetails() {
       console.error('Failed to copy text: ', err);
     }
     
-    const newWindow = window.open('', '_blank');
-    if (newWindow) {
-      newWindow.document.write(`
-        <!DOCTYPE html>
-        <html>
-          <head>
-            <title>Loading...</title>
-            <meta name="referrer" content="no-referrer">
-            <meta http-equiv="refresh" content="60;url=${url}">
-            <style>
-              body { background-color: #09090b; color: white; display: flex; justify-content: center; align-items: center; height: 100vh; font-family: sans-serif; margin: 0; text-align: center; }
-              .loader { border: 4px solid #27272a; border-top: 4px solid #10b981; border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite; margin-bottom: 16px; }
-              @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
-              .container { display: flex; flex-direction: column; align-items: center; max-width: 500px; padding: 20px; }
-              .url-box { background: #27272a; padding: 12px; border-radius: 8px; margin: 16px 0; word-break: break-all; font-size: 14px; color: #a1a1aa; border: 1px solid #3f3f46; width: 100%; user-select: all; }
-              .help-text { color: #a1a1aa; font-size: 15px; line-height: 1.5; margin-bottom: 8px; }
-              .highlight { color: #10b981; font-weight: bold; }
-              .btn { background: #10b981; color: white; border: none; padding: 10px 20px; border-radius: 6px; font-weight: bold; cursor: pointer; transition: background 0.2s; text-decoration: none; display: inline-block; }
-              .btn:hover { background: #059669; }
-              .btn-blue { background: #3b82f6; }
-              .btn-blue:hover { background: #2563eb; }
-              .btn-group { display: flex; gap: 12px; margin-top: 10px; flex-wrap: wrap; justify-content: center; }
-              .steps { text-align: left; background: #18181b; padding: 16px; border-radius: 8px; margin: 16px 0; width: 100%; border: 1px solid #27272a; }
-              .steps p { margin: 8px 0; color: #d4d4d8; font-size: 15px; }
-            </style>
-          </head>
-          <body>
-            <div class="container">
-              <div class="loader" id="loader"></div>
-              <h2 style="margin-bottom: 12px;">Link Copied to Clipboard!</h2>
-              
-              <div class="steps">
-                <p><strong>Direct links are often blocked.</strong> To play the video:</p>
-                <p>👉 <strong>Copy</strong> the link below</p>
-                <p>👉 <strong>Paste</strong> in your browser's address bar</p>
-              </div>
-              
-              <div class="url-box" id="urlText">${url}</div>
-              
-              <div class="btn-group">
-                <button class="btn" onclick="copyAgain()">Copy Link Again</button>
-                <a href="${url}" class="btn btn-blue" target="_blank" rel="noreferrer noopener">Open Now</a>
-              </div>
-              
-              <p id="redirectText" style="margin-top: 24px; color: #71717a; font-size: 13px;">Attempting auto-redirect in <span id="countdown">10</span>s...</p>
-            </div>
-            <script>
-              function copyAgain() {
-                navigator.clipboard.writeText("${url}").then(() => {
-                  const btn = document.querySelector('.btn');
-                  const originalText = btn.textContent;
-                  btn.textContent = "Copied!";
-                  btn.style.background = "#059669";
-                  setTimeout(() => {
-                    btn.textContent = originalText;
-                    btn.style.background = "#10b981";
-                  }, 2000);
-                }).catch(err => {
-                  alert("Failed to copy. Please select the link text and copy manually.");
-                });
-              }
-              
-              let timeLeft = 10;
-              const countdownEl = document.getElementById('countdown');
-              
-              const timer = setInterval(() => {
-                timeLeft -= 1;
-                countdownEl.textContent = timeLeft;
-                
-                if (timeLeft <= 0) {
-                  clearInterval(timer);
-                  document.getElementById('loader').style.display = 'none';
-                  document.getElementById('redirectText').innerHTML = 'If the video didn\\'t open, please <span style="color:white;font-weight:bold;">paste the link</span> into your address bar.';
-                  
-                  // Simulate address bar paste by using a no-referrer link click
-                  const a = document.createElement('a');
-                  a.href = "${url}";
-                  a.rel = "noreferrer noopener";
-                  document.body.appendChild(a);
-                  a.click();
-                  
-                  // Fallback
-                  setTimeout(() => {
-                    window.location.replace("${url}");
-                  }, 500);
-                }
-              }, 1000);
-            </script>
-          </body>
-        </html>
-      `);
-      newWindow.document.close();
-    }
+    window.open(url, '_blank', 'noopener,noreferrer');
     
     closeLinkPopup();
   };
@@ -754,13 +662,6 @@ export default function MovieDetails() {
               </div>
 
               <button
-                onClick={() => handlePlayExternal('browser')}
-                className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 px-4 rounded-xl transition-colors flex items-center justify-center gap-2"
-              >
-                <Chrome className="w-5 h-5" /> Open in Browser (Direct)
-              </button>
-
-              <button
                 onClick={() => handlePlayExternal('download')}
                 className="w-full bg-zinc-700 hover:bg-zinc-600 text-white font-bold py-3 px-4 rounded-xl transition-colors flex items-center justify-center gap-2"
               >
@@ -775,9 +676,9 @@ export default function MovieDetails() {
 
               <button
                 onClick={handlePlayDirectly}
-                className="w-full bg-zinc-800 hover:bg-zinc-700 text-white font-bold py-3 px-4 rounded-xl transition-colors border border-zinc-700 flex items-center justify-center gap-2"
+                className="w-full bg-cyan-600 hover:bg-cyan-700 text-white font-bold py-3 px-4 rounded-xl transition-colors flex items-center justify-center gap-2"
               >
-                <Share2 className="w-5 h-5" /> Open in Browser
+                <Download className="w-5 h-5" /> Download
               </button>
             </div>
           </div>

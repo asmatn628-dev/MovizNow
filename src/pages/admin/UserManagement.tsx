@@ -37,12 +37,12 @@ export default function UserManagement() {
       
       // Auto-expire users whose expiry date has passed
       const now = new Date();
-      now.setHours(0, 0, 0, 0);
       data.forEach(user => {
         if (user.status === 'active' && user.expiryDate) {
           const expiryDate = new Date(user.expiryDate);
-          expiryDate.setHours(0, 0, 0, 0);
-          if (expiryDate < now) {
+          // Add 24 hours to make it expire at the end of the day
+          const expiryEnd = new Date(expiryDate.getTime() + 24 * 60 * 60 * 1000);
+          if (now > expiryEnd) {
             updateDoc(doc(db, 'users', user.uid), { status: 'expired' }).catch(console.error);
           }
         }
