@@ -1,0 +1,1243 @@
+import React, { useState, useEffect, useMemo } from 'react';
+import { db } from '../../firebase';
+import { collection, addDoc, deleteDoc, doc, updateDoc, onSnapshot, writeBatch } from 'firebase/firestore';
+import { Content, Genre, Language, Quality, QualityLinks, Season, Episode, LinkDef } from '../../types';
+import { Plus, Edit2, Trash2, Share2, Film, Tv, X, Save, Upload, Search, Eye, EyeOff, ArrowUp, ArrowDown } from 'lucide-react';
+import ConfirmModal from '../../components/ConfirmModal';
+import AlertModal from '../../components/AlertModal';
+import { handleFirestoreError, OperationType } from '../../utils/firestoreErrorHandler';
+
+export default function ContentManagement() {
+  const [contentList, setContentList] = useState<Content[]>([]);
+  const [genres, setGenres] = useState<Genre[]>([]);
+  const [languages, setLanguages] = useState<Language[]>([]);
+  const [qualities, setQualities] = useState<Quality[]>([]);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [alertConfig, setAlertConfig] = useState<{ isOpen: boolean; title: string; message: string }>({ isOpen: false, title: '', message: '' });
+
+  // Form State
+  const [type, setType] = useState<'movie' | 'series'>('movie');
+  const [status, setStatus] = useState<'draft' | 'published'>('published');
+  const [title, setTitle] = useState('');
+  const [description, setDescription] = useState('');
+  const [posterUrl, setPosterUrl] = useState('');
+  const [trailerUrl, setTrailerUrl] = useState('');
+  const [sampleUrl, setSampleUrl] = useState('');
+  const [imdbLink, setImdbLink] = useState('');
+  const [selectedGenres, setSelectedGenres] = useState<string[]>([]);
+  const [selectedLanguages, setSelectedLanguages] = useState<string[]>([]);
+  const [selectedQuality, setSelectedQuality] = useState<string>('');
+  const [cast, setCast] = useState('');
+  const [year, setYear] = useState(new Date().getFullYear());
+  
+  // Movie specific
+  const [movieLinks, setMovieLinks] = useState<QualityLinks>([]);
+  
+  // Series specific
+  const [seasons, setSeasons] = useState<Season[]>([]);
+
+  // Search States
+  const [searchTerm, setSearchTerm] = useState('');
+  const [filterType, setFilterType] = useState<'all' | 'movie' | 'series'>('all');
+  const [filterGenre, setFilterGenre] = useState<string>('all');
+  const [filterLanguage, setFilterLanguage] = useState<string>('all');
+  const [filterQuality, setFilterQuality] = useState<string>('all');
+  const [filterYear, setFilterYear] = useState<string>('all');
+  const [filterDateAdded, setFilterDateAdded] = useState<'newest' | 'oldest'>('newest');
+  const [selectedContent, setSelectedContent] = useState<string[]>([]);
+
+  const [genreSearchTerm, setGenreSearchTerm] = useState('');
+  const [languageSearchTerm, setLanguageSearchTerm] = useState('');
+
+  const [isGenreDropdownOpen, setIsGenreDropdownOpen] = useState(false);
+  const [isLanguageDropdownOpen, setIsLanguageDropdownOpen] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [fetchingImdb, setFetchingImdb] = useState(false);
+
+  useEffect(() => {
+    const unsubContent = onSnapshot(collection(db, 'content'), (snapshot) => {
+      const data = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() } as Content));
+      setContentList(data);
+      setLoading(false);
+    }, (error) => {
+      console.error("Content snapshot error:", error);
+      setLoading(false);
+      handleFirestoreError(error, OperationType.LIST, 'content');
+    });
+    const unsubGenres = onSnapshot(collection(db, 'genres'), (snapshot) => {
+      const data = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Genre));
+      setGenres(data.sort((a, b) => {
+        if (a.order !== undefined && b.order !== undefined) return a.order - b.order;
+        if (a.order !== undefined) return -1;
+        if (b.order !== undefined) return 1;
+        return a.name.localeCompare(b.name);
+      }));
+    }, (error) => {
+      console.error("Genres snapshot error:", error);
+      handleFirestoreError(error, OperationType.LIST, 'genres');
+    });
+    const unsubLangs = onSnapshot(collection(db, 'languages'), (snapshot) => {
+      const data = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Language));
+      setLanguages(data.sort((a, b) => {
+        if (a.order !== undefined && b.order !== undefined) return a.order - b.order;
+        if (a.order !== undefined) return -1;
+        if (b.order !== undefined) return 1;
+        return a.name.localeCompare(b.name);
+      }));
+    }, (error) => {
+      console.error("Languages snapshot error:", error);
+      handleFirestoreError(error, OperationType.LIST, 'languages');
+    });
+    const unsubQualities = onSnapshot(collection(db, 'qualities'), (snapshot) => {
+      const data = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Quality));
+      setQualities(data.sort((a, b) => {
+        if (a.order !== undefined && b.order !== undefined) return a.order - b.order;
+        if (a.order !== undefined) return -1;
+        if (b.order !== undefined) return 1;
+        return a.name.localeCompare(b.name);
+      }));
+    }, (error) => {
+      console.error("Qualities snapshot error:", error);
+      handleFirestoreError(error, OperationType.LIST, 'qualities');
+    });
+    return () => { unsubContent(); unsubGenres(); unsubLangs(); unsubQualities(); };
+  }, []);
+
+  const resetForm = () => {
+    setType('movie');
+    setStatus('published');
+    setTitle('');
+    setDescription('');
+    setPosterUrl('');
+    setTrailerUrl('');
+    setSampleUrl('');
+    setImdbLink('');
+    setSelectedGenres([]);
+    setSelectedLanguages([]);
+    setSelectedQuality('');
+    setCast('');
+    setYear(new Date().getFullYear());
+    setMovieLinks([
+      { id: Math.random().toString(36).substr(2, 9), name: '480p', url: '', size: '', unit: 'MB' },
+      { id: Math.random().toString(36).substr(2, 9), name: '720p', url: '', size: '', unit: 'GB' },
+      { id: Math.random().toString(36).substr(2, 9), name: '1080p', url: '', size: '', unit: 'GB' }
+    ]);
+    setSeasons([]);
+    setEditingId(null);
+  };
+
+  const parseLinks = (linksStr: string | undefined): QualityLinks => {
+    if (!linksStr) return [];
+    try {
+      const parsed = JSON.parse(linksStr);
+      if (Array.isArray(parsed)) return parsed;
+      // Convert old format
+      if (typeof parsed === 'object') {
+        return Object.entries(parsed).map(([name, link]: [string, any]) => ({
+          id: Math.random().toString(36).substr(2, 9),
+          name,
+          url: link?.url || '',
+          size: link?.size || '',
+          unit: 'MB' as 'MB' | 'GB'
+        })).filter(l => l.url);
+      }
+    } catch (e) {
+      console.error("Error parsing links", e);
+    }
+    return [];
+  };
+
+  const handleEdit = (content: Content) => {
+    setType(content.type);
+    setStatus(content.status || 'published');
+    setTitle(content.title);
+    setDescription(content.description);
+    setPosterUrl(content.posterUrl);
+    setTrailerUrl(content.trailerUrl);
+    setSampleUrl(content.sampleUrl || '');
+    setImdbLink(content.imdbLink || '');
+    setSelectedGenres(content.genreIds || []);
+    setSelectedLanguages(content.languageIds || []);
+    setSelectedQuality(content.qualityId || '');
+    setCast((content.cast || []).join(', '));
+    setYear(content.year);
+    
+    if (content.type === 'movie') {
+      setMovieLinks(parseLinks(content.movieLinks));
+    } else {
+      setMovieLinks([]);
+    }
+    
+    if (content.type === 'series' && content.seasons) {
+      try {
+        const parsedSeasons = JSON.parse(content.seasons);
+        const normalizedSeasons = parsedSeasons.map((s: any) => ({
+          ...s,
+          zipLinks: parseLinks(JSON.stringify(s.zipLinks)),
+          episodes: s.episodes.map((ep: any) => ({
+            ...ep,
+            links: parseLinks(JSON.stringify(ep.links))
+          }))
+        }));
+        setSeasons(normalizedSeasons);
+      } catch (e) {
+        setSeasons([]);
+      }
+    } else {
+      setSeasons([]);
+    }
+    
+    setEditingId(content.id);
+    setIsModalOpen(true);
+  };
+
+  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        const MAX_WIDTH = 600;
+        const MAX_HEIGHT = 900;
+        let width = img.width;
+        let height = img.height;
+
+        if (width > height) {
+          if (width > MAX_WIDTH) {
+            height *= MAX_WIDTH / width;
+            width = MAX_WIDTH;
+          }
+        } else {
+          if (height > MAX_HEIGHT) {
+            width *= MAX_HEIGHT / height;
+            height = MAX_HEIGHT;
+          }
+        }
+
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        ctx?.drawImage(img, 0, 0, width, height);
+        
+        const dataUrl = canvas.toDataURL('image/jpeg', 0.7);
+        setPosterUrl(dataUrl);
+      };
+      img.src = event.target?.result as string;
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleSave = (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      // Sort seasons and episodes before saving
+      const sortedSeasons = [...seasons].sort((a, b) => a.seasonNumber - b.seasonNumber).map(s => ({
+        ...s,
+        episodes: [...s.episodes].sort((a, b) => a.episodeNumber - b.episodeNumber)
+      }));
+
+      const data: Partial<Content> = {
+        type,
+        status,
+        title,
+        description,
+        posterUrl,
+        trailerUrl,
+        sampleUrl,
+        imdbLink,
+        genreIds: selectedGenres,
+        languageIds: selectedLanguages,
+        qualityId: selectedQuality,
+        cast: cast.split(',').map(c => c.trim()).filter(Boolean),
+        year,
+        updatedAt: new Date().toISOString(),
+      };
+
+      if (type === 'movie') {
+        data.movieLinks = JSON.stringify(movieLinks);
+        data.seasons = JSON.stringify([]);
+      } else {
+        data.seasons = JSON.stringify(sortedSeasons);
+        data.movieLinks = JSON.stringify([]);
+      }
+
+      const currentEditingId = editingId;
+      setIsModalOpen(false);
+      resetForm();
+
+      if (currentEditingId) {
+        updateDoc(doc(db, 'content', currentEditingId), data).catch(error => {
+          console.error('Error saving content:', error);
+          setAlertConfig({ isOpen: true, title: 'Error', message: 'Failed to save content' });
+        });
+      } else {
+        data.createdAt = new Date().toISOString();
+        addDoc(collection(db, 'content'), data).catch(error => {
+          console.error('Error saving content:', error);
+          setAlertConfig({ isOpen: true, title: 'Error', message: 'Failed to save content' });
+        });
+      }
+    } catch (error) {
+      console.error('Error saving content:', error);
+      setAlertConfig({ isOpen: true, title: 'Error', message: 'Failed to save content' });
+    }
+  };
+
+  const fetchImdbData = async (link: string) => {
+    const ttMatch = link.match(/tt\d+/);
+    if (!ttMatch) return;
+    const ttId = ttMatch[0];
+    
+    try {
+      setFetchingImdb(true);
+      
+      // Try TVMaze first (great for series)
+      const tvmazeRes = await fetch(`https://api.tvmaze.com/lookup/shows?imdb=${ttId}`);
+      if (tvmazeRes.ok) {
+        const show = await tvmazeRes.json();
+        setTitle(show.name);
+        setDescription(show.summary?.replace(/<[^>]*>?/gm, '') || '');
+        if (show.image?.original) setPosterUrl(show.image.original);
+        if (show.premiered) setYear(parseInt(show.premiered.substring(0, 4)));
+        setType('series');
+        
+        // Fetch cast
+        try {
+          const castRes = await fetch(`https://api.tvmaze.com/shows/${show.id}/cast`);
+          if (castRes.ok) {
+            const castData = await castRes.json();
+            const castNames = castData.slice(0, 5).map((c: any) => c.person.name).join(', ');
+            setCast(castNames);
+          }
+        } catch (e) {}
+        
+        // Fetch episodes
+        try {
+          const epRes = await fetch(`https://api.tvmaze.com/shows/${show.id}/episodes`);
+          if (epRes.ok) {
+            const epData = await epRes.json();
+            const seasonsMap = new Map<number, any[]>();
+            epData.forEach((ep: any) => {
+              if (!seasonsMap.has(ep.season)) seasonsMap.set(ep.season, []);
+              seasonsMap.get(ep.season)!.push(ep);
+            });
+            
+            setSeasons(prevSeasons => {
+              const newSeasons = prevSeasons.map(s => ({ ...s, episodes: [...s.episodes] }));
+              seasonsMap.forEach((eps, seasonNum) => {
+                let seasonIndex = newSeasons.findIndex(s => s.seasonNumber === seasonNum);
+                if (seasonIndex === -1) {
+                  newSeasons.push({
+                    id: Math.random().toString(36).substr(2, 9),
+                    seasonNumber: seasonNum,
+                    year: undefined,
+                    episodes: [],
+                    zipLinks: [
+                      { id: Math.random().toString(36).substr(2, 9), name: '480p', url: '', size: '', unit: 'GB' },
+                      { id: Math.random().toString(36).substr(2, 9), name: '720p', url: '', size: '', unit: 'GB' },
+                      { id: Math.random().toString(36).substr(2, 9), name: '1080p', url: '', size: '', unit: 'GB' }
+                    ],
+                    mkvLinks: [
+                      { id: Math.random().toString(36).substr(2, 9), name: '480p', url: '', size: '', unit: 'GB' },
+                      { id: Math.random().toString(36).substr(2, 9), name: '720p', url: '', size: '', unit: 'GB' },
+                      { id: Math.random().toString(36).substr(2, 9), name: '1080p', url: '', size: '', unit: 'GB' }
+                    ]
+                  });
+                  seasonIndex = newSeasons.length - 1;
+                }
+                
+                const currentSeason = newSeasons[seasonIndex];
+                const newEpisodes = currentSeason.episodes;
+                
+                eps.forEach(ep => {
+                  const epIndex = newEpisodes.findIndex(e => e.episodeNumber === ep.number);
+                  if (epIndex === -1) {
+                    newEpisodes.push({
+                      id: Math.random().toString(36).substr(2, 9),
+                      episodeNumber: ep.number,
+                      title: ep.name,
+                      links: [
+                        { id: Math.random().toString(36).substr(2, 9), name: '720p', url: '', size: '', unit: 'MB' }
+                      ]
+                    });
+                  } else {
+                    newEpisodes[epIndex].title = ep.name;
+                  }
+                  
+                  if (ep.number === 1 && ep.airdate) {
+                      currentSeason.year = parseInt(ep.airdate.substring(0, 4));
+                  } else if (!currentSeason.year && ep.airdate) {
+                      currentSeason.year = parseInt(ep.airdate.substring(0, 4));
+                  }
+                });
+                
+                currentSeason.episodes = newEpisodes.sort((a, b) => a.episodeNumber - b.episodeNumber);
+              });
+              return newSeasons.sort((a, b) => a.seasonNumber - b.seasonNumber);
+            });
+          }
+        } catch (e) {}
+        
+        setFetchingImdb(false);
+        return;
+      }
+      
+      // Fallback for movies or if TVMaze fails
+      try {
+        const suggestRes = await fetch(`https://v3.sg.media-imdb.com/suggestion/x/${ttId}.json`);
+        if (suggestRes.ok) {
+          const suggestData = await suggestRes.json();
+          const item = suggestData.d?.[0];
+          if (item) {
+            setTitle(item.l || '');
+            setYear(item.y || new Date().getFullYear());
+            setCast(item.s || '');
+            if (item.i?.imageUrl) setPosterUrl(item.i.imageUrl);
+            setType(item.q === 'TV series' ? 'series' : 'movie');
+          }
+        }
+      } catch (e) {}
+      
+      try {
+        const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(`https://www.imdb.com/title/${ttId}/`)}`;
+        const pageRes = await fetch(proxyUrl);
+        if (pageRes.ok) {
+          const pageData = await pageRes.json();
+          const html = pageData.contents;
+          const parser = new DOMParser();
+          const doc = parser.parseFromString(html, 'text/html');
+          
+          let newDesc = description;
+          const descEl = doc.querySelector('[data-testid="plot-xl"]') || doc.querySelector('[data-testid="plot-l"]');
+          if (descEl && !description) {
+            newDesc = descEl.textContent || '';
+            setDescription(newDesc);
+          }
+          
+          const ratingEl = doc.querySelector('[data-testid="hero-rating-bar__aggregate-rating__score"] span');
+          if (ratingEl) {
+            const rating = ratingEl.textContent;
+            if (rating && !newDesc.includes(`IMDb Rating:`)) {
+              setDescription(`IMDb Rating: ${rating}/10\n\n${newDesc}`);
+            }
+          }
+        }
+      } catch (e) {}
+      
+    } catch (error) {
+      console.error("Error fetching IMDb data:", error);
+    } finally {
+      setFetchingImdb(false);
+    }
+  };
+
+  const handleDelete = () => {
+    if (!deleteId) return;
+    const currentDeleteId = deleteId;
+    setDeleteId(null);
+    deleteDoc(doc(db, 'content', currentDeleteId)).catch(error => {
+      console.error('Error deleting content:', error);
+      setAlertConfig({ isOpen: true, title: 'Error', message: 'Failed to delete content' });
+    });
+  };
+
+  const getSizeInMB = (sizeStr: string, unit: string) => {
+    const size = parseFloat(sizeStr) || 0;
+    return unit === 'GB' ? size * 1024 : size;
+  };
+
+  const handleShare = (content: Content) => {
+    let text = `🎬 *${content.title}${content.year ? ` (${content.year})` : ''}*\n\n`;
+    
+    const contentGenres = genres.filter(g => content.genreIds?.includes(g.id)).map(g => g.name).join(', ');
+    if (contentGenres) text += `🎭 Genres: ${contentGenres}\n`;
+    
+    const contentLangs = languages.filter(l => content.languageIds?.includes(l.id)).map(l => l.name).join(', ');
+    if (contentLangs) text += `🗣️ Languages: ${contentLangs}\n\n`;
+
+    if (content.type === 'movie' && content.movieLinks) {
+      const links: QualityLinks = parseLinks(content.movieLinks);
+      const sortedLinks = [...links].sort((a, b) => getSizeInMB(a.size, a.unit) - getSizeInMB(b.size, b.unit));
+      
+      const zipLinks = sortedLinks.filter(l => l.name.toLowerCase().includes('zip'));
+      const mkvLinks = sortedLinks.filter(l => l.name.toLowerCase().includes('mkv'));
+      const otherLinks = sortedLinks.filter(l => !l.name.toLowerCase().includes('zip') && !l.name.toLowerCase().includes('mkv'));
+
+      text += `📥 *Download Links:*\n`;
+      if (zipLinks.length > 0) {
+        text += `\n📦 *ZIP Files:*\n`;
+        zipLinks.forEach(l => { if (l.url) text += `▪️ ${l.name} (${l.size}${l.unit}): ${l.url}\n`; });
+      }
+      if (mkvLinks.length > 0) {
+        text += `\n🎞️ *MKV Files:*\n`;
+        mkvLinks.forEach(l => { if (l.url) text += `▪️ ${l.name} (${l.size}${l.unit}): ${l.url}\n`; });
+      }
+      if (otherLinks.length > 0) {
+        if (zipLinks.length > 0 || mkvLinks.length > 0) text += `\n📄 *Other Files:*\n`;
+        otherLinks.forEach(l => { if (l.url) text += `▪️ ${l.name} (${l.size}${l.unit}): ${l.url}\n`; });
+      }
+    } else if (content.type === 'series' && content.seasons) {
+      const parsedSeasons: Season[] = JSON.parse(content.seasons);
+      parsedSeasons.forEach(season => {
+        text += `\n📺 *Season ${season.seasonNumber}${season.year ? ` (${season.year})` : content.year ? ` (${content.year})` : ''}*\n`;
+        const zipLinks = parseLinks(JSON.stringify(season.zipLinks)).sort((a, b) => getSizeInMB(a.size, a.unit) - getSizeInMB(b.size, b.unit));
+        const mkvLinks = parseLinks(JSON.stringify(season.mkvLinks || [])).sort((a, b) => getSizeInMB(a.size, a.unit) - getSizeInMB(b.size, b.unit));
+        
+        if (zipLinks.length > 0) {
+          text += `📦 *Full Season ZIP:*\n`;
+          zipLinks.forEach((link) => {
+            if (link && link.url) {
+              text += `  ▪️ ${link.name} (${link.size}${link.unit}): ${link.url}\n`;
+            }
+          });
+        }
+        if (mkvLinks.length > 0) {
+          text += `\n🎞️ *Full Season MKV:*\n`;
+          mkvLinks.forEach((link) => {
+            if (link && link.url) {
+              text += `  ▪️ ${link.name} (${link.size}${link.unit}): ${link.url}\n`;
+            }
+          });
+        }
+        if (season.episodes && season.episodes.length > 0) {
+          text += `\n🎬 *Episodes:*\n`;
+          season.episodes.forEach(ep => {
+            text += `  E${ep.episodeNumber}: ${ep.title}\n`;
+            const epLinks = parseLinks(JSON.stringify(ep.links)).sort((a, b) => getSizeInMB(a.size, a.unit) - getSizeInMB(b.size, b.unit));
+            epLinks.forEach((link) => {
+              if (link && link.url) {
+                text += `    - ${link.name} (${link.size}${link.unit}): ${link.url}\n`;
+              }
+            });
+          });
+        }
+      });
+    }
+
+    text += `\n🍿 Enjoy watching on MovizNow!\n📞 WhatsApp: 03363284466`;
+    
+    const encodedText = encodeURIComponent(text);
+    window.open(`https://wa.me/?text=${encodedText}`, '_blank');
+  };
+
+  const renderQualityInputs = (
+    links: QualityLinks, 
+    onChange: (newLinks: QualityLinks) => void
+  ) => {
+    return (
+      <div className="space-y-3">
+        {links.map((link, idx) => (
+          <div key={link.id} className="flex flex-col gap-2 bg-zinc-900 p-3 rounded-lg border border-zinc-800">
+            <div className="flex gap-2 items-center">
+              <input
+                type="text"
+                placeholder="Name (e.g. 1080p, WEB-DL)"
+                value={link.name}
+                onChange={(e) => {
+                  const newLinks = [...links];
+                  newLinks[idx].name = e.target.value;
+                  onChange(newLinks);
+                }}
+                className="flex-1 bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-1.5 text-sm"
+              />
+              <button
+                type="button"
+                onClick={() => {
+                  const newLinks = links.filter((_, i) => i !== idx);
+                  onChange(newLinks);
+                }}
+                className="p-1.5 text-red-500 hover:bg-red-500/10 rounded-lg transition-colors shrink-0"
+              >
+                <Trash2 className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="flex gap-2 items-center">
+              <input
+                type="number"
+                placeholder="Size"
+                value={link.size}
+                onChange={(e) => {
+                  const newLinks = [...links];
+                  newLinks[idx].size = e.target.value;
+                  onChange(newLinks);
+                }}
+                className="w-20 bg-zinc-950 border border-zinc-800 rounded-lg px-2 py-1.5 text-xs"
+              />
+              <select
+                value={link.unit || 'MB'}
+                onChange={(e) => {
+                  const newLinks = [...links];
+                  newLinks[idx].unit = e.target.value as 'MB' | 'GB';
+                  onChange(newLinks);
+                }}
+                className="bg-zinc-950 border border-zinc-800 rounded-lg px-1 py-1.5 text-xs"
+              >
+                <option value="MB">MB</option>
+                <option value="GB">GB</option>
+              </select>
+            </div>
+            <div className="flex gap-2 items-center">
+              <input
+                type="text"
+                placeholder="URL"
+                value={link.url}
+                onChange={(e) => {
+                  const newLinks = [...links];
+                  newLinks[idx].url = e.target.value;
+                  onChange(newLinks);
+                }}
+                className="flex-1 bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-1.5 text-xs"
+              />
+            </div>
+          </div>
+        ))}
+        <button
+          type="button"
+          onClick={() => {
+            onChange([...links, { id: Math.random().toString(36).substr(2, 9), name: '', url: '', size: '', unit: 'MB' }]);
+          }}
+          className="text-emerald-500 hover:text-emerald-400 text-sm font-medium flex items-center gap-1 mt-2"
+        >
+          <Plus className="w-4 h-4" /> Add Link
+        </button>
+      </div>
+    );
+  };
+
+  const uniqueYears = useMemo(() => {
+    const years = new Set(contentList.map(c => c.year));
+    return Array.from(years).sort((a, b) => Number(b) - Number(a));
+  }, [contentList]);
+
+  const filteredContent = useMemo(() => {
+    let result = contentList;
+    if (filterType !== 'all') {
+      result = result.filter(c => c.type === filterType);
+    }
+    if (filterGenre !== 'all') {
+      result = result.filter(c => c.genreIds?.includes(filterGenre));
+    }
+    if (filterLanguage !== 'all') {
+      result = result.filter(c => c.languageIds?.includes(filterLanguage));
+    }
+    if (filterQuality !== 'all') {
+      result = result.filter(c => c.qualityId === filterQuality);
+    }
+    if (filterYear !== 'all') {
+      result = result.filter(c => c.year === parseInt(filterYear));
+    }
+    if (searchTerm) {
+      const lower = searchTerm.toLowerCase();
+      result = result.filter(c => c.title.toLowerCase().includes(lower));
+    }
+    
+    result.sort((a, b) => {
+      const timeA = new Date(a.createdAt).getTime();
+      const timeB = new Date(b.createdAt).getTime();
+      return filterDateAdded === 'newest' ? timeB - timeA : timeA - timeB;
+    });
+    
+    return result;
+  }, [contentList, searchTerm, filterType, filterGenre, filterLanguage, filterQuality, filterYear, filterDateAdded]);
+
+  const filteredGenres = useMemo(() => {
+    if (!genreSearchTerm) return genres;
+    const lower = genreSearchTerm.toLowerCase();
+    return genres.filter(g => g.name.toLowerCase().includes(lower));
+  }, [genres, genreSearchTerm]);
+
+  const filteredLanguages = useMemo(() => {
+    if (!languageSearchTerm) return languages;
+    const lower = languageSearchTerm.toLowerCase();
+    return languages.filter(l => l.name.toLowerCase().includes(lower));
+  }, [languages, languageSearchTerm]);
+
+  const handleSelectAll = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.checked) {
+      setSelectedContent(filteredContent.map(c => c.id));
+    } else {
+      setSelectedContent([]);
+    }
+  };
+
+  const handleSelectContent = (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setSelectedContent(prev => 
+      prev.includes(id) ? prev.filter(cId => cId !== id) : [...prev, id]
+    );
+  };
+
+  const handleBulkStatusChange = (status: 'published' | 'draft') => {
+    if (!window.confirm(`Are you sure you want to change the status of ${selectedContent.length} items to ${status}?`)) return;
+    
+    const currentSelected = [...selectedContent];
+    setSelectedContent([]);
+    
+    const batch = writeBatch(db);
+    currentSelected.forEach(id => {
+      const contentRef = doc(db, 'content', id);
+      batch.update(contentRef, { status });
+    });
+    batch.commit().catch(error => {
+      console.error('Error updating content:', error);
+      setAlertConfig({ isOpen: true, title: 'Error', message: 'Failed to update content' });
+    });
+  };
+
+  const handleBulkDelete = () => {
+    if (!window.confirm(`Are you sure you want to delete ${selectedContent.length} items? This action cannot be undone.`)) return;
+    
+    const currentSelected = [...selectedContent];
+    setSelectedContent([]);
+    
+    const batch = writeBatch(db);
+    currentSelected.forEach(id => {
+      const contentRef = doc(db, 'content', id);
+      batch.delete(contentRef);
+    });
+    batch.commit().catch(error => {
+      console.error('Error deleting content:', error);
+      setAlertConfig({ isOpen: true, title: 'Error', message: 'Failed to delete content' });
+    });
+  };
+
+  return (
+    <div className="p-4 md:p-8">
+      <div className="flex flex-col gap-4 mb-8">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <h1 className="text-2xl md:text-3xl font-bold">Movies & Series</h1>
+          <div className="flex flex-col sm:flex-row gap-4">
+            <div className="relative w-full sm:w-64">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-zinc-500" />
+              <input
+                type="text"
+                placeholder="Search content..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full bg-zinc-900 border border-zinc-800 rounded-xl pl-10 pr-4 py-3 focus:outline-none focus:border-emerald-500"
+              />
+            </div>
+            {selectedContent.length > 0 && (
+              <div className="flex items-center gap-2 bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-2">
+                <span className="text-sm text-zinc-400">{selectedContent.length} selected</span>
+                <select
+                  onChange={(e) => {
+                    if (e.target.value === 'delete') {
+                      handleBulkDelete();
+                    } else if (e.target.value) {
+                      handleBulkStatusChange(e.target.value as any);
+                    }
+                    e.target.value = '';
+                  }}
+                  className="bg-transparent border-none text-sm focus:outline-none text-emerald-500 font-medium cursor-pointer"
+                >
+                  <option value="">Bulk Actions</option>
+                  <option value="published">Publish</option>
+                  <option value="draft">Draft</option>
+                  <option value="delete">Delete</option>
+                </select>
+              </div>
+            )}
+            <button
+              onClick={() => { resetForm(); setIsModalOpen(true); }}
+              className="bg-emerald-500 hover:bg-emerald-600 text-white px-6 py-3 rounded-xl font-medium flex items-center justify-center gap-2 transition-colors whitespace-nowrap"
+            >
+              <Plus className="w-5 h-5" />
+              Add Content
+            </button>
+          </div>
+        </div>
+        
+        <div className="flex flex-wrap gap-3 bg-zinc-900 p-4 rounded-xl border border-zinc-800">
+          <select value={filterType} onChange={(e) => setFilterType(e.target.value as any)} className="bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm focus:border-emerald-500">
+            <option value="all">All Types</option>
+            <option value="movie">Movies</option>
+            <option value="series">Series</option>
+          </select>
+          <select value={filterGenre} onChange={(e) => setFilterGenre(e.target.value)} className="bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm focus:border-emerald-500">
+            <option value="all">All Genres</option>
+            {genres.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
+          </select>
+          <select value={filterLanguage} onChange={(e) => setFilterLanguage(e.target.value)} className="bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm focus:border-emerald-500">
+            <option value="all">All Languages</option>
+            {languages.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
+          </select>
+          <select value={filterQuality} onChange={(e) => setFilterQuality(e.target.value)} className="bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm focus:border-emerald-500">
+            <option value="all">All Qualities</option>
+            {qualities.map(q => <option key={q.id} value={q.id}>{q.name}</option>)}
+          </select>
+          <select value={filterYear} onChange={(e) => setFilterYear(e.target.value)} className="bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm focus:border-emerald-500">
+            <option value="all">All Years</option>
+            {uniqueYears.map(y => <option key={y} value={y.toString()}>{y}</option>)}
+          </select>
+          <select value={filterDateAdded} onChange={(e) => setFilterDateAdded(e.target.value as any)} className="bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm focus:border-emerald-500">
+            <option value="newest">Newest Added</option>
+            <option value="oldest">Oldest Added</option>
+          </select>
+        </div>
+      </div>
+
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-2">
+          <input 
+            type="checkbox" 
+            checked={selectedContent.length === filteredContent.length && filteredContent.length > 0}
+            onChange={handleSelectAll}
+            className="w-4 h-4 rounded border-zinc-700 bg-zinc-900 text-emerald-500 focus:ring-emerald-500 focus:ring-offset-zinc-950"
+          />
+          <span className="text-sm text-zinc-400">Select All</span>
+        </div>
+        <div className="text-sm text-zinc-400">
+          {filteredContent.length} items found
+        </div>
+      </div>
+
+      {loading ? (
+        <div className="flex justify-center items-center py-20">
+          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-emerald-500"></div>
+        </div>
+      ) : filteredContent.length === 0 ? (
+        <div className="text-center py-20 text-zinc-500 bg-zinc-900 border border-zinc-800 rounded-xl">
+          <Film className="w-16 h-16 mx-auto mb-4 opacity-20" />
+          <p className="text-xl">No content found matching your filters.</p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3 md:gap-6">
+          {filteredContent.map((content) => (
+            <div key={content.id} className="bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden flex flex-col group relative">
+              <div className="absolute top-2 left-2 z-10">
+                <input 
+                  type="checkbox" 
+                  checked={selectedContent.includes(content.id)}
+                  onChange={(e) => {
+                    e.stopPropagation();
+                    handleSelectContent(content.id, e as any);
+                  }}
+                  className="w-4 h-4 rounded border-zinc-700 bg-zinc-900 text-emerald-500 focus:ring-emerald-500 focus:ring-offset-zinc-950"
+                />
+              </div>
+              <div className="relative aspect-[2/3]">
+                <img src={content.posterUrl || 'https://picsum.photos/seed/movie/400/600'} alt={content.title} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                <div className="absolute top-1 right-1 flex flex-col gap-1 items-end">
+                  <div className="bg-black/80 backdrop-blur-md px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider">
+                    {content.type}
+                  </div>
+                  {content.status === 'draft' && (
+                    <div className="bg-yellow-500/90 text-black backdrop-blur-md px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider flex items-center gap-1">
+                      <EyeOff className="w-3 h-3" />
+                      Draft
+                    </div>
+                  )}
+                </div>
+              </div>
+              <div className="p-2 md:p-3 flex-1 flex flex-col">
+                <h3 className="font-bold text-sm md:text-base mb-0.5 line-clamp-1" title={content.title}>{content.title}</h3>
+                <p className="text-zinc-400 text-xs mb-2">{content.year}</p>
+                
+                <div className="mt-auto flex items-center justify-between pt-2 border-t border-zinc-800/50">
+                  <button onClick={() => handleShare(content)} className="text-emerald-500 hover:text-emerald-400 p-1.5 transition-colors" title="Share to WhatsApp">
+                    <Share2 className="w-4 h-4 md:w-5 md:h-5" />
+                  </button>
+                  <div className="flex gap-1">
+                    <button onClick={() => handleEdit(content)} className="text-zinc-400 hover:text-white p-1.5 transition-colors">
+                      <Edit2 className="w-4 h-4 md:w-5 md:h-5" />
+                    </button>
+                    <button onClick={() => setDeleteId(content.id)} className="text-red-500 hover:text-red-400 p-1.5 transition-colors">
+                      <Trash2 className="w-4 h-4 md:w-5 md:h-5" />
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {isModalOpen && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 z-50 overflow-y-auto">
+          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-4xl my-8 flex flex-col max-h-[90vh]">
+            <div className="p-6 border-b border-zinc-800 flex items-center justify-between sticky top-0 bg-zinc-900 z-10">
+              <h2 className="text-2xl font-bold">{editingId ? 'Edit Content' : 'Add Content'}</h2>
+              <button onClick={() => setIsModalOpen(false)} className="text-zinc-400 hover:text-white p-2">
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+            
+            <div className="flex-1 overflow-y-auto p-6">
+              <form id="content-form" onSubmit={handleSave} className="space-y-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div>
+                    <label className="block text-sm font-medium text-zinc-400 mb-2">Type</label>
+                    <div className="flex gap-4">
+                      <label className={`flex-1 flex items-center justify-center gap-2 p-3 rounded-xl border cursor-pointer transition-colors ${type === 'movie' ? 'bg-emerald-500/10 border-emerald-500 text-emerald-500' : 'bg-zinc-950 border-zinc-800 text-zinc-400'}`}>
+                        <input type="radio" name="type" value="movie" checked={type === 'movie'} onChange={() => setType('movie')} className="hidden" />
+                        <Film className="w-5 h-5" /> Movie
+                      </label>
+                      <label className={`flex-1 flex items-center justify-center gap-2 p-3 rounded-xl border cursor-pointer transition-colors ${type === 'series' ? 'bg-emerald-500/10 border-emerald-500 text-emerald-500' : 'bg-zinc-950 border-zinc-800 text-zinc-400'}`}>
+                        <input type="radio" name="type" value="series" checked={type === 'series'} onChange={() => setType('series')} className="hidden" />
+                        <Tv className="w-5 h-5" /> Series
+                      </label>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-zinc-400 mb-2">Status</label>
+                    <div className="flex gap-4">
+                      <label className={`flex-1 flex items-center justify-center gap-2 p-3 rounded-xl border cursor-pointer transition-colors ${status === 'published' ? 'bg-emerald-500/10 border-emerald-500 text-emerald-500' : 'bg-zinc-950 border-zinc-800 text-zinc-400'}`}>
+                        <input type="radio" name="status" value="published" checked={status === 'published'} onChange={() => setStatus('published')} className="hidden" />
+                        <Eye className="w-5 h-5" /> Published
+                      </label>
+                      <label className={`flex-1 flex items-center justify-center gap-2 p-3 rounded-xl border cursor-pointer transition-colors ${status === 'draft' ? 'bg-yellow-500/10 border-yellow-500 text-yellow-500' : 'bg-zinc-950 border-zinc-800 text-zinc-400'}`}>
+                        <input type="radio" name="status" value="draft" checked={status === 'draft'} onChange={() => setStatus('draft')} className="hidden" />
+                        <EyeOff className="w-5 h-5" /> Draft
+                      </label>
+                    </div>
+                  </div>
+                  
+                  <div>
+                    <label className="block text-sm font-medium text-zinc-400 mb-2">Title</label>
+                    <input type="text" value={title} onChange={(e) => setTitle(e.target.value)} className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-3 focus:outline-none focus:border-emerald-500" />
+                  </div>
+
+                  <div className="md:col-span-2">
+                    <label className="block text-sm font-medium text-zinc-400 mb-2">Description</label>
+                    <textarea rows={3} value={description} onChange={(e) => setDescription(e.target.value)} className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-3 focus:outline-none focus:border-emerald-500" />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-zinc-400 mb-2">Poster (URL or Upload)</label>
+                    <div className="flex gap-2">
+                      <input type="text" placeholder="https://..." value={posterUrl} onChange={(e) => setPosterUrl(e.target.value)} className="flex-1 bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-3 focus:outline-none focus:border-emerald-500" />
+                      <label className="flex items-center justify-center bg-zinc-800 hover:bg-zinc-700 text-white px-4 rounded-xl cursor-pointer transition-colors">
+                        <Upload className="w-5 h-5" />
+                        <input type="file" accept="image/*" onChange={handleImageUpload} className="hidden" />
+                      </label>
+                    </div>
+                    {posterUrl && (
+                      <div className="mt-2 text-xs text-emerald-500 truncate">
+                        {posterUrl.startsWith('data:image') ? 'Image uploaded successfully' : 'Using image URL'}
+                      </div>
+                    )}
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-zinc-400 mb-2">Trailer URL (YouTube)</label>
+                    <input type="url" value={trailerUrl} onChange={(e) => setTrailerUrl(e.target.value)} className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-3 focus:outline-none focus:border-emerald-500" />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-zinc-400 mb-2">Sample URL (Optional)</label>
+                    <input type="url" value={sampleUrl} onChange={(e) => setSampleUrl(e.target.value)} className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-3 focus:outline-none focus:border-emerald-500" placeholder="Sample video link" />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-zinc-400 mb-2">IMDb Link (Optional)</label>
+                    <div className="flex gap-2">
+                      <div className="relative flex-1">
+                        <input 
+                          type="url" 
+                          value={imdbLink} 
+                          onChange={(e) => setImdbLink(e.target.value)} 
+                          className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-3 focus:outline-none focus:border-emerald-500" 
+                          placeholder="https://www.imdb.com/title/..." 
+                        />
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => fetchImdbData(imdbLink)}
+                        disabled={fetchingImdb || !imdbLink.includes('imdb.com/title/tt')}
+                        className="bg-emerald-500 hover:bg-emerald-600 disabled:bg-emerald-500/50 text-white px-4 py-3 rounded-xl font-medium transition-colors flex items-center justify-center min-w-[100px]"
+                      >
+                        {fetchingImdb ? (
+                          <div className="animate-spin rounded-full h-5 w-5 border-t-2 border-b-2 border-white"></div>
+                        ) : (
+                          'Fetch'
+                        )}
+                      </button>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-zinc-400 mb-2">Release Year</label>
+                    <input type="number" value={year || ''} onChange={(e) => setYear(parseInt(e.target.value) || new Date().getFullYear())} className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-3 focus:outline-none focus:border-emerald-500" />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-zinc-400 mb-2">Quality</label>
+                    <select value={selectedQuality} onChange={(e) => setSelectedQuality(e.target.value)} className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-3 focus:outline-none focus:border-emerald-500">
+                      <option value="">Select Quality</option>
+                      {qualities.map(q => <option key={q.id} value={q.id}>{q.name}</option>)}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-zinc-400 mb-2">Cast (comma separated)</label>
+                    <input type="text" value={cast} onChange={(e) => setCast(e.target.value)} className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-3 focus:outline-none focus:border-emerald-500" />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-zinc-400 mb-2">Genres</label>
+                    <div className="flex flex-wrap gap-2">
+                      {genres.map(g => {
+                        const isSelected = selectedGenres.includes(g.id);
+                        return (
+                          <button
+                            key={g.id}
+                            type="button"
+                            onClick={() => {
+                              if (isSelected) {
+                                setSelectedGenres(selectedGenres.filter(id => id !== g.id));
+                              } else {
+                                setSelectedGenres([...selectedGenres, g.id]);
+                              }
+                            }}
+                            className={`px-4 py-2 rounded-full text-sm font-medium transition-colors border ${
+                              isSelected 
+                                ? 'bg-emerald-500/20 border-emerald-500 text-emerald-500' 
+                                : 'bg-zinc-900 border-zinc-700 text-zinc-400 hover:bg-zinc-800 hover:text-white'
+                            }`}
+                          >
+                            {g.name}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-zinc-400 mb-2">Languages</label>
+                    <div className="flex flex-wrap gap-2">
+                      {languages.map(l => {
+                        const isSelected = selectedLanguages.includes(l.id);
+                        return (
+                          <button
+                            key={l.id}
+                            type="button"
+                            onClick={() => {
+                              if (isSelected) {
+                                setSelectedLanguages(selectedLanguages.filter(id => id !== l.id));
+                              } else {
+                                setSelectedLanguages([...selectedLanguages, l.id]);
+                              }
+                            }}
+                            className={`px-4 py-2 rounded-full text-sm font-medium transition-colors border ${
+                              isSelected 
+                                ? 'bg-emerald-500/20 border-emerald-500 text-emerald-500' 
+                                : 'bg-zinc-900 border-zinc-700 text-zinc-400 hover:bg-zinc-800 hover:text-white'
+                            }`}
+                          >
+                            {l.name}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </div>
+
+                <hr className="border-zinc-800" />
+
+                {type === 'movie' ? (
+                  <div>
+                    <h3 className="text-lg font-bold mb-4">Movie Links</h3>
+                    {renderQualityInputs(movieLinks, setMovieLinks)}
+                  </div>
+                ) : (
+                  <div>
+                    <div className="flex items-center justify-between mb-4">
+                      <h3 className="text-lg font-bold">Seasons</h3>
+                      <button
+                        type="button"
+                        onClick={() => setSeasons([...seasons, { 
+                          id: Date.now().toString(), 
+                          seasonNumber: seasons.length + 1, 
+                          zipLinks: [
+                            { id: Math.random().toString(36).substr(2, 9), name: '480p', url: '', size: '', unit: 'GB' },
+                            { id: Math.random().toString(36).substr(2, 9), name: '720p', url: '', size: '', unit: 'GB' },
+                            { id: Math.random().toString(36).substr(2, 9), name: '1080p', url: '', size: '', unit: 'GB' }
+                          ], 
+                          mkvLinks: [
+                            { id: Math.random().toString(36).substr(2, 9), name: '480p', url: '', size: '', unit: 'GB' },
+                            { id: Math.random().toString(36).substr(2, 9), name: '720p', url: '', size: '', unit: 'GB' },
+                            { id: Math.random().toString(36).substr(2, 9), name: '1080p', url: '', size: '', unit: 'GB' }
+                          ],
+                          episodes: [] 
+                        }])}
+                        className="text-emerald-500 hover:text-emerald-400 text-sm font-medium flex items-center gap-1"
+                      >
+                        <Plus className="w-4 h-4" /> Add Season
+                      </button>
+                    </div>
+                    
+                    <div className="space-y-6">
+                      {seasons.map((season, sIdx) => (
+                        <div key={season.id} className="bg-zinc-950 border border-zinc-800 rounded-xl p-4">
+                          <div className="flex items-center justify-between mb-4">
+                            <div className="flex items-center gap-4">
+                              <div className="flex items-center gap-2">
+                                <h4 className="font-bold">Season</h4>
+                                <input
+                                  type="number"
+                                  value={season.seasonNumber}
+                                  onChange={(e) => {
+                                    const newSeasons = [...seasons];
+                                    newSeasons[sIdx].seasonNumber = parseInt(e.target.value) || 0;
+                                    setSeasons(newSeasons);
+                                  }}
+                                  className="w-16 bg-zinc-900 border border-zinc-700 rounded px-2 py-1 text-sm text-center"
+                                />
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <h4 className="font-bold text-sm text-zinc-400">Year</h4>
+                                <input
+                                  type="number"
+                                  value={season.year || ''}
+                                  onChange={(e) => {
+                                    const newSeasons = [...seasons];
+                                    newSeasons[sIdx].year = parseInt(e.target.value) || undefined;
+                                    setSeasons(newSeasons);
+                                  }}
+                                  placeholder="YYYY"
+                                  className="w-20 bg-zinc-900 border border-zinc-700 rounded px-2 py-1 text-sm text-center"
+                                />
+                              </div>
+                            </div>
+                            <button type="button" onClick={() => setSeasons(seasons.filter((_, i) => i !== sIdx))} className="text-red-500 hover:text-red-400 p-1">
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
+                          
+                          <div className="mb-6">
+                            <h5 className="text-sm font-medium text-zinc-400 mb-2">Season ZIP Links</h5>
+                            {renderQualityInputs(season.zipLinks, (newLinks) => {
+                              const newSeasons = [...seasons];
+                              newSeasons[sIdx].zipLinks = newLinks;
+                              setSeasons(newSeasons);
+                            })}
+                          </div>
+
+                          <div className="mb-6">
+                            <h5 className="text-sm font-medium text-zinc-400 mb-2">Season MKV Links</h5>
+                            {renderQualityInputs(season.mkvLinks || [], (newLinks) => {
+                              const newSeasons = [...seasons];
+                              newSeasons[sIdx].mkvLinks = newLinks;
+                              setSeasons(newSeasons);
+                            })}
+                          </div>
+
+                          <div>
+                            <div className="flex items-center justify-between mb-2">
+                              <h5 className="text-sm font-medium text-zinc-400">Episodes</h5>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const newSeasons = [...seasons];
+                                  newSeasons[sIdx].episodes.push({
+                                    id: Date.now().toString(),
+                                    episodeNumber: newSeasons[sIdx].episodes.length + 1,
+                                    title: `Episode ${newSeasons[sIdx].episodes.length + 1}`,
+                                    links: [
+                                      { id: Math.random().toString(36).substr(2, 9), name: '720p', url: '', size: '', unit: 'MB' }
+                                    ]
+                                  });
+                                  setSeasons(newSeasons);
+                                }}
+                                className="text-emerald-500 hover:text-emerald-400 text-xs font-medium flex items-center gap-1"
+                              >
+                                <Plus className="w-3 h-3" /> Add Episode
+                              </button>
+                            </div>
+                            
+                            <div className="space-y-4">
+                              {season.episodes.map((ep, eIdx) => (
+                                <div key={ep.id} className="bg-zinc-900 border border-zinc-800 rounded-lg p-4">
+                                  <div className="flex gap-4 mb-4">
+                                    <input
+                                      type="number"
+                                      value={ep.episodeNumber}
+                                      onChange={(e) => {
+                                        const newSeasons = [...seasons];
+                                        newSeasons[sIdx].episodes[eIdx].episodeNumber = parseInt(e.target.value) || 0;
+                                        setSeasons(newSeasons);
+                                      }}
+                                      className="w-20 bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm"
+                                      placeholder="Ep #"
+                                    />
+                                    <input
+                                      type="text"
+                                      value={ep.title}
+                                      onChange={(e) => {
+                                        const newSeasons = [...seasons];
+                                        newSeasons[sIdx].episodes[eIdx].title = e.target.value;
+                                        setSeasons(newSeasons);
+                                      }}
+                                      className="flex-1 bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm"
+                                      placeholder="Episode Title"
+                                    />
+                                    <button type="button" onClick={() => {
+                                      const newSeasons = [...seasons];
+                                      newSeasons[sIdx].episodes = newSeasons[sIdx].episodes.filter((_, i) => i !== eIdx);
+                                      setSeasons(newSeasons);
+                                    }} className="text-red-500 hover:text-red-400 p-2">
+                                      <Trash2 className="w-4 h-4" />
+                                    </button>
+                                  </div>
+                                  {renderQualityInputs(ep.links, (newLinks) => {
+                                    const newSeasons = [...seasons];
+                                    newSeasons[sIdx].episodes[eIdx].links = newLinks;
+                                    setSeasons(newSeasons);
+                                  })}
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </form>
+            </div>
+
+            <div className="p-6 border-t border-zinc-800 flex justify-end gap-4 sticky bottom-0 bg-zinc-900 z-10 rounded-b-2xl">
+              <button
+                type="button"
+                onClick={() => setIsModalOpen(false)}
+                className="px-6 py-3 rounded-xl font-medium text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                form="content-form"
+                className="bg-emerald-500 hover:bg-emerald-600 text-white px-6 py-3 rounded-xl font-medium flex items-center gap-2 transition-colors"
+              >
+                <Save className="w-5 h-5" />
+                Save Content
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <ConfirmModal
+        isOpen={!!deleteId}
+        title="Delete Content"
+        message="Are you sure you want to delete this content? This action cannot be undone."
+        onConfirm={handleDelete}
+        onCancel={() => setDeleteId(null)}
+      />
+
+      <AlertModal
+        isOpen={alertConfig.isOpen}
+        title={alertConfig.title}
+        message={alertConfig.message}
+        onClose={() => setAlertConfig({ ...alertConfig, isOpen: false })}
+      />
+    </div>
+  );
+}

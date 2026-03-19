@@ -1,0 +1,119 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "A user of the MovizNow app.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "description": "The user's unique ID." },
+        "email": { "type": "string", "format": "email" },
+        "displayName": { "type": "string" },
+        "photoURL": { "type": "string" },
+        "role": { "type": "string", "enum": ["admin", "user", "temporary"] },
+        "status": { "type": "string", "enum": ["pending", "active", "expired"] },
+        "phone": { "type": "string" },
+        "expiryDate": { "type": "string", "format": "date-time" },
+        "assignedContent": { "type": "array", "items": { "type": "string" } },
+        "watchLater": { "type": "array", "items": { "type": "string" } },
+        "favorites": { "type": "array", "items": { "type": "string" } },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "sessionsCount": { "type": "number" },
+        "timeSpent": { "type": "number" }
+      },
+      "required": ["uid", "email", "role", "status", "createdAt"]
+    },
+    "Genre": {
+      "title": "Genre",
+      "description": "A movie or series genre.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" }
+      },
+      "required": ["id", "name"]
+    },
+    "Language": {
+      "title": "Language",
+      "description": "A movie or series language.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" }
+      },
+      "required": ["id", "name"]
+    },
+    "Content": {
+      "title": "Content",
+      "description": "A movie or series.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "type": { "type": "string", "enum": ["movie", "series"] },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "posterUrl": { "type": "string" },
+        "trailerUrl": { "type": "string" },
+        "genreIds": { "type": "array", "items": { "type": "string" } },
+        "languageIds": { "type": "array", "items": { "type": "string" } },
+        "cast": { "type": "array", "items": { "type": "string" } },
+        "year": { "type": "number" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" },
+        "movieLinks": { "type": "string", "description": "JSON stringified movie links" },
+        "seasons": { "type": "string", "description": "JSON stringified seasons array" }
+      },
+      "required": ["id", "type", "title", "posterUrl", "createdAt", "updatedAt"]
+    },
+    "AnalyticsEvent": {
+      "title": "AnalyticsEvent",
+      "description": "An event tracked for analytics.",
+      "type": "object",
+      "properties": {
+        "type": { "type": "string", "enum": ["session_start", "content_view", "link_click", "watch_time"] },
+        "userId": { "type": "string" },
+        "timestamp": { "type": "string", "format": "date-time" },
+        "contentId": { "type": "string" },
+        "contentTitle": { "type": "string" },
+        "quality": { "type": "string" },
+        "duration": { "type": "number" }
+      },
+      "required": ["type", "userId", "timestamp"]
+    },
+    "Quality": {
+      "title": "Quality",
+      "description": "A movie or series quality.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" }
+      },
+      "required": ["id", "name"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/User" },
+      "description": "Stores user profiles."
+    },
+    "/genres/{genreId}": {
+      "schema": { "$ref": "#/entities/Genre" },
+      "description": "Stores genres."
+    },
+    "/languages/{languageId}": {
+      "schema": { "$ref": "#/entities/Language" },
+      "description": "Stores languages."
+    },
+    "/content/{contentId}": {
+      "schema": { "$ref": "#/entities/Content" },
+      "description": "Stores movies and series."
+    },
+    "/analytics/{eventId}": {
+      "schema": { "$ref": "#/entities/AnalyticsEvent" },
+      "description": "Stores analytics events."
+    },
+    "/qualities/{qualityId}": {
+      "schema": { "$ref": "#/entities/Quality" },
+      "description": "Stores movie and series qualities."
+    }
+  }
+}

@@ -1,0 +1,64 @@
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { Suspense, lazy } from 'react';
+import { AuthProvider } from './contexts/AuthContext';
+import { ProtectedRoute } from './components/ProtectedRoute';
+import { Loader2 } from 'lucide-react';
+
+// Pages
+const Login = lazy(() => import('./pages/Login'));
+const Home = lazy(() => import('./pages/user/Home'));
+const MovieDetails = lazy(() => import('./pages/user/MovieDetails'));
+const WatchLater = lazy(() => import('./pages/user/WatchLater'));
+const Favorites = lazy(() => import('./pages/user/Favorites'));
+
+// Admin Pages
+const AdminLayout = lazy(() => import('./pages/admin/AdminLayout'));
+const Analytics = lazy(() => import('./pages/admin/Analytics'));
+const ContentManagement = lazy(() => import('./pages/admin/ContentManagement'));
+const GenreManagement = lazy(() => import('./pages/admin/GenreManagement'));
+const LanguageManagement = lazy(() => import('./pages/admin/LanguageManagement'));
+const QualityManagement = lazy(() => import('./pages/admin/QualityManagement'));
+const UserManagement = lazy(() => import('./pages/admin/UserManagement'));
+const TemporaryUsers = lazy(() => import('./pages/admin/TemporaryUsers'));
+const SelectedContentUsers = lazy(() => import('./pages/admin/SelectedContentUsers'));
+const IncomeManagement = lazy(() => import('./pages/admin/IncomeManagement'));
+
+const LoadingFallback = () => (
+  <div className="min-h-screen bg-zinc-950 flex items-center justify-center">
+    <Loader2 className="w-8 h-8 text-emerald-500 animate-spin" />
+  </div>
+);
+
+export default function App() {
+  return (
+    <AuthProvider>
+      <BrowserRouter>
+        <Suspense fallback={<LoadingFallback />}>
+          <Routes>
+            <Route path="/login" element={<Login />} />
+            
+            {/* User Routes */}
+            <Route path="/" element={<ProtectedRoute><Home /></ProtectedRoute>} />
+            <Route path="/movie/:id" element={<ProtectedRoute><MovieDetails /></ProtectedRoute>} />
+            <Route path="/watch-later" element={<ProtectedRoute><WatchLater /></ProtectedRoute>} />
+            <Route path="/favorites" element={<ProtectedRoute><Favorites /></ProtectedRoute>} />
+            
+            {/* Admin Routes */}
+            <Route path="/admin" element={<ProtectedRoute requireAdmin><AdminLayout /></ProtectedRoute>}>
+              <Route index element={<Navigate to="content" replace />} />
+              <Route path="analytics" element={<Analytics />} />
+              <Route path="content" element={<ContentManagement />} />
+              <Route path="genres" element={<GenreManagement />} />
+              <Route path="languages" element={<LanguageManagement />} />
+              <Route path="qualities" element={<QualityManagement />} />
+              <Route path="users" element={<UserManagement />} />
+              <Route path="temporary-users" element={<TemporaryUsers />} />
+              <Route path="selected-content" element={<SelectedContentUsers />} />
+              <Route path="income" element={<IncomeManagement />} />
+            </Route>
+          </Routes>
+        </Suspense>
+      </BrowserRouter>
+    </AuthProvider>
+  );
+}
