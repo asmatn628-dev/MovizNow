@@ -19,11 +19,21 @@ export function ProtectedRoute({ children, requireAdmin = false }: ProtectedRout
     );
   }
 
+  console.log('ProtectedRoute:', { 
+    path: location.pathname, 
+    user: user?.email, 
+    role: profile?.role, 
+    status: profile?.status,
+    requireAdmin 
+  });
+
   if (!user || !profile) {
+    console.log('ProtectedRoute: No user or profile, redirecting to login');
     return <Navigate to="/login" state={{ from: location }} replace />;
   }
 
   if (requireAdmin && profile.role !== 'admin' && profile.role !== 'data_editor') {
+    console.log('ProtectedRoute: Admin required but user is not admin/editor, redirecting to home');
     return <Navigate to="/" replace />;
   }
 
