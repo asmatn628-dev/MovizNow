@@ -1,13 +1,14 @@
 import { useState, useEffect, useRef } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useNavigate } from 'react-router-dom';
 import { db } from '../../firebase';
 import { doc, onSnapshot, updateDoc, arrayUnion, arrayRemove, collection } from 'firebase/firestore';
 import { Content, Genre, Language, QualityLinks, Season, Quality } from '../../types';
 import { useAuth } from '../../contexts/AuthContext';
-import { Film, ArrowLeft, Play, Clock, Heart, MessageCircle, AlertCircle, Download, Share2, Chrome, Copy } from 'lucide-react';
+import { Film, ArrowLeft, Play, Clock, Heart, MessageCircle, AlertCircle, Download, Share2, Chrome, Copy, Youtube, X } from 'lucide-react';
 import { logEvent } from '../../services/analytics';
 import { handleFirestoreError, OperationType } from '../../utils/firestoreErrorHandler';
 import AlertModal from '../../components/AlertModal';
+import { motion, AnimatePresence } from 'motion/react';
 
 export default function MovieDetails() {
   const { id } = useParams<{ id: string }>();
@@ -20,7 +21,11 @@ export default function MovieDetails() {
   const [alertConfig, setAlertConfig] = useState<{ isOpen: boolean; title: string; message: string }>({ isOpen: false, title: '', message: '' });
   const [linkPopup, setLinkPopup] = useState<{ isOpen: boolean; url: string; name: string; id: string } | null>(null);
   const [isPosterExpanded, setIsPosterExpanded] = useState(false);
+  const [isTrailerPopupOpen, setIsTrailerPopupOpen] = useState(false);
+  const [imdbData, setImdbData] = useState<any>(null);
+  const [fetchingImdb, setFetchingImdb] = useState(false);
   const hasLoggedView = useRef(false);
+  const navigate = useNavigate();
 
   useEffect(() => {
     window.scrollTo(0, 0);
@@ -103,6 +108,112 @@ export default function MovieDetails() {
     }
   }, [isPosterExpanded]);
 
+  useEffect(() => {
+    if (content?.imdbLink) {
+      const fetchImdb = async () => {
+        setFetchingImdb(true);
+        const ttMatch = content.imdbLink!.match(/tt\d+/);
+        if (!ttMatch) {
+          setFetchingImdb(false);
+          return;
+        }
+        const ttId = ttMatch[0];
+        let data: any = {};
+        
+        // Try TVMaze first
+        try {
+          const tvmazeRes = await fetch(`https://api.tvmaze.com/lookup/shows?imdb=${ttId}`);
+          if (tvmazeRes.ok) {
+            const show = await tvmazeRes.json();
+            data.title = show.name;
+            data.description = show.summary?.replace(/<[^>]*>?/gm, '') || '';
+            if (show.image?.original) data.posterUrl = show.image.original;
+            if (show.premiered) {
+              data.year = parseInt(show.premiered.substring(0, 4));
+              data.releaseDate = show.premiered;
+            }
+            data.duration = show.runtime ? `${show.runtime} min` : '';
+            data.rating = show.rating?.average ? `${show.rating.average}/10` : '';
+            
+            try {
+              const castRes = await fetch(`https://api.tvmaze.com/shows/${show.id}/cast`);
+              if (castRes.ok) {
+                const castData = await castRes.json();
+                data.cast = castData.slice(0, 5).map((c: any) => c.person.name).join(', ');
+              }
+            } catch (e) {}
+          }
+        } catch (error) {
+          // TVMaze fetch failed, silently fallback
+        }
+
+        if (Object.keys(data).length === 0) {
+          // Fallback to suggestion API
+          try {
+            let suggestRes = await fetch(`https://v3.sg.media-imdb.com/suggestion/t/${ttId}.json`).catch(() => null);
+            let suggestData = null;
+            
+            if (suggestRes && suggestRes.ok) {
+              suggestData = await suggestRes.json();
+            } else {
+              // Try via proxy
+              const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(`https://v3.sg.media-imdb.com/suggestion/t/${ttId}.json`)}`;
+              const proxyRes = await fetch(proxyUrl);
+              if (proxyRes.ok) {
+                const proxyData = await proxyRes.json();
+                suggestData = proxyData;
+              }
+            }
+
+            if (suggestData) {
+              const item = suggestData.d?.find((i: any) => i.id === ttId) || suggestData.d?.[0];
+              if (item) {
+                data.title = item.l || '';
+                data.year = item.y || '';
+                data.cast = item.s || '';
+                if (item.i?.imageUrl) data.posterUrl = item.i.imageUrl;
+              }
+            }
+          } catch (error) {
+            // IMDb suggestion fetch failed, silently fallback
+          }
+          
+          // Try to get more details via proxy
+          try {
+            const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(`https://www.imdb.com/title/${ttId}/`)}`;
+            const pageRes = await fetch(proxyUrl);
+            if (pageRes.ok) {
+              const html = await pageRes.text();
+              const parser = new DOMParser();
+              const doc = parser.parseFromString(html, 'text/html');
+              
+              const descEl = doc.querySelector('[data-testid="plot-xl"]') || doc.querySelector('[data-testid="plot-l"]');
+              if (descEl) data.description = descEl.textContent || '';
+              
+              const ratingEl = doc.querySelector('[data-testid="hero-rating-bar__aggregate-rating__score"] span');
+              if (ratingEl) data.rating = `${ratingEl.textContent}/10`;
+            }
+          } catch (error) {
+            // Proxy fetch failed, silently fallback
+          }
+        }
+        
+        if (Object.keys(data).length > 0) {
+          setImdbData(data);
+        }
+        setFetchingImdb(false);
+      };
+      fetchImdb();
+    }
+  }, [content?.imdbLink]);
+
+  const getYouTubeEmbedUrl = (url?: string) => {
+    if (!url) return null;
+    const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|&v=)([^#&?]*).*/;
+    const match = url.match(regExp);
+    return (match && match[2].length === 11) ? `https://www.youtube.com/embed/${match[2]}` : null;
+  };
+
   if (loading) {
     return <div className="min-h-screen bg-zinc-950 flex items-center justify-center"><div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-emerald-500"></div></div>;
   }
@@ -115,8 +226,14 @@ export default function MovieDetails() {
   const isExpired = profile?.status === 'expired';
   const isTemp = profile?.role === 'temporary';
   const isSelectedContent = profile?.role === 'selected_content';
-  const isAssigned = (isTemp || isSelectedContent) && profile?.assignedContent?.includes(content.id);
+  const isAssigned = (isTemp || isSelectedContent) && (
+    profile?.assignedContent?.includes(content.id) ||
+    profile?.assignedContent?.some(id => id.startsWith(`${content.id}:`))
+  );
   const canPlay = profile?.role === 'admin' || profile?.role === 'data_editor' || (profile?.status === 'active' && (!(isTemp || isSelectedContent) || isAssigned));
+
+  const allowedSeasons = profile?.assignedContent?.filter(id => id.startsWith(`${content.id}:`)).map(id => id.split(':')[1]) || [];
+  const hasFullAccess = profile?.role === 'admin' || profile?.role === 'data_editor' || (!(isTemp || isSelectedContent)) || profile?.assignedContent?.includes(content.id);
 
   const toggleWatchLater = async () => {
     if (!profile) return;
@@ -408,10 +525,13 @@ export default function MovieDetails() {
           <div className="absolute inset-0 bg-gradient-to-t from-zinc-950 via-zinc-950/60 to-transparent" />
         </div>
         
-        <div className="absolute top-0 left-0 w-full p-4 z-10">
-          <Link to="/" className="inline-flex items-center gap-2 text-zinc-300 hover:text-white bg-black/40 backdrop-blur-md px-4 py-2 rounded-full transition-colors">
+        <div className="absolute top-0 left-0 w-full p-4 z-[100] pointer-events-none">
+          <button 
+            onClick={() => navigate('/')} 
+            className="inline-flex items-center gap-2 text-zinc-300 hover:text-white bg-black/40 backdrop-blur-md px-4 py-2 rounded-full transition-colors pointer-events-auto cursor-pointer"
+          >
             <ArrowLeft className="w-5 h-5" /> Back
-          </Link>
+          </button>
         </div>
 
         <div className="absolute inset-0 flex items-center justify-center p-8 z-10 pt-20">
@@ -447,9 +567,13 @@ export default function MovieDetails() {
 
               <div className="flex flex-wrap items-center justify-center gap-4">
                 {content.trailerUrl && (
-                  <a href={content.trailerUrl} target="_blank" rel="noreferrer" className="bg-emerald-500 hover:bg-emerald-600 text-white px-8 py-4 rounded-xl font-bold flex items-center gap-2 transition-colors">
-                    <Play className="w-5 h-5" /> Watch Trailer
-                  </a>
+                  <button 
+                    onClick={() => setIsTrailerPopupOpen(true)}
+                    className={`${getYouTubeEmbedUrl(content.trailerUrl) ? 'bg-red-600 hover:bg-red-700' : 'bg-emerald-500 hover:bg-emerald-600'} text-white px-8 py-4 rounded-xl font-bold flex items-center gap-2 transition-colors`}
+                  >
+                    {getYouTubeEmbedUrl(content.trailerUrl) ? <Youtube className="w-5 h-5" /> : <Play className="w-5 h-5" />}
+                    Watch Trailer
+                  </button>
                 )}
                 {content.sampleUrl && (
                   <a href={content.sampleUrl} target="_blank" rel="noreferrer" className="bg-zinc-800 hover:bg-zinc-700 text-white px-8 py-4 rounded-xl font-bold flex items-center gap-2 transition-colors border border-zinc-700">
@@ -512,22 +636,67 @@ export default function MovieDetails() {
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-12">
           <div className="lg:col-span-2 space-y-12">
-            <section>
-              <h2 className="text-2xl font-bold mb-4">Synopsis</h2>
-              <p className="text-zinc-300 text-lg leading-relaxed">{content.description}</p>
-            </section>
-
-            {content.cast && content.cast.length > 0 && (
-              <section>
-                <h2 className="text-2xl font-bold mb-4">Cast</h2>
-                <div className="flex flex-wrap gap-2">
-                  {content.cast.map((actor, idx) => (
-                    <span key={idx} className="bg-zinc-900 border border-zinc-800 px-4 py-2 rounded-full text-sm">
-                      {actor}
-                    </span>
-                  ))}
+            {fetchingImdb ? (
+              <div className="flex justify-center items-center py-12">
+                <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-yellow-500"></div>
+              </div>
+            ) : imdbData ? (
+              <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-2xl p-6 md:p-8 flex flex-col md:flex-row gap-8">
+                {imdbData.posterUrl && (
+                  <img src={imdbData.posterUrl} alt="IMDb Poster" className="w-32 md:w-48 mx-auto md:mx-0 rounded-xl shadow-lg object-cover" referrerPolicy="no-referrer" />
+                )}
+                <div className="flex-1 space-y-4">
+                  <h2 className="text-3xl font-bold text-yellow-500">
+                    {imdbData.title} {imdbData.year ? `(${imdbData.year})` : ''}
+                  </h2>
+                  
+                  <div className="flex flex-wrap gap-4 text-sm font-medium text-yellow-500/80">
+                    {imdbData.releaseDate && <span>Release: {imdbData.releaseDate}</span>}
+                    {imdbData.duration && <span>Duration: {imdbData.duration}</span>}
+                    {imdbData.rating && <span>IMDb Rating: ⭐ {imdbData.rating}</span>}
+                  </div>
+                  
+                  {(imdbData.description || content.description) && (
+                    <div>
+                      <h3 className="text-lg font-bold text-yellow-500 mb-2">Synopsis</h3>
+                      <p className="text-zinc-300 leading-relaxed">{imdbData.description || content.description}</p>
+                    </div>
+                  )}
+                  
+                  {(imdbData.cast || (content.cast && content.cast.length > 0)) && (
+                    <div>
+                      <h3 className="text-lg font-bold text-yellow-500 mb-2">Cast</h3>
+                      <div className="flex flex-wrap gap-2">
+                        {(imdbData.cast ? imdbData.cast.split(',').map(c => c.trim()) : content.cast).map((actor, idx) => (
+                          <span key={idx} className="bg-zinc-800/80 border border-zinc-700 px-3 py-1.5 rounded-full text-sm text-zinc-300">
+                            {actor}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
-              </section>
+              </div>
+            ) : (
+              <>
+                <section>
+                  <h2 className="text-2xl font-bold mb-4">Synopsis</h2>
+                  <p className="text-zinc-300 text-lg leading-relaxed">{content.description}</p>
+                </section>
+
+                {content.cast && content.cast.length > 0 && (
+                  <section>
+                    <h2 className="text-2xl font-bold mb-4">Cast</h2>
+                    <div className="flex flex-wrap gap-2">
+                      {content.cast.map((actor, idx) => (
+                        <span key={idx} className="bg-zinc-900 border border-zinc-800 px-4 py-2 rounded-full text-sm">
+                          {actor}
+                        </span>
+                      ))}
+                    </div>
+                  </section>
+                )}
+              </>
             )}
 
             {/* Links Section */}
@@ -543,7 +712,9 @@ export default function MovieDetails() {
 
               {content.type === 'series' && content.seasons && (
                 <div className="space-y-6">
-                  {JSON.parse(content.seasons).map((season: Season) => (
+                  {JSON.parse(content.seasons)
+                    .filter((season: Season) => hasFullAccess || allowedSeasons.includes(season.id))
+                    .map((season: Season) => (
                     <div key={season.id} className="bg-zinc-900 border border-zinc-800 rounded-2xl overflow-hidden">
                       <div className="bg-zinc-950/50 p-6 border-b border-zinc-800">
                         <h3 className="text-xl font-bold">Season {season.seasonNumber}</h3>
@@ -551,9 +722,9 @@ export default function MovieDetails() {
                       
                       <div className="p-6 space-y-8">
                         {(() => {
-                          const zipLinks = season.zipLinks?.filter(l => l.name.toLowerCase().includes('zip')) || [];
-                          const mkvLinks = season.zipLinks?.filter(l => l.name.toLowerCase().includes('mkv')) || [];
-                          const otherLinks = season.zipLinks?.filter(l => !l.name.toLowerCase().includes('zip') && !l.name.toLowerCase().includes('mkv')) || [];
+                          const zipLinks = season.zipLinks || [];
+                          const mkvLinks = season.mkvLinks || [];
+                          const otherLinks = (season as any).otherLinks || []; // Fallback if any
                           
                           return (
                             <>
@@ -567,12 +738,6 @@ export default function MovieDetails() {
                                 <div>
                                   <h4 className="font-semibold text-zinc-400 mb-3 text-sm uppercase tracking-wider">Full Season MKV</h4>
                                   {renderLinks(mkvLinks)}
-                                </div>
-                              )}
-                              {otherLinks.length > 0 && (
-                                <div>
-                                  <h4 className="font-semibold text-zinc-400 mb-3 text-sm uppercase tracking-wider">Other Links</h4>
-                                  {renderLinks(otherLinks)}
                                 </div>
                               )}
                             </>
@@ -630,36 +795,40 @@ export default function MovieDetails() {
             <h3 className="text-xl font-bold mb-2">Play Content</h3>
             <p className="text-zinc-400 mb-6">How would you like to open "{linkPopup.name}"?</p>
             <div className="flex flex-col gap-3">
-              <button
-                onClick={() => handlePlayExternal('generic')}
-                className="w-full bg-emerald-500 hover:bg-emerald-600 text-white font-bold py-3 px-4 rounded-xl transition-colors flex items-center justify-center gap-2"
-              >
-                <Play className="w-5 h-5" /> Play in Video Player
-              </button>
-              
-              <div className="grid grid-cols-2 gap-3">
-                <button
-                  onClick={() => handlePlayExternal('mx')}
-                  className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-xl transition-colors flex items-center justify-center gap-2 text-sm"
-                >
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" className="w-5 h-5">
-                    <rect width="24" height="24" rx="6" fill="white" fillOpacity="0.2"/>
-                    <path d="M16.5 12L9 16.5V7.5L16.5 12Z" fill="currentColor"/>
-                  </svg>
-                  MX Player
-                </button>
-                <button
-                  onClick={() => handlePlayExternal('vlc')}
-                  className="w-full bg-orange-600 hover:bg-orange-700 text-white font-bold py-3 px-4 rounded-xl transition-colors flex items-center justify-center gap-2 text-sm"
-                >
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" className="w-5 h-5">
-                    <path d="M12 2L5 22H19L12 2Z" fill="currentColor"/>
-                    <path d="M6.5 17H17.5" stroke="#ea580c" strokeWidth="2.5"/>
-                    <path d="M9 10H15" stroke="#ea580c" strokeWidth="2.5"/>
-                  </svg>
-                  VLC Player
-                </button>
-              </div>
+              {!(linkPopup.name.toLowerCase().includes('zip') || linkPopup.url.toLowerCase().includes('.zip')) ? (
+                <>
+                  <button
+                    onClick={() => handlePlayExternal('generic')}
+                    className="w-full bg-emerald-500 hover:bg-emerald-600 text-white font-bold py-3 px-4 rounded-xl transition-colors flex items-center justify-center gap-2"
+                  >
+                    <Play className="w-5 h-5" /> Play in Video Player
+                  </button>
+                  
+                  <div className="grid grid-cols-2 gap-3">
+                    <button
+                      onClick={() => handlePlayExternal('mx')}
+                      className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-xl transition-colors flex items-center justify-center gap-2 text-sm"
+                    >
+                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" className="w-5 h-5">
+                        <rect width="24" height="24" rx="6" fill="white" fillOpacity="0.2"/>
+                        <path d="M16.5 12L9 16.5V7.5L16.5 12Z" fill="currentColor"/>
+                      </svg>
+                      MX Player
+                    </button>
+                    <button
+                      onClick={() => handlePlayExternal('vlc')}
+                      className="w-full bg-orange-600 hover:bg-orange-700 text-white font-bold py-3 px-4 rounded-xl transition-colors flex items-center justify-center gap-2 text-sm"
+                    >
+                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" className="w-5 h-5">
+                        <path d="M12 2L5 22H19L12 2Z" fill="currentColor"/>
+                        <path d="M6.5 17H17.5" stroke="#ea580c" strokeWidth="2.5"/>
+                        <path d="M9 10H15" stroke="#ea580c" strokeWidth="2.5"/>
+                      </svg>
+                      VLC Player
+                    </button>
+                  </div>
+                </>
+              ) : null}
 
               <button
                 onClick={() => handlePlayExternal('download')}
@@ -667,12 +836,6 @@ export default function MovieDetails() {
               >
                 <Copy className="w-5 h-5" /> Copy Link
               </button>
-
-              <div className="relative flex py-2 items-center">
-                <div className="flex-grow border-t border-zinc-700"></div>
-                <span className="flex-shrink-0 mx-4 text-zinc-500 text-sm">or</span>
-                <div className="flex-grow border-t border-zinc-700"></div>
-              </div>
 
               <button
                 onClick={handlePlayDirectly}
@@ -706,6 +869,51 @@ export default function MovieDetails() {
           </div>
         </div>
       )}
+      <AnimatePresence>
+        {isTrailerPopupOpen && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.3 }}
+            className="fixed inset-0 bg-black/95 backdrop-blur-md flex items-center justify-center z-[60] p-4"
+            onClick={() => setIsTrailerPopupOpen(false)}
+          >
+            <motion.div 
+              initial={{ scale: 0.9, opacity: 0, y: 20 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.9, opacity: 0, y: 20 }}
+              transition={{ type: "spring", damping: 25, stiffness: 300 }}
+              className="relative w-full max-w-5xl aspect-video bg-black rounded-2xl overflow-hidden shadow-[0_0_50px_rgba(0,0,0,0.5)] ring-1 ring-white/10" 
+              onClick={e => e.stopPropagation()}
+            >
+              <button
+                onClick={() => setIsTrailerPopupOpen(false)}
+                className="absolute top-4 right-4 text-white/70 hover:text-white transition-colors bg-black/50 hover:bg-black/80 p-2 rounded-full z-10 backdrop-blur-sm"
+              >
+                <X className="w-6 h-6" />
+              </button>
+              {getYouTubeEmbedUrl(content.trailerUrl!) ? (
+                <iframe
+                  src={`${getYouTubeEmbedUrl(content.trailerUrl!)}?autoplay=1`}
+                  title="Trailer"
+                  className="w-full h-full border-0"
+                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                  allowFullScreen
+                ></iframe>
+              ) : (
+                <div className="w-full h-full flex flex-col items-center justify-center text-white gap-4 bg-zinc-900">
+                  <Play className="w-16 h-16 opacity-50" />
+                  <p>This trailer cannot be played directly here.</p>
+                  <a href={content.trailerUrl} target="_blank" rel="noreferrer" className="bg-emerald-500 hover:bg-emerald-600 px-6 py-3 rounded-xl font-bold transition-colors">
+                    Open in New Tab
+                  </a>
+                </div>
+              )}
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

@@ -49,6 +49,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               const now = new Date();
               if (data.status === 'active' && data.expiryDate) {
                 const expiryDate = new Date(data.expiryDate);
+                // Add 1 day to expiryDate so it expires on the next day
+                expiryDate.setDate(expiryDate.getDate() + 1);
                 if (expiryDate < now) {
                   try {
                     await updateDoc(userRef, { status: 'expired' });

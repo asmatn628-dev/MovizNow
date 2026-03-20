@@ -124,6 +124,26 @@ export default function Home() {
     return result.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()).slice(0, 10);
   }, [contentList, profile]);
 
+  const getRoleColor = (role: string) => {
+    switch(role) {
+      case 'admin': return 'bg-purple-500/20 text-purple-400 border-purple-500/30';
+      case 'data_editor': return 'bg-blue-500/20 text-blue-400 border-blue-500/30';
+      case 'selected_content': return 'bg-amber-500/20 text-amber-400 border-amber-500/30';
+      case 'temporary': return 'bg-orange-500/20 text-orange-400 border-orange-500/30';
+      default: return 'bg-zinc-500/20 text-zinc-400 border-zinc-500/30';
+    }
+  };
+
+  const getStatusColor = (status: string) => {
+    switch(status) {
+      case 'active': return 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30';
+      case 'expired': return 'bg-red-500/20 text-red-400 border-red-500/30';
+      case 'suspended': return 'bg-red-500/20 text-red-400 border-red-500/30';
+      case 'pending': return 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30';
+      default: return 'bg-zinc-500/20 text-zinc-400 border-zinc-500/30';
+    }
+  };
+
   const filteredAndSortedContent = useMemo(() => {
     let result = [...contentList];
 
@@ -177,7 +197,7 @@ export default function Home() {
       <header className="sticky top-0 z-40 bg-zinc-950/80 backdrop-blur-xl border-b border-zinc-800">
         <div className="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between">
           <Link to="/" className="text-2xl font-bold text-emerald-500 flex items-center gap-3">
-            <img src="/logo.svg?v=2" alt="MovizNow Logo" className="w-8 h-8" />
+            <img src="/pwa-512x512.png" alt="MovizNow Logo" className="w-8 h-8" />
             <span className="tracking-tight">MovizNow</span>
           </Link>
 
@@ -187,9 +207,14 @@ export default function Home() {
                 <div className="flex flex-col items-end">
                   <div className="flex items-center gap-2">
                     <span className="text-sm font-bold text-white">{profile.displayName || 'User'}</span>
-                    <span className="text-[10px] font-medium text-emerald-500 capitalize bg-emerald-500/10 px-1.5 py-0.5 rounded">
-                      {profile.role === 'selected_content' ? 'Selected Content' : profile.role.replace('_', ' ')} • {profile.status}
-                    </span>
+                    <div className="flex items-center gap-1.5">
+                      <span className={clsx("text-[10px] font-medium capitalize px-2 py-0.5 rounded-full border", getRoleColor(profile.role))}>
+                        {profile.role === 'selected_content' ? 'Selected Content' : profile.role.replace('_', ' ')}
+                      </span>
+                      <span className={clsx("text-[10px] font-medium capitalize px-2 py-0.5 rounded-full border", getStatusColor(profile.status))}>
+                        {profile.status}
+                      </span>
+                    </div>
                   </div>
                   {profile.phone ? (
                     <span className="text-xs font-medium text-zinc-400">{profile.phone}</span>
@@ -263,7 +288,14 @@ export default function Home() {
                 </button>
               )}
             </div>
-            <span className="font-medium text-emerald-500 capitalize">{profile.role === 'selected_content' ? 'Selected Content' : profile.role.replace('_', ' ')} • {profile.status}</span>
+            <div className="flex items-center gap-1.5">
+              <span className={clsx("text-[10px] font-medium capitalize px-2 py-0.5 rounded-full border", getRoleColor(profile.role))}>
+                {profile.role === 'selected_content' ? 'Selected Content' : profile.role.replace('_', ' ')}
+              </span>
+              <span className={clsx("text-[10px] font-medium capitalize px-2 py-0.5 rounded-full border", getStatusColor(profile.status))}>
+                {profile.status}
+              </span>
+            </div>
           </div>
           <div className="flex justify-between items-center">
             <span className="text-zinc-400 text-xs">

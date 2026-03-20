@@ -55,6 +55,8 @@ export default function ContentManagement() {
   const [isLanguageDropdownOpen, setIsLanguageDropdownOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [fetchingImdb, setFetchingImdb] = useState(false);
+  const [imdbSeasonsPopup, setImdbSeasonsPopup] = useState<{ isOpen: boolean; seasons: any[]; show: any; epData: any[] } | null>(null);
+  const [selectedImdbSeasons, setSelectedImdbSeasons] = useState<number[]>([]);
 
   useEffect(() => {
     const unsubContent = onSnapshot(collection(db, 'content'), (snapshot) => {
@@ -288,6 +290,69 @@ export default function ContentManagement() {
     }
   };
 
+  const processImdbSeasons = (epData: any[], selectedSeasons?: number[]) => {
+    const seasonsMap = new Map<number, any[]>();
+    epData.forEach((ep: any) => {
+      if (selectedSeasons && !selectedSeasons.includes(ep.season)) return;
+      if (!seasonsMap.has(ep.season)) seasonsMap.set(ep.season, []);
+      seasonsMap.get(ep.season)!.push(ep);
+    });
+    
+    setSeasons(prevSeasons => {
+      const newSeasons = prevSeasons.map(s => ({ ...s, episodes: [...s.episodes] }));
+      seasonsMap.forEach((eps, seasonNum) => {
+        let seasonIndex = newSeasons.findIndex(s => s.seasonNumber === seasonNum);
+        if (seasonIndex === -1) {
+          newSeasons.push({
+            id: Math.random().toString(36).substr(2, 9),
+            seasonNumber: seasonNum,
+            year: undefined,
+            episodes: [],
+            zipLinks: [
+              { id: Math.random().toString(36).substr(2, 9), name: '480p', url: '', size: '', unit: 'GB' },
+              { id: Math.random().toString(36).substr(2, 9), name: '720p', url: '', size: '', unit: 'GB' },
+              { id: Math.random().toString(36).substr(2, 9), name: '1080p', url: '', size: '', unit: 'GB' }
+            ],
+            mkvLinks: [
+              { id: Math.random().toString(36).substr(2, 9), name: '480p', url: '', size: '', unit: 'GB' },
+              { id: Math.random().toString(36).substr(2, 9), name: '720p', url: '', size: '', unit: 'GB' },
+              { id: Math.random().toString(36).substr(2, 9), name: '1080p', url: '', size: '', unit: 'GB' }
+            ]
+          });
+          seasonIndex = newSeasons.length - 1;
+        }
+        
+        const currentSeason = newSeasons[seasonIndex];
+        const newEpisodes = currentSeason.episodes;
+        
+        eps.forEach(ep => {
+          const epIndex = newEpisodes.findIndex(e => e.episodeNumber === ep.number);
+          if (epIndex === -1) {
+            newEpisodes.push({
+              id: Math.random().toString(36).substr(2, 9),
+              episodeNumber: ep.number,
+              title: ep.name,
+              links: [
+                { id: Math.random().toString(36).substr(2, 9), name: '720p', url: '', size: '', unit: 'MB' }
+              ]
+            });
+          } else {
+            newEpisodes[epIndex].title = ep.name;
+          }
+          
+          if (ep.number === 1 && ep.airdate) {
+              currentSeason.year = parseInt(ep.airdate.substring(0, 4));
+          } else if (!currentSeason.year && ep.airdate) {
+              currentSeason.year = parseInt(ep.airdate.substring(0, 4));
+          }
+        });
+        
+        currentSeason.episodes = newEpisodes.sort((a, b) => a.episodeNumber - b.episodeNumber);
+      });
+      return newSeasons.sort((a, b) => a.seasonNumber - b.seasonNumber);
+    });
+  };
+
   const fetchImdbData = async (link: string) => {
     const ttMatch = link.match(/tt\d+/);
     if (!ttMatch) return;
@@ -327,59 +392,21 @@ export default function ContentManagement() {
               seasonsMap.get(ep.season)!.push(ep);
             });
             
-            setSeasons(prevSeasons => {
-              const newSeasons = prevSeasons.map(s => ({ ...s, episodes: [...s.episodes] }));
-              seasonsMap.forEach((eps, seasonNum) => {
-                let seasonIndex = newSeasons.findIndex(s => s.seasonNumber === seasonNum);
-                if (seasonIndex === -1) {
-                  newSeasons.push({
-                    id: Math.random().toString(36).substr(2, 9),
-                    seasonNumber: seasonNum,
-                    year: undefined,
-                    episodes: [],
-                    zipLinks: [
-                      { id: Math.random().toString(36).substr(2, 9), name: '480p', url: '', size: '', unit: 'GB' },
-                      { id: Math.random().toString(36).substr(2, 9), name: '720p', url: '', size: '', unit: 'GB' },
-                      { id: Math.random().toString(36).substr(2, 9), name: '1080p', url: '', size: '', unit: 'GB' }
-                    ],
-                    mkvLinks: [
-                      { id: Math.random().toString(36).substr(2, 9), name: '480p', url: '', size: '', unit: 'GB' },
-                      { id: Math.random().toString(36).substr(2, 9), name: '720p', url: '', size: '', unit: 'GB' },
-                      { id: Math.random().toString(36).substr(2, 9), name: '1080p', url: '', size: '', unit: 'GB' }
-                    ]
-                  });
-                  seasonIndex = newSeasons.length - 1;
-                }
-                
-                const currentSeason = newSeasons[seasonIndex];
-                const newEpisodes = currentSeason.episodes;
-                
-                eps.forEach(ep => {
-                  const epIndex = newEpisodes.findIndex(e => e.episodeNumber === ep.number);
-                  if (epIndex === -1) {
-                    newEpisodes.push({
-                      id: Math.random().toString(36).substr(2, 9),
-                      episodeNumber: ep.number,
-                      title: ep.name,
-                      links: [
-                        { id: Math.random().toString(36).substr(2, 9), name: '720p', url: '', size: '', unit: 'MB' }
-                      ]
-                    });
-                  } else {
-                    newEpisodes[epIndex].title = ep.name;
-                  }
-                  
-                  if (ep.number === 1 && ep.airdate) {
-                      currentSeason.year = parseInt(ep.airdate.substring(0, 4));
-                  } else if (!currentSeason.year && ep.airdate) {
-                      currentSeason.year = parseInt(ep.airdate.substring(0, 4));
-                  }
-                });
-                
-                currentSeason.episodes = newEpisodes.sort((a, b) => a.episodeNumber - b.episodeNumber);
+            const availableSeasons = Array.from(seasonsMap.keys()).sort((a, b) => a - b);
+            
+            if (availableSeasons.length > 1) {
+              setSelectedImdbSeasons(availableSeasons);
+              setImdbSeasonsPopup({
+                isOpen: true,
+                seasons: availableSeasons,
+                show: show,
+                epData: epData
               });
-              return newSeasons.sort((a, b) => a.seasonNumber - b.seasonNumber);
-            });
+              setFetchingImdb(false);
+              return;
+            } else {
+              processImdbSeasons(epData);
+            }
           }
         } catch (e) {}
         
@@ -404,11 +431,10 @@ export default function ContentManagement() {
       } catch (e) {}
       
       try {
-        const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(`https://www.imdb.com/title/${ttId}/`)}`;
+        const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(`https://www.imdb.com/title/${ttId}/`)}`;
         const pageRes = await fetch(proxyUrl);
         if (pageRes.ok) {
-          const pageData = await pageRes.json();
-          const html = pageData.contents;
+          const html = await pageRes.text();
           const parser = new DOMParser();
           const doc = parser.parseFromString(html, 'text/html');
           
@@ -1238,6 +1264,79 @@ export default function ContentManagement() {
         message={alertConfig.message}
         onClose={() => setAlertConfig({ ...alertConfig, isOpen: false })}
       />
+
+      {imdbSeasonsPopup && imdbSeasonsPopup.isOpen && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-[60] p-4">
+          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 max-w-md w-full relative">
+            <button
+              onClick={() => setImdbSeasonsPopup(null)}
+              className="absolute top-4 right-4 text-zinc-400 hover:text-white transition-colors"
+            >
+              <X className="w-5 h-5" />
+            </button>
+            <h3 className="text-xl font-bold mb-2">Select Seasons</h3>
+            <p className="text-zinc-400 mb-6">Choose which seasons to fetch for "{imdbSeasonsPopup.show.name}"</p>
+            
+            <div className="max-h-60 overflow-y-auto space-y-2 mb-6 pr-2 custom-scrollbar">
+              {imdbSeasonsPopup.seasons.map(season => (
+                <label key={season} className="flex items-center gap-3 p-3 rounded-xl hover:bg-zinc-800/50 cursor-pointer border border-zinc-800/50 transition-colors">
+                  <input
+                    type="checkbox"
+                    checked={selectedImdbSeasons.includes(season)}
+                    onChange={(e) => {
+                      if (e.target.checked) {
+                        setSelectedImdbSeasons(prev => [...prev, season]);
+                      } else {
+                        setSelectedImdbSeasons(prev => prev.filter(s => s !== season));
+                      }
+                    }}
+                    className="w-5 h-5 rounded border-zinc-700 text-emerald-500 focus:ring-emerald-500/20 bg-zinc-950"
+                  />
+                  <span className="font-medium">Season {season}</span>
+                </label>
+              ))}
+            </div>
+
+            <div className="flex gap-3">
+              <button
+                onClick={() => {
+                  setSelectedImdbSeasons(imdbSeasonsPopup.seasons);
+                }}
+                className="flex-1 py-2 px-4 rounded-xl font-medium bg-zinc-800 hover:bg-zinc-700 text-white transition-colors text-sm"
+              >
+                Select All
+              </button>
+              <button
+                onClick={() => {
+                  setSelectedImdbSeasons([]);
+                }}
+                className="flex-1 py-2 px-4 rounded-xl font-medium bg-zinc-800 hover:bg-zinc-700 text-white transition-colors text-sm"
+              >
+                Deselect All
+              </button>
+            </div>
+
+            <div className="mt-6 flex justify-end gap-3">
+              <button
+                onClick={() => setImdbSeasonsPopup(null)}
+                className="px-6 py-2 rounded-xl font-medium hover:bg-zinc-800 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  processImdbSeasons(imdbSeasonsPopup.epData, selectedImdbSeasons);
+                  setImdbSeasonsPopup(null);
+                }}
+                disabled={selectedImdbSeasons.length === 0}
+                className="bg-emerald-500 hover:bg-emerald-600 disabled:opacity-50 disabled:cursor-not-allowed text-white px-6 py-2 rounded-xl font-bold transition-colors"
+              >
+                Fetch Selected
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

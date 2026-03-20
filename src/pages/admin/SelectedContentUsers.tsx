@@ -21,6 +21,19 @@ export default function SelectedContentUsers() {
   useEffect(() => {
     const unsub = onSnapshot(collection(db, 'users'), (snapshot) => {
       const data = snapshot.docs.map((doc) => ({ ...doc.data() } as UserProfile));
+      
+      // Auto-expire users whose expiry date has passed
+      const now = new Date();
+      data.forEach(user => {
+        if (user.status === 'active' && user.expiryDate) {
+          const expiryDate = new Date(user.expiryDate);
+          expiryDate.setDate(expiryDate.getDate() + 1);
+          if (now > expiryDate) {
+            updateDoc(doc(db, 'users', user.uid), { status: 'expired' }).catch(console.error);
+          }
+        }
+      });
+
       setUsers(data);
     }, (error) => {
       console.error("Users snapshot error:", error);
@@ -45,12 +58,48 @@ export default function SelectedContentUsers() {
     setAssignedIds(new Set(user.assignedContent || []));
   };
 
-  const toggleContent = (contentId: string) => {
+  const toggleContent = (contentId: string, seasons?: any[]) => {
     const newSet = new Set(assignedIds);
     if (newSet.has(contentId)) {
       newSet.delete(contentId);
+      if (seasons) {
+        seasons.forEach(s => newSet.delete(`${contentId}:${s.id}`));
+      }
     } else {
       newSet.add(contentId);
+      if (seasons) {
+        seasons.forEach(s => newSet.delete(`${contentId}:${s.id}`));
+      }
+    }
+    setAssignedIds(newSet);
+  };
+
+  const toggleSeason = (contentId: string, seasonId: string, allSeasons: any[]) => {
+    const newSet = new Set(assignedIds);
+    const seasonKey = `${contentId}:${seasonId}`;
+    
+    if (newSet.has(contentId)) {
+      newSet.delete(contentId);
+      allSeasons.forEach(s => {
+        if (s.id !== seasonId) {
+          newSet.add(`${contentId}:${s.id}`);
+        }
+      });
+    } else if (newSet.has(seasonKey)) {
+      newSet.delete(seasonKey);
+    } else {
+      newSet.add(seasonKey);
+      let allSelected = true;
+      for (const s of allSeasons) {
+        if (s.id !== seasonId && !newSet.has(`${contentId}:${s.id}`)) {
+          allSelected = false;
+          break;
+        }
+      }
+      if (allSelected) {
+        allSeasons.forEach(s => newSet.delete(`${contentId}:${s.id}`));
+        newSet.add(contentId);
+      }
     }
     setAssignedIds(newSet);
   };
@@ -203,37 +252,70 @@ export default function SelectedContentUsers() {
             
             <div className="flex-1 overflow-y-auto p-6">
               <div className="space-y-2">
-                {filteredContent.map((content) => (
-                  <label
-                    key={content.id}
-                    className={`flex items-center gap-4 p-4 rounded-xl cursor-pointer border transition-colors ${
-                      assignedIds.has(content.id)
-                        ? 'bg-emerald-500/10 border-emerald-500/50'
-                        : 'bg-zinc-950 border-zinc-800 hover:border-zinc-700'
-                    }`}
-                  >
-                    <input 
-                      type="checkbox" 
-                      className="hidden" 
-                      checked={assignedIds.has(content.id)}
-                      onChange={() => toggleContent(content.id)}
-                    />
-                    <div className={`w-6 h-6 rounded flex items-center justify-center border ${
-                      assignedIds.has(content.id) ? 'bg-emerald-500 border-emerald-500' : 'border-zinc-600'
-                    }`}>
-                      {assignedIds.has(content.id) && <Check className="w-4 h-4 text-white" />}
-                    </div>
-                    <div className="flex-1 flex items-center justify-between">
-                      <div>
-                        <h4 className="font-medium">{content.title}</h4>
-                        <p className="text-xs text-zinc-500 capitalize">{content.type} • {content.year}</p>
-                      </div>
-                      {content.status === 'draft' && (
-                        <span className="bg-yellow-500/20 text-yellow-500 text-xs px-2 py-1 rounded font-medium">Draft</span>
+                {filteredContent.map((content) => {
+                  const isSeries = content.type === 'series';
+                  const seasons = isSeries && content.seasons ? JSON.parse(content.seasons) : [];
+                  const isFullyAssigned = assignedIds.has(content.id);
+                  const isPartiallyAssigned = !isFullyAssigned && seasons.some((s: any) => assignedIds.has(`${content.id}:${s.id}`));
+
+                  return (
+                    <div key={content.id} className="bg-zinc-950 border border-zinc-800 rounded-xl overflow-hidden">
+                      <label
+                        className={`flex items-center gap-4 p-4 cursor-pointer transition-colors ${
+                          isFullyAssigned
+                            ? 'bg-emerald-500/10'
+                            : isPartiallyAssigned ? 'bg-emerald-500/5' : 'hover:bg-zinc-900'
+                        }`}
+                      >
+                        <input 
+                          type="checkbox" 
+                          className="hidden" 
+                          checked={isFullyAssigned}
+                          onChange={() => toggleContent(content.id, seasons)}
+                        />
+                        <div className={`w-6 h-6 rounded flex items-center justify-center border ${
+                          isFullyAssigned ? 'bg-emerald-500 border-emerald-500' : isPartiallyAssigned ? 'border-emerald-500 bg-emerald-500/20' : 'border-zinc-600'
+                        }`}>
+                          {isFullyAssigned && <Check className="w-4 h-4 text-white" />}
+                          {!isFullyAssigned && isPartiallyAssigned && <div className="w-3 h-3 bg-emerald-500 rounded-sm" />}
+                        </div>
+                        <div className="flex-1 flex items-center justify-between">
+                          <div>
+                            <h4 className="font-medium">{content.title}</h4>
+                            <p className="text-xs text-zinc-500 capitalize">{content.type} • {content.year}</p>
+                          </div>
+                          {content.status === 'draft' && (
+                            <span className="bg-yellow-500/20 text-yellow-500 text-xs px-2 py-1 rounded font-medium">Draft</span>
+                          )}
+                        </div>
+                      </label>
+                      
+                      {isSeries && seasons.length > 0 && (
+                        <div className="border-t border-zinc-800/50 bg-zinc-900/30 p-2 pl-14 space-y-1">
+                          {seasons.map((season: any) => {
+                            const isSeasonAssigned = isFullyAssigned || assignedIds.has(`${content.id}:${season.id}`);
+                            return (
+                              <label key={season.id} className="flex items-center gap-3 p-2 rounded-lg cursor-pointer hover:bg-zinc-800/50">
+                                <input
+                                  type="checkbox"
+                                  className="hidden"
+                                  checked={isSeasonAssigned}
+                                  onChange={() => toggleSeason(content.id, season.id, seasons)}
+                                />
+                                <div className={`w-5 h-5 rounded flex items-center justify-center border ${
+                                  isSeasonAssigned ? 'bg-emerald-500 border-emerald-500' : 'border-zinc-600'
+                                }`}>
+                                  {isSeasonAssigned && <Check className="w-3 h-3 text-white" />}
+                                </div>
+                                <span className="text-sm text-zinc-300">Season {season.seasonNumber}</span>
+                              </label>
+                            );
+                          })}
+                        </div>
                       )}
                     </div>
-                  </label>
-                ))}
+                  );
+                })}
                 {filteredContent.length === 0 && (
                   <p className="text-center text-zinc-500 py-8">No content available.</p>
                 )}
