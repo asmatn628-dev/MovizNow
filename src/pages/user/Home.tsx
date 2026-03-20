@@ -9,6 +9,7 @@ import { clsx } from 'clsx';
 import { handleFirestoreError, OperationType } from '../../utils/firestoreErrorHandler';
 import { format } from 'date-fns';
 import ConfirmModal from '../../components/ConfirmModal';
+import { formatContentTitle } from '../../utils/contentUtils';
 
 export default function Home() {
   const { profile, logout } = useAuth();
@@ -24,13 +25,15 @@ export default function Home() {
   const [selectedType, setSelectedType] = useState<string>('');
   const [selectedQuality, setSelectedQuality] = useState<string>('');
   const [selectedYear, setSelectedYear] = useState<string>('');
+  const [currentPage, setCurrentPage] = useState(1);
+  const ITEMS_PER_PAGE = 20;
   const [isLogoutModalOpen, setIsLogoutModalOpen] = useState(false);
   const [showWhatsappPrompt, setShowWhatsappPrompt] = useState(false);
   const [whatsappNumber, setWhatsappNumber] = useState('');
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (profile && profile.phone === undefined) {
+    if (profile && profile.phone === undefined && profile.role !== 'admin' && profile.role !== 'data_editor') {
       setShowWhatsappPrompt(true);
     }
   }, [profile]);
@@ -191,13 +194,24 @@ export default function Home() {
     return result;
   }, [contentList, search, sort, selectedType, selectedGenre, selectedLanguage, selectedQuality, selectedYear, profile]);
 
+  const totalPages = Math.ceil(filteredAndSortedContent.length / ITEMS_PER_PAGE);
+  const paginatedContent = useMemo(() => {
+    const start = (currentPage - 1) * ITEMS_PER_PAGE;
+    return filteredAndSortedContent.slice(start, start + ITEMS_PER_PAGE);
+  }, [filteredAndSortedContent, currentPage]);
+
+  // Reset to page 1 when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [search, sort, selectedType, selectedGenre, selectedLanguage, selectedQuality, selectedYear]);
+
   return (
     <div className="min-h-screen bg-zinc-950 text-white flex flex-col">
       {/* Header */}
       <header className="sticky top-0 z-40 bg-zinc-950/80 backdrop-blur-xl border-b border-zinc-800">
         <div className="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between">
           <Link to="/" className="text-2xl font-bold text-emerald-500 flex items-center gap-3">
-            <img src="/pwa-512x512.png" alt="MovizNow Logo" className="w-8 h-8" />
+            <img src="/logo.svg?v=2" alt="MovizNow Logo" className="w-8 h-8" />
             <span className="tracking-tight">MovizNow</span>
           </Link>
 
@@ -392,7 +406,7 @@ export default function Home() {
                     </div>
 
                     <div className="p-2 flex-1 flex flex-col">
-                      <h3 className="font-bold text-xs line-clamp-1 mb-1 group-hover:text-emerald-500 transition-colors">{content.title}</h3>
+                      <h3 className="font-bold text-xs line-clamp-1 mb-1 group-hover:text-emerald-500 transition-colors">{formatContentTitle(content)}</h3>
                       <div className="flex items-center gap-1 text-[10px] text-zinc-400 mb-1">
                         <span>{content.year}</span>
                         {contentLangs && (
@@ -498,67 +512,136 @@ export default function Home() {
             <p className="text-xl">No content found</p>
           </div>
         ) : (
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4 md:gap-6">
-            {filteredAndSortedContent.map((content) => {
-              const isAssigned = (profile?.role === 'temporary' || profile?.role === 'selected_content') && profile.assignedContent?.includes(content.id);
-              const isLocked = profile?.status !== 'active' || ((profile?.role === 'temporary' || profile?.role === 'selected_content') && !isAssigned);
-              
-              const contentQuality = qualities.find(q => q.id === content.qualityId)?.name;
-              const contentLangs = languages.filter(l => content.languageIds?.includes(l.id)).map(l => l.name).join(', ');
-              const contentGenres = genres.filter(g => content.genreIds?.includes(g.id)).map(g => g.name).join(', ');
+          <>
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4 md:gap-6">
+              {paginatedContent.map((content) => {
+                const isAssigned = (profile?.role === 'temporary' || profile?.role === 'selected_content') && profile.assignedContent?.includes(content.id);
+                const isLocked = profile?.status !== 'active' || ((profile?.role === 'temporary' || profile?.role === 'selected_content') && !isAssigned);
+                
+                const contentQuality = qualities.find(q => q.id === content.qualityId)?.name;
+                const contentLangs = languages.filter(l => content.languageIds?.includes(l.id)).map(l => l.name).join(', ');
+                const contentGenres = genres.filter(g => content.genreIds?.includes(g.id)).map(g => g.name).join(', ');
 
-              return (
-                <Link
-                  key={content.id}
-                  to={`/movie/${content.id}`}
-                  className={`group relative flex flex-col bg-zinc-900 border border-zinc-800 rounded-2xl overflow-hidden transition-transform hover:scale-105 hover:border-emerald-500/50 ${isLocked ? 'opacity-50' : ''}`}
-                >
-                  <div className="relative aspect-[2/3] w-full">
-                    <img
-                      src={content.posterUrl || 'https://picsum.photos/seed/movie/400/600'}
-                      alt={content.title}
-                      className="w-full h-full object-cover"
-                      referrerPolicy="no-referrer"
-                      loading="lazy"
-                    />
-                    <div className={`absolute top-2 right-2 backdrop-blur-md px-2 py-1 rounded text-xs font-bold uppercase tracking-wider text-white ${content.type === 'movie' ? 'bg-blue-500/80' : 'bg-purple-500/80'}`}>
-                      {content.type}
-                    </div>
-                    {isLocked && (
-                      <div className="absolute top-2 left-2 bg-red-500/90 backdrop-blur-md px-2 py-1 rounded text-xs font-bold uppercase tracking-wider flex items-center gap-1 shadow-lg text-white">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
-                        Locked
+                return (
+                  <Link
+                    key={content.id}
+                    to={`/movie/${content.id}`}
+                    className={`group relative flex flex-col bg-zinc-900 border border-zinc-800 rounded-2xl overflow-hidden transition-transform hover:scale-105 hover:border-emerald-500/50 ${isLocked ? 'opacity-50' : ''}`}
+                  >
+                    <div className="relative aspect-[2/3] w-full">
+                      <img
+                        src={content.posterUrl || 'https://picsum.photos/seed/movie/400/600'}
+                        alt={content.title}
+                        className="w-full h-full object-cover"
+                        referrerPolicy="no-referrer"
+                        loading="lazy"
+                      />
+                      <div className={`absolute top-2 right-2 backdrop-blur-md px-2 py-1 rounded text-xs font-bold uppercase tracking-wider text-white ${content.type === 'movie' ? 'bg-blue-500/80' : 'bg-purple-500/80'}`}>
+                        {content.type}
                       </div>
-                    )}
-                  </div>
-                  <div className="p-4 flex flex-col flex-1">
-                    <h3 className="font-bold text-base md:text-lg leading-tight mb-2">{content.title}</h3>
-                    <div className="flex flex-wrap items-center gap-2 text-zinc-400 text-xs mb-2">
-                      <span>{content.year}</span>
-                      {contentQuality && (
-                        <>
-                          <span>•</span>
-                          <span className="text-emerald-400 font-medium">{contentQuality}</span>
-                        </>
+                      {isLocked && (
+                        <div className="absolute top-2 left-2 bg-red-500/90 backdrop-blur-md px-2 py-1 rounded text-xs font-bold uppercase tracking-wider flex items-center gap-1 shadow-lg text-white">
+                          <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
+                          Locked
+                        </div>
                       )}
                     </div>
-                    <div className="flex flex-col gap-1 mt-auto">
-                      {contentGenres && (
-                        <p className="text-zinc-500 text-xs line-clamp-1">
-                          {contentGenres}
-                        </p>
-                      )}
-                      {contentLangs && (
-                        <p className="text-zinc-500 text-xs line-clamp-1">
-                          {contentLangs}
-                        </p>
-                      )}
+                    <div className="p-4 flex flex-col flex-1">
+                      <h3 className="font-bold text-base md:text-lg leading-tight mb-2">{formatContentTitle(content)}</h3>
+                      <div className="flex flex-wrap items-center gap-2 text-zinc-400 text-xs mb-2">
+                        <span>{content.year}</span>
+                        {contentQuality && (
+                          <>
+                            <span>•</span>
+                            <span className="text-emerald-400 font-medium">{contentQuality}</span>
+                          </>
+                        )}
+                      </div>
+                      <div className="flex flex-col gap-1 mt-auto">
+                        {contentGenres && (
+                          <p className="text-zinc-500 text-xs line-clamp-1">
+                            {contentGenres}
+                          </p>
+                        )}
+                        {contentLangs && (
+                          <p className="text-zinc-500 text-xs line-clamp-1">
+                            {contentLangs}
+                          </p>
+                        )}
+                      </div>
                     </div>
+                  </Link>
+                );
+              })}
+            </div>
+
+            {/* Pagination */}
+            {totalPages > 1 && (
+              <div className="mt-12 flex flex-col items-center gap-4">
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => {
+                      setCurrentPage(prev => Math.max(1, prev - 1));
+                      window.scrollTo({ top: 0, behavior: 'smooth' });
+                    }}
+                    disabled={currentPage === 1}
+                    className="px-4 py-2 rounded-xl bg-zinc-900 border border-zinc-800 text-sm font-medium hover:bg-zinc-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  >
+                    Previous
+                  </button>
+                  
+                  <div className="flex items-center gap-1">
+                    {Array.from({ length: totalPages }, (_, i) => i + 1).map(page => {
+                      // Show limited page numbers for better UI
+                      if (
+                        page === 1 || 
+                        page === totalPages || 
+                        (page >= currentPage - 1 && page <= currentPage + 1)
+                      ) {
+                        return (
+                          <button
+                            key={page}
+                            onClick={() => {
+                              setCurrentPage(page);
+                              window.scrollTo({ top: 0, behavior: 'smooth' });
+                            }}
+                            className={clsx(
+                              "w-10 h-10 rounded-xl text-sm font-medium transition-colors",
+                              currentPage === page 
+                                ? "bg-emerald-500 text-white" 
+                                : "bg-zinc-900 border border-zinc-800 text-zinc-400 hover:bg-zinc-800"
+                            )}
+                          >
+                            {page}
+                          </button>
+                        );
+                      } else if (
+                        page === currentPage - 2 || 
+                        page === currentPage + 2
+                      ) {
+                        return <span key={page} className="text-zinc-600 px-1">...</span>;
+                      }
+                      return null;
+                    })}
                   </div>
-                </Link>
-              );
-            })}
-          </div>
+
+                  <button
+                    onClick={() => {
+                      setCurrentPage(prev => Math.min(totalPages, prev + 1));
+                      window.scrollTo({ top: 0, behavior: 'smooth' });
+                    }}
+                    disabled={currentPage === totalPages}
+                    className="px-4 py-2 rounded-xl bg-zinc-900 border border-zinc-800 text-sm font-medium hover:bg-zinc-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  >
+                    Next
+                  </button>
+                </div>
+                <p className="text-xs text-zinc-500">
+                  Showing {(currentPage - 1) * ITEMS_PER_PAGE + 1} to {Math.min(currentPage * ITEMS_PER_PAGE, filteredAndSortedContent.length)} of {filteredAndSortedContent.length} contents
+                </p>
+              </div>
+            )}
+          </>
         )}
       </main>
 

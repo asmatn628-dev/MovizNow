@@ -6,6 +6,7 @@ import { Content, Quality, Language, Genre } from '../../types';
 import { useAuth } from '../../contexts/AuthContext';
 import { Film, Clock, ArrowLeft } from 'lucide-react';
 import { handleFirestoreError, OperationType } from '../../utils/firestoreErrorHandler';
+import { formatContentTitle } from '../../utils/contentUtils';
 
 export default function WatchLater() {
   const { profile } = useAuth();
@@ -115,7 +116,7 @@ export default function WatchLater() {
                   </div>
                 </div>
                 <div className="p-4 flex flex-col flex-1">
-                  <h3 className="font-bold text-base md:text-lg leading-tight mb-2">{content.title}</h3>
+                  <h3 className="font-bold text-base md:text-lg leading-tight mb-2">{formatContentTitle(content)}</h3>
                   <div className="flex flex-wrap items-center gap-2 text-zinc-400 text-xs mb-2">
                     <span>{content.year}</span>
                     {contentQuality && (

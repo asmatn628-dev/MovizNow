@@ -21,7 +21,7 @@ export default function Login() {
     <div className="min-h-screen bg-zinc-950 flex flex-col items-center justify-center text-white p-4">
       <div className="max-w-md w-full bg-zinc-900 rounded-2xl p-8 shadow-2xl border border-zinc-800 text-center">
         <div className="flex justify-center mb-6">
-          <img src="/pwa-512x512.png" alt="MovizNow Logo" className="w-24 h-24" />
+          <img src="/logo.svg" alt="MovizNow Logo" className="w-24 h-24" />
         </div>
         <h1 className="text-3xl font-bold mb-2">MovizNow</h1>
         <p className="text-zinc-400 mb-8">Your ultimate movies & series destination</p>

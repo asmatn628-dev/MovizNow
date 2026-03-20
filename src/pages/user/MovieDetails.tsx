@@ -1,14 +1,17 @@
 import { useState, useEffect, useRef } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { db } from '../../firebase';
-import { doc, onSnapshot, updateDoc, arrayUnion, arrayRemove, collection } from 'firebase/firestore';
+import { doc, onSnapshot, updateDoc, arrayUnion, arrayRemove, collection, deleteDoc } from 'firebase/firestore';
 import { Content, Genre, Language, QualityLinks, Season, Quality } from '../../types';
 import { useAuth } from '../../contexts/AuthContext';
-import { Film, ArrowLeft, Play, Clock, Heart, MessageCircle, AlertCircle, Download, Share2, Chrome, Copy, Youtube, X } from 'lucide-react';
+import { Film, ArrowLeft, Play, Clock, Heart, MessageCircle, AlertCircle, Download, Share2, Chrome, Copy, Youtube, X, Edit2, Trash2, Settings } from 'lucide-react';
 import { logEvent } from '../../services/analytics';
 import { handleFirestoreError, OperationType } from '../../utils/firestoreErrorHandler';
 import AlertModal from '../../components/AlertModal';
+import { fetchContentDataWithAI } from '../../services/geminiService';
+import ConfirmModal from '../../components/ConfirmModal';
 import { motion, AnimatePresence } from 'motion/react';
+import { formatContentTitle } from '../../utils/contentUtils';
 
 export default function MovieDetails() {
   const { id } = useParams<{ id: string }>();
@@ -19,7 +22,8 @@ export default function MovieDetails() {
   const [qualities, setQualities] = useState<Quality[]>([]);
   const [loading, setLoading] = useState(true);
   const [alertConfig, setAlertConfig] = useState<{ isOpen: boolean; title: string; message: string }>({ isOpen: false, title: '', message: '' });
-  const [linkPopup, setLinkPopup] = useState<{ isOpen: boolean; url: string; name: string; id: string } | null>(null);
+  const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [linkPopup, setLinkPopup] = useState<{ isOpen: boolean; url: string; name: string; id: string; isZip?: boolean } | null>(null);
   const [isPosterExpanded, setIsPosterExpanded] = useState(false);
   const [isTrailerPopupOpen, setIsTrailerPopupOpen] = useState(false);
   const [imdbData, setImdbData] = useState<any>(null);
@@ -108,104 +112,32 @@ export default function MovieDetails() {
     }
   }, [isPosterExpanded]);
 
+
   useEffect(() => {
-    if (content?.imdbLink) {
+    if (content?.title) {
       const fetchImdb = async () => {
         setFetchingImdb(true);
-        const ttMatch = content.imdbLink!.match(/tt\d+/);
-        if (!ttMatch) {
-          setFetchingImdb(false);
-          return;
-        }
-        const ttId = ttMatch[0];
-        let data: any = {};
-        
-        // Try TVMaze first
         try {
-          const tvmazeRes = await fetch(`https://api.tvmaze.com/lookup/shows?imdb=${ttId}`);
-          if (tvmazeRes.ok) {
-            const show = await tvmazeRes.json();
-            data.title = show.name;
-            data.description = show.summary?.replace(/<[^>]*>?/gm, '') || '';
-            if (show.image?.original) data.posterUrl = show.image.original;
-            if (show.premiered) {
-              data.year = parseInt(show.premiered.substring(0, 4));
-              data.releaseDate = show.premiered;
-            }
-            data.duration = show.runtime ? `${show.runtime} min` : '';
-            data.rating = show.rating?.average ? `${show.rating.average}/10` : '';
-            
-            try {
-              const castRes = await fetch(`https://api.tvmaze.com/shows/${show.id}/cast`);
-              if (castRes.ok) {
-                const castData = await castRes.json();
-                data.cast = castData.slice(0, 5).map((c: any) => c.person.name).join(', ');
-              }
-            } catch (e) {}
+          const data = await fetchContentDataWithAI(content.title);
+          if (data) {
+            setImdbData({
+              title: data.title,
+              year: data.year,
+              description: data.description,
+              cast: data.cast.join(', '),
+              posterUrl: data.posterUrl,
+              rating: 'N/A' // AI service doesn't return rating
+            });
           }
         } catch (error) {
-          // TVMaze fetch failed, silently fallback
+          console.error("Error fetching data with AI:", error);
+        } finally {
+          setFetchingImdb(false);
         }
-
-        if (Object.keys(data).length === 0) {
-          // Fallback to suggestion API
-          try {
-            let suggestRes = await fetch(`https://v3.sg.media-imdb.com/suggestion/t/${ttId}.json`).catch(() => null);
-            let suggestData = null;
-            
-            if (suggestRes && suggestRes.ok) {
-              suggestData = await suggestRes.json();
-            } else {
-              // Try via proxy
-              const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(`https://v3.sg.media-imdb.com/suggestion/t/${ttId}.json`)}`;
-              const proxyRes = await fetch(proxyUrl);
-              if (proxyRes.ok) {
-                const proxyData = await proxyRes.json();
-                suggestData = proxyData;
-              }
-            }
-
-            if (suggestData) {
-              const item = suggestData.d?.find((i: any) => i.id === ttId) || suggestData.d?.[0];
-              if (item) {
-                data.title = item.l || '';
-                data.year = item.y || '';
-                data.cast = item.s || '';
-                if (item.i?.imageUrl) data.posterUrl = item.i.imageUrl;
-              }
-            }
-          } catch (error) {
-            // IMDb suggestion fetch failed, silently fallback
-          }
-          
-          // Try to get more details via proxy
-          try {
-            const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(`https://www.imdb.com/title/${ttId}/`)}`;
-            const pageRes = await fetch(proxyUrl);
-            if (pageRes.ok) {
-              const html = await pageRes.text();
-              const parser = new DOMParser();
-              const doc = parser.parseFromString(html, 'text/html');
-              
-              const descEl = doc.querySelector('[data-testid="plot-xl"]') || doc.querySelector('[data-testid="plot-l"]');
-              if (descEl) data.description = descEl.textContent || '';
-              
-              const ratingEl = doc.querySelector('[data-testid="hero-rating-bar__aggregate-rating__score"] span');
-              if (ratingEl) data.rating = `${ratingEl.textContent}/10`;
-            }
-          } catch (error) {
-            // Proxy fetch failed, silently fallback
-          }
-        }
-        
-        if (Object.keys(data).length > 0) {
-          setImdbData(data);
-        }
-        setFetchingImdb(false);
       };
       fetchImdb();
     }
-  }, [content?.imdbLink]);
+  }, [content?.title]);
 
   const getYouTubeEmbedUrl = (url?: string) => {
     if (!url) return null;
@@ -255,7 +187,18 @@ export default function MovieDetails() {
     }
   };
 
-  const handlePlayClick = (url: string, linkName?: string, linkId?: string) => {
+  const handleDelete = async () => {
+    if (!id) return;
+    try {
+      await deleteDoc(doc(db, 'content', id));
+      navigate('/admin/content');
+    } catch (error) {
+      console.error('Error deleting content:', error);
+      setAlertConfig({ isOpen: true, title: 'Error', message: 'Failed to delete content' });
+    }
+  };
+
+  const handlePlayClick = (url: string, linkName?: string, linkId?: string, isZip?: boolean) => {
     if (!canPlay) {
       if (isPending) setAlertConfig({ isOpen: true, title: 'Account Pending', message: 'Your account is pending admin approval. Please contact admin to activate your account.' });
       else if (isExpired) setAlertConfig({ isOpen: true, title: 'Membership Expired', message: 'Your membership has expired. Please renew to continue watching.' });
@@ -263,7 +206,7 @@ export default function MovieDetails() {
       return;
     }
     
-    setLinkPopup({ isOpen: true, url, name: linkName || 'Unknown Link', id: linkId || 'unknown' });
+    setLinkPopup({ isOpen: true, url, name: linkName || 'Unknown Link', id: linkId || 'unknown', isZip });
   };
 
   const closePosterPopup = () => {
@@ -452,7 +395,7 @@ export default function MovieDetails() {
   const contentGenres = genres.filter(g => content.genreIds?.includes(g.id)).map(g => g.name).join(', ');
   const contentLangs = languages.filter(l => content.languageIds?.includes(l.id)).map(l => l.name).join(', ');
 
-  const renderLinks = (links: QualityLinks) => {
+  const renderLinks = (links: QualityLinks, isZip?: boolean) => {
     if (!Array.isArray(links)) return null;
 
     const getBytes = (size: string, unit: string) => {
@@ -469,7 +412,7 @@ export default function MovieDetails() {
           return (
             <div key={link.id} className="flex flex-col sm:flex-row items-stretch sm:items-center bg-zinc-800 rounded-xl overflow-hidden border border-zinc-700 flex-1 min-w-[200px] max-w-sm">
               <button
-                onClick={() => handlePlayClick(link.url, link.name, link.id)}
+                onClick={() => handlePlayClick(link.url, link.name, link.id, isZip)}
                 className="flex-1 flex items-center justify-center gap-2 hover:bg-zinc-700 text-white px-4 py-3 sm:py-2 text-sm font-medium transition-colors border-b sm:border-b-0 sm:border-r border-zinc-700"
                 title="Play"
               >
@@ -477,7 +420,7 @@ export default function MovieDetails() {
                 <span className="truncate">Play {link.name}</span>
               </button>
               <button
-                onClick={() => handlePlayClick(link.url, link.name, link.id)}
+                onClick={() => handlePlayClick(link.url, link.name, link.id, isZip)}
                 className="flex items-center justify-center gap-2 hover:bg-zinc-700 text-white px-4 py-3 sm:py-2 text-sm font-medium transition-colors shrink-0"
                 title="Download"
               >
@@ -492,15 +435,33 @@ export default function MovieDetails() {
   };
 
   const handleShare = async () => {
+    if (!content) return;
+    
+    let shareUrl = window.location.href;
+    
+    // Try to shorten the URL
+    try {
+      const response = await fetch(`https://tinyurl.com/api-create.php?url=${encodeURIComponent(shareUrl)}`);
+      if (response.ok) {
+        const shortened = await response.text();
+        if (shortened && shortened.startsWith('http')) {
+          shareUrl = shortened;
+        }
+      }
+    } catch (err) {
+      console.error('Error shortening URL:', err);
+      // Fallback to original URL if shortening fails
+    }
+
     const shareData = {
-      title: `${content.title} (${content.year})`,
-      text: `🎬 *${content.title} (${content.year})*\n\n` +
+      title: `${formatContentTitle(content)} (${content.year})`,
+      text: `🎬 *${formatContentTitle(content)} (${content.year})*\n\n` +
             `🗣️ *Language:* ${contentLangs || 'N/A'}\n` +
             `🎭 *Genre:* ${contentGenres || 'N/A'}\n` +
-            `📺 *Quality:* ${qualities.find(q => q.id === content.qualityId)?.name || 'N/A'}\n` +
+            `🖨️ *Print Quality:* ${qualities.find(q => q.id === content.qualityId)?.name || 'N/A'}\n` +
             (profile?.phone ? `📱 *WhatsApp:* ${profile.phone}\n\n` : '\n') +
             `Watch it here:`,
-      url: window.location.href,
+      url: shareUrl,
     };
 
     try {
@@ -557,7 +518,7 @@ export default function MovieDetails() {
                 )}
               </div>
               
-              <h1 className="text-4xl md:text-6xl font-bold mb-4 leading-tight">{content.title}</h1>
+              <h1 className="text-4xl md:text-6xl font-bold mb-4 leading-tight">{formatContentTitle(content)}</h1>
               
               <div className="flex flex-wrap items-center justify-center gap-4 text-sm text-zinc-300 mb-6">
                 {contentGenres && <span>{contentGenres}</span>}
@@ -576,9 +537,12 @@ export default function MovieDetails() {
                   </button>
                 )}
                 {content.sampleUrl && (
-                  <a href={content.sampleUrl} target="_blank" rel="noreferrer" className="bg-zinc-800 hover:bg-zinc-700 text-white px-8 py-4 rounded-xl font-bold flex items-center gap-2 transition-colors border border-zinc-700">
+                  <button 
+                    onClick={() => handlePlayClick(content.sampleUrl!, 'Sample', 'sample')}
+                    className="bg-zinc-800 hover:bg-zinc-700 text-white px-8 py-4 rounded-xl font-bold flex items-center gap-2 transition-colors border border-zinc-700"
+                  >
                     <Play className="w-5 h-5" /> Sample
-                  </a>
+                  </button>
                 )}
                 {content.imdbLink && (
                   <a href={content.imdbLink} target="_blank" rel="noreferrer" className="bg-yellow-500 hover:bg-yellow-600 text-black px-8 py-4 rounded-xl font-bold flex items-center gap-2 transition-colors">
@@ -609,6 +573,27 @@ export default function MovieDetails() {
                 >
                   <Share2 className="w-5 h-5" />
                 </button>
+
+                {(profile?.role === 'admin' || profile?.role === 'data_editor') && (
+                  <div className="flex gap-4">
+                    <Link
+                      to={`/admin/content?edit=${content.id}`}
+                      className="p-4 rounded-xl border bg-emerald-500/10 border-emerald-500 text-emerald-500 hover:bg-emerald-500/20 transition-colors flex items-center gap-2"
+                      title="Edit Content"
+                    >
+                      <Edit2 className="w-5 h-5" />
+                      <span className="hidden sm:inline">Edit</span>
+                    </Link>
+                    <button
+                      onClick={() => setDeleteId(content.id)}
+                      className="p-4 rounded-xl border bg-red-500/10 border-red-500 text-red-500 hover:bg-red-500/20 transition-colors flex items-center gap-2"
+                      title="Delete Content"
+                    >
+                      <Trash2 className="w-5 h-5" />
+                      <span className="hidden sm:inline">Delete</span>
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
           </div>
@@ -642,7 +627,7 @@ export default function MovieDetails() {
               </div>
             ) : imdbData ? (
               <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-2xl p-6 md:p-8 flex flex-col md:flex-row gap-8">
-                {imdbData.posterUrl && (
+                {imdbData.posterUrl && imdbData.posterUrl.trim() !== "" && (
                   <img src={imdbData.posterUrl} alt="IMDb Poster" className="w-32 md:w-48 mx-auto md:mx-0 rounded-xl shadow-lg object-cover" referrerPolicy="no-referrer" />
                 )}
                 <div className="flex-1 space-y-4">
@@ -731,7 +716,7 @@ export default function MovieDetails() {
                               {zipLinks.length > 0 && (
                                 <div>
                                   <h4 className="font-semibold text-zinc-400 mb-3 text-sm uppercase tracking-wider">Full Season Zip</h4>
-                                  {renderLinks(zipLinks)}
+                                  {renderLinks(zipLinks, true)}
                                 </div>
                               )}
                               {mkvLinks.length > 0 && (
@@ -777,6 +762,14 @@ export default function MovieDetails() {
         onClose={() => setAlertConfig({ ...alertConfig, isOpen: false })}
       />
 
+      <ConfirmModal
+        isOpen={!!deleteId}
+        title="Delete Content"
+        message="Are you sure you want to delete this content? This action cannot be undone."
+        onConfirm={handleDelete}
+        onCancel={() => setDeleteId(null)}
+      />
+
       {linkPopup && (
         <div 
           className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4"
@@ -795,7 +788,7 @@ export default function MovieDetails() {
             <h3 className="text-xl font-bold mb-2">Play Content</h3>
             <p className="text-zinc-400 mb-6">How would you like to open "{linkPopup.name}"?</p>
             <div className="flex flex-col gap-3">
-              {!(linkPopup.name.toLowerCase().includes('zip') || linkPopup.url.toLowerCase().includes('.zip')) ? (
+              {!(linkPopup.isZip || linkPopup.name.toLowerCase().includes('zip') || linkPopup.url.toLowerCase().includes('.zip')) ? (
                 <>
                   <button
                     onClick={() => handlePlayExternal('generic')}

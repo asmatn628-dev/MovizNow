@@ -1,14 +1,17 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { useSearchParams, Link } from 'react-router-dom';
 import { db } from '../../firebase';
 import { collection, addDoc, deleteDoc, doc, updateDoc, onSnapshot, writeBatch } from 'firebase/firestore';
 import { Content, Genre, Language, Quality, QualityLinks, Season, Episode, LinkDef } from '../../types';
-import { Plus, Edit2, Trash2, Share2, Film, Tv, X, Save, Upload, Search, Eye, EyeOff, ArrowUp, ArrowDown } from 'lucide-react';
+import { Plus, Edit2, Trash2, Share2, Film, Tv, X, Save, Upload, Search, Eye, EyeOff, ArrowUp, ArrowDown, Copy, ClipboardPaste } from 'lucide-react';
 import ConfirmModal from '../../components/ConfirmModal';
 import AlertModal from '../../components/AlertModal';
 import { handleFirestoreError, OperationType } from '../../utils/firestoreErrorHandler';
+import { fetchContentDataWithAI } from '../../services/geminiService';
 
 export default function ContentManagement() {
   const [contentList, setContentList] = useState<Content[]>([]);
+  const [loading, setLoading] = useState(true);
   const [genres, setGenres] = useState<Genre[]>([]);
   const [languages, setLanguages] = useState<Language[]>([]);
   const [qualities, setQualities] = useState<Quality[]>([]);
@@ -53,10 +56,23 @@ export default function ContentManagement() {
 
   const [isGenreDropdownOpen, setIsGenreDropdownOpen] = useState(false);
   const [isLanguageDropdownOpen, setIsLanguageDropdownOpen] = useState(false);
-  const [loading, setLoading] = useState(true);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [imdbCardData, setImdbCardData] = useState<{
+    title: string;
+    year: number;
+    description: string;
+    cast: string;
+    posterUrl: string;
+    type: 'movie' | 'series';
+    genres?: string[];
+  } | null>(null);
   const [fetchingImdb, setFetchingImdb] = useState(false);
+  const [isAutoFillModalOpen, setIsAutoFillModalOpen] = useState(false);
+  const [autoFillText, setAutoFillText] = useState('');
   const [imdbSeasonsPopup, setImdbSeasonsPopup] = useState<{ isOpen: boolean; seasons: any[]; show: any; epData: any[] } | null>(null);
   const [selectedImdbSeasons, setSelectedImdbSeasons] = useState<number[]>([]);
+  const [shareSeasonModal, setShareSeasonModal] = useState<{ isOpen: boolean; content: Content | null; seasons: Season[] }>({ isOpen: false, content: null, seasons: [] });
+  const [selectedShareSeasons, setSelectedShareSeasons] = useState<number[]>([]);
 
   useEffect(() => {
     const unsubContent = onSnapshot(collection(db, 'content'), (snapshot) => {
@@ -106,6 +122,18 @@ export default function ContentManagement() {
     });
     return () => { unsubContent(); unsubGenres(); unsubLangs(); unsubQualities(); };
   }, []);
+
+  useEffect(() => {
+    const editId = searchParams.get('edit');
+    if (editId && contentList.length > 0) {
+      const content = contentList.find(c => c.id === editId);
+      if (content) {
+        handleEdit(content);
+        // Clear the param so it doesn't reopen on refresh if we close it
+        setSearchParams({}, { replace: true });
+      }
+    }
+  }, [searchParams, contentList]);
 
   const resetForm = () => {
     setType('movie');
@@ -353,114 +381,35 @@ export default function ContentManagement() {
     });
   };
 
-  const fetchImdbData = async (link: string) => {
-    const ttMatch = link.match(/tt\d+/);
-    if (!ttMatch) return;
-    const ttId = ttMatch[0];
-    
+
+  const fetchImdbData = async (query: string) => {
     try {
       setFetchingImdb(true);
+      setImdbCardData(null);
       
-      // Try TVMaze first (great for series)
-      const tvmazeRes = await fetch(`https://api.tvmaze.com/lookup/shows?imdb=${ttId}`);
-      if (tvmazeRes.ok) {
-        const show = await tvmazeRes.json();
-        setTitle(show.name);
-        setDescription(show.summary?.replace(/<[^>]*>?/gm, '') || '');
-        if (show.image?.original) setPosterUrl(show.image.original);
-        if (show.premiered) setYear(parseInt(show.premiered.substring(0, 4)));
-        setType('series');
-        
-        // Fetch cast
-        try {
-          const castRes = await fetch(`https://api.tvmaze.com/shows/${show.id}/cast`);
-          if (castRes.ok) {
-            const castData = await castRes.json();
-            const castNames = castData.slice(0, 5).map((c: any) => c.person.name).join(', ');
-            setCast(castNames);
-          }
-        } catch (e) {}
-        
-        // Fetch episodes
-        try {
-          const epRes = await fetch(`https://api.tvmaze.com/shows/${show.id}/episodes`);
-          if (epRes.ok) {
-            const epData = await epRes.json();
-            const seasonsMap = new Map<number, any[]>();
-            epData.forEach((ep: any) => {
-              if (!seasonsMap.has(ep.season)) seasonsMap.set(ep.season, []);
-              seasonsMap.get(ep.season)!.push(ep);
-            });
-            
-            const availableSeasons = Array.from(seasonsMap.keys()).sort((a, b) => a - b);
-            
-            if (availableSeasons.length > 1) {
-              setSelectedImdbSeasons(availableSeasons);
-              setImdbSeasonsPopup({
-                isOpen: true,
-                seasons: availableSeasons,
-                show: show,
-                epData: epData
-              });
-              setFetchingImdb(false);
-              return;
-            } else {
-              processImdbSeasons(epData);
-            }
-          }
-        } catch (e) {}
-        
-        setFetchingImdb(false);
-        return;
+      const data = await fetchContentDataWithAI(query);
+      
+      if (data) {
+        setImdbCardData({
+          title: data.title,
+          year: data.year,
+          description: data.description,
+          cast: data.cast.join(', '),
+          posterUrl: data.posterUrl,
+          type: data.type,
+          genres: data.genres
+        });
       }
-      
-      // Fallback for movies or if TVMaze fails
-      try {
-        const suggestRes = await fetch(`https://v3.sg.media-imdb.com/suggestion/x/${ttId}.json`);
-        if (suggestRes.ok) {
-          const suggestData = await suggestRes.json();
-          const item = suggestData.d?.[0];
-          if (item) {
-            setTitle(item.l || '');
-            setYear(item.y || new Date().getFullYear());
-            setCast(item.s || '');
-            if (item.i?.imageUrl) setPosterUrl(item.i.imageUrl);
-            setType(item.q === 'TV series' ? 'series' : 'movie');
-          }
-        }
-      } catch (e) {}
-      
-      try {
-        const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(`https://www.imdb.com/title/${ttId}/`)}`;
-        const pageRes = await fetch(proxyUrl);
-        if (pageRes.ok) {
-          const html = await pageRes.text();
-          const parser = new DOMParser();
-          const doc = parser.parseFromString(html, 'text/html');
-          
-          let newDesc = description;
-          const descEl = doc.querySelector('[data-testid="plot-xl"]') || doc.querySelector('[data-testid="plot-l"]');
-          if (descEl && !description) {
-            newDesc = descEl.textContent || '';
-            setDescription(newDesc);
-          }
-          
-          const ratingEl = doc.querySelector('[data-testid="hero-rating-bar__aggregate-rating__score"] span');
-          if (ratingEl) {
-            const rating = ratingEl.textContent;
-            if (rating && !newDesc.includes(`IMDb Rating:`)) {
-              setDescription(`IMDb Rating: ${rating}/10\n\n${newDesc}`);
-            }
-          }
-        }
-      } catch (e) {}
-      
     } catch (error) {
-      console.error("Error fetching IMDb data:", error);
+      console.error("Error fetching data with AI:", error);
     } finally {
       setFetchingImdb(false);
     }
   };
+  
+
+      
+
 
   const handleDelete = () => {
     if (!deleteId) return;
@@ -478,13 +427,30 @@ export default function ContentManagement() {
   };
 
   const handleShare = (content: Content) => {
+    if (content.type === 'series' && content.seasons) {
+      const parsedSeasons: Season[] = JSON.parse(content.seasons);
+      if (parsedSeasons.length > 1) {
+        setShareSeasonModal({ isOpen: true, content, seasons: parsedSeasons });
+        setSelectedShareSeasons(parsedSeasons.map(s => s.seasonNumber));
+        return;
+      }
+    }
+    executeShare(content);
+  };
+
+  const executeShare = async (content: Content, selectedSeasonNumbers?: number[]) => {
     let text = `🎬 *${content.title}${content.year ? ` (${content.year})` : ''}*\n\n`;
     
     const contentGenres = genres.filter(g => content.genreIds?.includes(g.id)).map(g => g.name).join(', ');
     if (contentGenres) text += `🎭 Genres: ${contentGenres}\n`;
     
     const contentLangs = languages.filter(l => content.languageIds?.includes(l.id)).map(l => l.name).join(', ');
-    if (contentLangs) text += `🗣️ Languages: ${contentLangs}\n\n`;
+    if (contentLangs) text += `🗣️ Languages: ${contentLangs}\n`;
+
+    const contentQuality = qualities.find(q => q.id === content.qualityId)?.name;
+    if (contentQuality) text += `🖨️ Print Quality: ${contentQuality}\n`;
+    if (content.sampleUrl) text += `📽️ Sample: ${content.sampleUrl}\n\n`;
+    else text += `\n`;
 
     if (content.type === 'movie' && content.movieLinks) {
       const links: QualityLinks = parseLinks(content.movieLinks);
@@ -509,7 +475,11 @@ export default function ContentManagement() {
       }
     } else if (content.type === 'series' && content.seasons) {
       const parsedSeasons: Season[] = JSON.parse(content.seasons);
-      parsedSeasons.forEach(season => {
+      const seasonsToShare = selectedSeasonNumbers 
+        ? parsedSeasons.filter(s => selectedSeasonNumbers.includes(s.seasonNumber))
+        : parsedSeasons;
+
+      seasonsToShare.forEach(season => {
         text += `\n📺 *Season ${season.seasonNumber}${season.year ? ` (${season.year})` : content.year ? ` (${content.year})` : ''}*\n`;
         const zipLinks = parseLinks(JSON.stringify(season.zipLinks)).sort((a, b) => getSizeInMB(a.size, a.unit) - getSizeInMB(b.size, b.unit));
         const mkvLinks = parseLinks(JSON.stringify(season.mkvLinks || [])).sort((a, b) => getSizeInMB(a.size, a.unit) - getSizeInMB(b.size, b.unit));
@@ -547,8 +517,270 @@ export default function ContentManagement() {
 
     text += `\n🍿 Enjoy watching on MovizNow!\n📞 WhatsApp: 03363284466`;
     
-    const encodedText = encodeURIComponent(text);
-    window.open(`https://wa.me/?text=${encodedText}`, '_blank');
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: content.title,
+          text: text,
+        });
+      } catch (err) {
+        if ((err as Error).name !== 'AbortError') {
+          const encodedText = encodeURIComponent(text);
+          window.open(`https://wa.me/?text=${encodedText}`, '_blank');
+        }
+      }
+    } else {
+      const encodedText = encodeURIComponent(text);
+      window.open(`https://wa.me/?text=${encodedText}`, '_blank');
+    }
+  };
+
+  const handleCopyData = async (content: Content) => {
+    if (!content.posterUrl) {
+      setAlertConfig({ isOpen: true, title: 'Poster Required', message: 'Cannot copy data because poster URL is missing.' });
+      return;
+    }
+
+    let text = `🎬 *${content.title}${content.year ? ` (${content.year})` : ''}*\n\n`;
+    text += `Type: ${content.type.charAt(0).toUpperCase() + content.type.slice(1)}\n`;
+    
+    const contentGenres = genres.filter(g => content.genreIds?.includes(g.id)).map(g => g.name).join(', ');
+    if (contentGenres) text += `🎭 Genres: ${contentGenres}\n`;
+    
+    const contentLangs = languages.filter(l => content.languageIds?.includes(l.id)).map(l => l.name).join(', ');
+    if (contentLangs) text += `🗣️ Languages: ${contentLangs}\n`;
+
+    const contentQuality = qualities.find(q => q.id === content.qualityId)?.name;
+    if (contentQuality) text += `🖨️ Print Quality: ${contentQuality}\n`;
+
+    if (content.imdbLink) text += `⭐ IMDb: ${content.imdbLink}\n`;
+    if (content.trailerUrl) text += `🎥 Trailer: ${content.trailerUrl}\n`;
+    if (content.sampleUrl) text += `📽️ Sample: ${content.sampleUrl}\n`;
+    if (content.posterUrl) text += `🖼️ Poster: ${content.posterUrl}\n`;
+    if (content.cast && content.cast.length > 0) text += `👥 Cast: ${content.cast.join(', ')}\n`;
+    if (content.description) text += `📝 Description: ${content.description}\n\n`;
+
+    if (content.type === 'movie' && content.movieLinks) {
+      const links: QualityLinks = parseLinks(content.movieLinks);
+      text += `📥 *Download Links:*\n`;
+      links.forEach(l => {
+        if (l.url) text += `▪️ ${l.name} (${l.size}${l.unit}): ${l.url}\n`;
+      });
+    } else if (content.type === 'series' && content.seasons) {
+      const parsedSeasons: Season[] = JSON.parse(content.seasons);
+      parsedSeasons.forEach(season => {
+        text += `\n📺 *Season ${season.seasonNumber}${season.year ? ` (${season.year})` : content.year ? ` (${content.year})` : ''}*\n`;
+        const zipLinks = parseLinks(JSON.stringify(season.zipLinks));
+        const mkvLinks = parseLinks(JSON.stringify(season.mkvLinks || []));
+        
+        if (zipLinks.length > 0) {
+          text += `📦 *Full Season ZIP:*\n`;
+          zipLinks.forEach((link) => {
+            if (link && link.url) text += `  ▪️ ${link.name} (${link.size}${link.unit}): ${link.url}\n`;
+          });
+        }
+        if (mkvLinks.length > 0) {
+          text += `\n🎞️ *Full Season MKV:*\n`;
+          mkvLinks.forEach((link) => {
+            if (link && link.url) text += `  ▪️ ${link.name} (${link.size}${link.unit}): ${link.url}\n`;
+          });
+        }
+        if (season.episodes && season.episodes.length > 0) {
+          text += `\n🎬 *Episodes:*\n`;
+          season.episodes.forEach(ep => {
+            text += `  E${ep.episodeNumber}: ${ep.title}\n`;
+            const epLinks = parseLinks(JSON.stringify(ep.links));
+            epLinks.forEach((link) => {
+              if (link && link.url) text += `    - ${link.name} (${link.size}${link.unit}): ${link.url}\n`;
+            });
+          });
+        }
+      });
+    }
+
+    try {
+      await navigator.clipboard.writeText(text);
+      setAlertConfig({ isOpen: true, title: 'Success', message: 'All data copied to clipboard!' });
+    } catch (err) {
+      console.error('Error copying data:', err);
+      setAlertConfig({ isOpen: true, title: 'Error', message: 'Failed to copy data' });
+    }
+  };
+
+  const handleAutoFill = () => {
+    if (!autoFillText) return;
+
+    const lines = autoFillText.split('\n');
+    let newTitle = '';
+    let newYear = year;
+    let newType: 'movie' | 'series' = type;
+    let newDescription = '';
+    let newCast = '';
+    let newImdb = '';
+    let newTrailer = '';
+    let newSample = '';
+    let newPoster = '';
+    let newGenreIds: string[] = [];
+    let newLanguageIds: string[] = [];
+    let newQualityId = '';
+    let newMovieLinks: QualityLinks = [];
+    let newSeasons: Season[] = [];
+
+    const findGenreId = (name: string) => genres.find(g => g.name.toLowerCase() === name.toLowerCase())?.id;
+    const findLanguageId = (name: string) => languages.find(l => l.name.toLowerCase() === name.toLowerCase())?.id;
+    const findQualityId = (name: string) => qualities.find(q => q.name.toLowerCase() === name.toLowerCase())?.id;
+
+    let currentSeason: Season | null = null;
+    let currentEpisode: Episode | null = null;
+    let linkSection: 'movie' | 'zip' | 'mkv' | 'episode' | null = null;
+
+    lines.forEach(line => {
+      const trimmed = line.trim();
+      if (!trimmed) return;
+
+      // Title and Year: 🎬 *Title (Year)* or Title (Year)
+      const titleYearMatch = trimmed.match(/🎬?\s*\*?([^(]+)\s*\((\d{4})\)\*?/);
+      if (titleYearMatch) {
+        newTitle = titleYearMatch[1].trim();
+        newYear = parseInt(titleYearMatch[2]);
+      }
+
+      // Type
+      if (trimmed.toLowerCase().includes('type: movie')) newType = 'movie';
+      if (trimmed.toLowerCase().includes('type: series')) newType = 'series';
+
+      // Genres
+      if (trimmed.includes('🎭 Genres:')) {
+        const genreNames = trimmed.split('🎭 Genres:')[1].split(',').map(s => s.trim());
+        newGenreIds = genreNames.map(findGenreId).filter(Boolean) as string[];
+      }
+
+      // Languages
+      if (trimmed.includes('🗣️ Languages:')) {
+        const langNames = trimmed.split('🗣️ Languages:')[1].split(',').map(s => s.trim());
+        newLanguageIds = langNames.map(findLanguageId).filter(Boolean) as string[];
+      }
+
+      // Quality
+      if (trimmed.includes('📺 Quality:')) {
+        const qName = trimmed.split('📺 Quality:')[1].trim();
+        newQualityId = findQualityId(qName) || '';
+      }
+
+      // IMDb
+      if (trimmed.includes('IMDb:')) {
+        const match = trimmed.match(/https?:\/\/[^\s]+/);
+        if (match) newImdb = match[0];
+      }
+
+      // Trailer
+      if (trimmed.includes('Trailer:')) {
+        const match = trimmed.match(/https?:\/\/[^\s]+/);
+        if (match) newTrailer = match[0];
+      }
+
+      // Sample
+      if (trimmed.includes('Sample:')) {
+        const match = trimmed.match(/https?:\/\/[^\s]+/);
+        if (match) newSample = match[0];
+      }
+
+      // Poster
+      if (trimmed.includes('Poster:')) {
+        const match = trimmed.match(/https?:\/\/[^\s]+/);
+        if (match) newPoster = match[0];
+      }
+
+      // Cast
+      if (trimmed.includes('👥 Cast:')) {
+        newCast = trimmed.split('👥 Cast:')[1].trim();
+      }
+
+      // Description
+      if (trimmed.includes('📝 Description:')) {
+        newDescription = trimmed.split('📝 Description:')[1].trim();
+      }
+
+      // Links Detection
+      if (trimmed.includes('Download Links:')) {
+        linkSection = 'movie';
+        newType = 'movie';
+      }
+      if (trimmed.includes('Full Season ZIP:')) linkSection = 'zip';
+      if (trimmed.includes('Full Season MKV:')) linkSection = 'mkv';
+      if (trimmed.includes('Episodes:')) linkSection = 'episode';
+
+      // Season Detection: 📺 *Season X (Year)*
+      const seasonMatch = trimmed.match(/📺?\s*\*?Season\s*(\d+)/i);
+      if (seasonMatch) {
+        newType = 'series';
+        const sNum = parseInt(seasonMatch[1]);
+        currentSeason = {
+          id: Math.random().toString(36).substr(2, 9),
+          seasonNumber: sNum,
+          zipLinks: [],
+          mkvLinks: [],
+          episodes: []
+        };
+        newSeasons.push(currentSeason);
+      }
+
+      // Episode Detection: E1: Title or - E1: Title
+      const epMatch = trimmed.match(/E(\d+):\s*(.*)/i);
+      if (epMatch && currentSeason) {
+        const epNum = parseInt(epMatch[1]);
+        currentEpisode = {
+          id: Math.random().toString(36).substr(2, 9),
+          episodeNumber: epNum,
+          title: epMatch[2].trim(),
+          links: []
+        };
+        currentSeason.episodes.push(currentEpisode);
+        linkSection = 'episode';
+      }
+
+      // Link Parsing: ▪️ 720p (1.2GB): https://... or - 720p (1.2GB): https://...
+      const linkMatch = trimmed.match(/[▪️-]\s*([^(\s]+)\s*\(([\d.]+)\s*(MB|GB)\):\s*(https?:\/\/[^\s]+)/i);
+      if (linkMatch) {
+        const link: LinkDef = {
+          id: Math.random().toString(36).substr(2, 9),
+          name: linkMatch[1].trim(),
+          size: linkMatch[2],
+          unit: linkMatch[3].toUpperCase() as 'MB' | 'GB',
+          url: linkMatch[4]
+        };
+
+        if (linkSection === 'movie') {
+          newMovieLinks.push(link);
+        } else if (linkSection === 'zip' && currentSeason) {
+          currentSeason.zipLinks.push(link);
+        } else if (linkSection === 'mkv' && currentSeason) {
+          if (!currentSeason.mkvLinks) currentSeason.mkvLinks = [];
+          currentSeason.mkvLinks.push(link);
+        } else if (linkSection === 'episode' && currentEpisode) {
+          currentEpisode.links.push(link);
+        }
+      }
+    });
+
+    if (newTitle) setTitle(newTitle);
+    if (newYear) setYear(newYear);
+    setType(newType);
+    if (newDescription) setDescription(newDescription);
+    if (newCast) setCast(newCast);
+    if (newImdb) setImdbLink(newImdb);
+    if (newTrailer) setTrailerUrl(newTrailer);
+    if (newSample) setSampleUrl(newSample);
+    if (newPoster) setPosterUrl(newPoster);
+    if (newGenreIds.length > 0) setSelectedGenres(newGenreIds);
+    if (newLanguageIds.length > 0) setSelectedLanguages(newLanguageIds);
+    if (newQualityId) setSelectedQuality(newQualityId);
+    if (newMovieLinks.length > 0) setMovieLinks(newMovieLinks);
+    if (newSeasons.length > 0) setSeasons(newSeasons);
+
+    setIsAutoFillModalOpen(false);
+    setAutoFillText('');
+    setAlertConfig({ isOpen: true, title: 'Success', message: 'Data auto-filled successfully!' });
   };
 
   const renderQualityInputs = (
@@ -569,7 +801,7 @@ export default function ContentManagement() {
                   newLinks[idx].name = e.target.value;
                   onChange(newLinks);
                 }}
-                className="flex-1 bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-1.5 text-sm"
+                className="flex-1 bg-zinc-950 border border-zinc-800 rounded-lg px-4 py-3 text-sm"
               />
               <button
                 type="button"
@@ -577,9 +809,9 @@ export default function ContentManagement() {
                   const newLinks = links.filter((_, i) => i !== idx);
                   onChange(newLinks);
                 }}
-                className="p-1.5 text-red-500 hover:bg-red-500/10 rounded-lg transition-colors shrink-0"
+                className="p-2 text-red-500 hover:bg-red-500/10 rounded-lg transition-colors shrink-0"
               >
-                <Trash2 className="w-4 h-4" />
+                <Trash2 className="w-5 h-5" />
               </button>
             </div>
             <div className="flex gap-2 items-center">
@@ -592,7 +824,7 @@ export default function ContentManagement() {
                   newLinks[idx].size = e.target.value;
                   onChange(newLinks);
                 }}
-                className="w-20 bg-zinc-950 border border-zinc-800 rounded-lg px-2 py-1.5 text-xs"
+                className="w-24 bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-3 text-sm"
               />
               <select
                 value={link.unit || 'MB'}
@@ -601,7 +833,7 @@ export default function ContentManagement() {
                   newLinks[idx].unit = e.target.value as 'MB' | 'GB';
                   onChange(newLinks);
                 }}
-                className="bg-zinc-950 border border-zinc-800 rounded-lg px-1 py-1.5 text-xs"
+                className="bg-zinc-950 border border-zinc-800 rounded-lg px-2 py-3 text-sm"
               >
                 <option value="MB">MB</option>
                 <option value="GB">GB</option>
@@ -617,7 +849,7 @@ export default function ContentManagement() {
                   newLinks[idx].url = e.target.value;
                   onChange(newLinks);
                 }}
-                className="flex-1 bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-1.5 text-xs"
+                className="flex-1 bg-zinc-950 border border-zinc-800 rounded-lg px-4 py-3 text-sm"
               />
             </div>
           </div>
@@ -848,7 +1080,9 @@ export default function ContentManagement() {
                 />
               </div>
               <div className="relative aspect-[2/3]">
-                <img src={content.posterUrl || 'https://picsum.photos/seed/movie/400/600'} alt={content.title} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                <Link to={`/movie/${content.id}`} className="block w-full h-full">
+                  <img src={content.posterUrl || 'https://picsum.photos/seed/movie/400/600'} alt={content.title} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                </Link>
                 <div className="absolute top-1 right-1 flex flex-col gap-1 items-end">
                   <div className="bg-black/80 backdrop-blur-md px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider">
                     {content.type}
@@ -869,6 +1103,9 @@ export default function ContentManagement() {
                   <button onClick={() => handleShare(content)} className="text-emerald-500 hover:text-emerald-400 p-1.5 transition-colors" title="Share to WhatsApp">
                     <Share2 className="w-4 h-4 md:w-5 md:h-5" />
                   </button>
+                  <button onClick={() => handleCopyData(content)} className="text-zinc-400 hover:text-white p-1.5 transition-colors" title="Copy Data">
+                    <Copy className="w-4 h-4 md:w-5 md:h-5" />
+                  </button>
                   <div className="flex gap-1">
                     <button onClick={() => handleEdit(content)} className="text-zinc-400 hover:text-white p-1.5 transition-colors">
                       <Edit2 className="w-4 h-4 md:w-5 md:h-5" />
@@ -888,7 +1125,16 @@ export default function ContentManagement() {
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 z-50 overflow-y-auto">
           <div className="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-4xl my-8 flex flex-col max-h-[90vh]">
             <div className="p-6 border-b border-zinc-800 flex items-center justify-between sticky top-0 bg-zinc-900 z-10">
-              <h2 className="text-2xl font-bold">{editingId ? 'Edit Content' : 'Add Content'}</h2>
+              <div className="flex items-center gap-4">
+                <h2 className="text-2xl font-bold">{editingId ? 'Edit Content' : 'Add Content'}</h2>
+                <button
+                  type="button"
+                  onClick={() => setIsAutoFillModalOpen(true)}
+                  className="bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-500 px-4 py-2 rounded-xl text-sm font-bold flex items-center gap-2 transition-colors border border-emerald-500/20"
+                >
+                  <ClipboardPaste className="w-4 h-4" /> Auto-Fill from Text
+                </button>
+              </div>
               <button onClick={() => setIsModalOpen(false)} className="text-zinc-400 hover:text-white p-2">
                 <X className="w-6 h-6" />
               </button>
@@ -988,13 +1234,100 @@ export default function ContentManagement() {
                     </div>
                   </div>
 
+                  {imdbCardData && (
+                    <div className="md:col-span-2 bg-zinc-950 border border-emerald-500/30 rounded-2xl p-4 flex flex-col sm:flex-row gap-4">
+                      <div className="w-full sm:w-32 aspect-[2/3] rounded-lg overflow-hidden flex-shrink-0">
+                        {imdbCardData.posterUrl && imdbCardData.posterUrl.trim() !== "" && (
+                          <img src={imdbCardData.posterUrl} alt={imdbCardData.title} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                        )}
+                      </div>
+                      <div className="flex-1 flex flex-col">
+                        <div className="flex items-center justify-between gap-2 mb-2">
+                          <h4 className="text-lg font-bold text-emerald-500">{imdbCardData.title} ({imdbCardData.year})</h4>
+                          <button 
+                            type="button"
+                            onClick={() => setImdbCardData(null)}
+                            className="text-zinc-500 hover:text-white"
+                          >
+                            <X className="w-5 h-5" />
+                          </button>
+                        </div>
+                        
+                        <div className="space-y-3 mb-4">
+                          {imdbCardData.description && (
+                            <div>
+                              <div className="flex items-center justify-between mb-1">
+                                <span className="text-xs font-bold text-zinc-500 uppercase">Description</span>
+                                <button 
+                                  type="button"
+                                  onClick={() => setDescription(imdbCardData.description)}
+                                  className="text-[10px] text-emerald-500 hover:underline"
+                                >
+                                  Apply Description
+                                </button>
+                              </div>
+                              <p className="text-sm text-zinc-400 line-clamp-2">{imdbCardData.description}</p>
+                            </div>
+                          )}
+                          
+                          {imdbCardData.cast && (
+                            <div>
+                              <div className="flex items-center justify-between mb-1">
+                                <span className="text-xs font-bold text-zinc-500 uppercase">Cast</span>
+                                <button 
+                                  type="button"
+                                  onClick={() => setCast(imdbCardData.cast)}
+                                  className="text-[10px] text-emerald-500 hover:underline"
+                                >
+                                  Apply Cast
+                                </button>
+                              </div>
+                              <p className="text-xs text-zinc-500 truncate">{imdbCardData.cast}</p>
+                            </div>
+                          )}
+                        </div>
+
+                        <div className="mt-auto flex flex-wrap gap-2">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setTitle(imdbCardData.title);
+                              setYear(imdbCardData.year);
+                              setPosterUrl(imdbCardData.posterUrl);
+                              setType(imdbCardData.type);
+                              setImdbCardData(null);
+                            }}
+                            className="bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-500 border border-emerald-500/20 px-4 py-2 rounded-lg text-xs font-bold transition-colors"
+                          >
+                            Apply Basic Info
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setTitle(imdbCardData.title);
+                              setYear(imdbCardData.year);
+                              setPosterUrl(imdbCardData.posterUrl);
+                              setType(imdbCardData.type);
+                              setDescription(imdbCardData.description);
+                              setCast(imdbCardData.cast);
+                              setImdbCardData(null);
+                            }}
+                            className="bg-emerald-500 hover:bg-emerald-600 text-white px-4 py-2 rounded-lg text-xs font-bold transition-colors"
+                          >
+                            Apply All
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
                   <div>
                     <label className="block text-sm font-medium text-zinc-400 mb-2">Release Year</label>
                     <input type="number" value={year || ''} onChange={(e) => setYear(parseInt(e.target.value) || new Date().getFullYear())} className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-3 focus:outline-none focus:border-emerald-500" />
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-zinc-400 mb-2">Quality</label>
+                    <label className="block text-sm font-medium text-zinc-400 mb-2">Print Quality</label>
                     <select value={selectedQuality} onChange={(e) => setSelectedQuality(e.target.value)} className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-3 focus:outline-none focus:border-emerald-500">
                       <option value="">Select Quality</option>
                       {qualities.map(q => <option key={q.id} value={q.id}>{q.name}</option>)}
@@ -1250,6 +1583,54 @@ export default function ContentManagement() {
         </div>
       )}
 
+      {/* Auto-Fill Modal */}
+      {isAutoFillModalOpen && (
+        <div className="fixed inset-0 bg-black/90 backdrop-blur-md flex items-center justify-center p-4 z-[60]">
+          <div className="bg-zinc-900 border border-zinc-800 rounded-3xl w-full max-w-2xl overflow-hidden shadow-2xl">
+            <div className="p-6 border-b border-zinc-800 flex items-center justify-between bg-zinc-900/50">
+              <div>
+                <h3 className="text-xl font-bold text-white">Auto-Fill from Text</h3>
+                <p className="text-sm text-zinc-400 mt-1">Paste WhatsApp or copied data to automatically populate fields</p>
+              </div>
+              <button 
+                onClick={() => setIsAutoFillModalOpen(false)}
+                className="text-zinc-400 hover:text-white p-2 hover:bg-zinc-800 rounded-full transition-all"
+              >
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+            
+            <div className="p-6">
+              <textarea
+                value={autoFillText}
+                onChange={(e) => setAutoFillText(e.target.value)}
+                placeholder="Paste your movie/series data here..."
+                className="w-full h-64 bg-zinc-950 border border-zinc-800 rounded-2xl p-4 text-zinc-300 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500 transition-all resize-none font-mono text-sm"
+              />
+              
+              <div className="mt-6 flex gap-3">
+                <button
+                  onClick={handleAutoFill}
+                  disabled={!autoFillText.trim()}
+                  className="flex-1 bg-emerald-500 hover:bg-emerald-400 disabled:opacity-50 disabled:cursor-not-allowed text-black font-bold py-4 rounded-2xl flex items-center justify-center gap-2 transition-all shadow-lg shadow-emerald-500/20"
+                >
+                  <ClipboardPaste className="w-5 h-5" /> Process & Auto-Fill
+                </button>
+                <button
+                  onClick={() => {
+                    setAutoFillText('');
+                    setIsAutoFillModalOpen(false);
+                  }}
+                  className="px-8 bg-zinc-800 hover:bg-zinc-700 text-white font-bold py-4 rounded-2xl transition-all"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       <ConfirmModal
         isOpen={!!deleteId}
         title="Delete Content"
@@ -1332,6 +1713,77 @@ export default function ContentManagement() {
                 className="bg-emerald-500 hover:bg-emerald-600 disabled:opacity-50 disabled:cursor-not-allowed text-white px-6 py-2 rounded-xl font-bold transition-colors"
               >
                 Fetch Selected
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {shareSeasonModal.isOpen && shareSeasonModal.content && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-[60] p-4">
+          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 max-w-md w-full relative">
+            <button
+              onClick={() => setShareSeasonModal({ ...shareSeasonModal, isOpen: false })}
+              className="absolute top-4 right-4 text-zinc-400 hover:text-white transition-colors"
+            >
+              <X className="w-5 h-5" />
+            </button>
+            <h3 className="text-xl font-bold mb-2">Share Series</h3>
+            <p className="text-zinc-400 mb-6">Select which seasons of "{shareSeasonModal.content.title}" you want to share on WhatsApp.</p>
+            
+            <div className="max-h-60 overflow-y-auto space-y-2 mb-6 pr-2 custom-scrollbar">
+              <label className={`flex items-center gap-3 p-3 rounded-xl cursor-pointer border transition-colors ${selectedShareSeasons.length === shareSeasonModal.seasons.length ? 'bg-emerald-500/10 border-emerald-500 text-emerald-500' : 'bg-zinc-950 border-zinc-800 hover:bg-zinc-800/50'}`}>
+                <input
+                  type="checkbox"
+                  checked={selectedShareSeasons.length === shareSeasonModal.seasons.length}
+                  onChange={(e) => {
+                    if (e.target.checked) {
+                      setSelectedShareSeasons(shareSeasonModal.seasons.map(s => s.seasonNumber));
+                    } else {
+                      setSelectedShareSeasons([]);
+                    }
+                  }}
+                  className="w-5 h-5 rounded border-zinc-700 text-emerald-500 focus:ring-emerald-500/20 bg-zinc-950"
+                />
+                <span className="font-medium">All Seasons</span>
+              </label>
+              <div className="h-px bg-zinc-800 my-2" />
+              {shareSeasonModal.seasons.map(season => (
+                <label key={season.id} className={`flex items-center gap-3 p-3 rounded-xl cursor-pointer border transition-colors ${selectedShareSeasons.includes(season.seasonNumber) ? 'bg-emerald-500/10 border-emerald-500 text-emerald-500' : 'bg-zinc-950 border-zinc-800 hover:bg-zinc-800/50'}`}>
+                  <input
+                    type="checkbox"
+                    checked={selectedShareSeasons.includes(season.seasonNumber)}
+                    onChange={(e) => {
+                      if (e.target.checked) {
+                        setSelectedShareSeasons(prev => [...prev, season.seasonNumber]);
+                      } else {
+                        setSelectedShareSeasons(prev => prev.filter(s => s !== season.seasonNumber));
+                      }
+                    }}
+                    className="w-5 h-5 rounded border-zinc-700 text-emerald-500 focus:ring-emerald-500/20 bg-zinc-950"
+                  />
+                  <span className="font-medium">Season {season.seasonNumber}</span>
+                </label>
+              ))}
+            </div>
+
+            <div className="flex justify-end gap-3">
+              <button
+                onClick={() => setShareSeasonModal({ ...shareSeasonModal, isOpen: false })}
+                className="px-6 py-2 rounded-xl font-medium hover:bg-zinc-800 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  if (shareSeasonModal.content) {
+                    executeShare(shareSeasonModal.content, selectedShareSeasons);
+                    setShareSeasonModal({ ...shareSeasonModal, isOpen: false });
+                  }
+                }}
+                disabled={selectedShareSeasons.length === 0}
+                className="bg-emerald-500 hover:bg-emerald-600 disabled:opacity-50 disabled:cursor-not-allowed text-white px-6 py-2 rounded-xl font-bold transition-colors flex items-center gap-2"
+              >
+                <Share2 className="w-4 h-4" /> Share ({selectedShareSeasons.length})
               </button>
             </div>
           </div>

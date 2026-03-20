@@ -12,7 +12,7 @@ export default defineConfig(({mode}) => {
       tailwindcss(),
       VitePWA({
         registerType: 'autoUpdate',
-        includeAssets: ['logo.png', 'pwa-192x192.png', 'pwa-512x512.png'],
+        includeAssets: ['launcher.svg'],
         manifest: {
           name: 'MovizNow',
           short_name: 'MovizNow',
@@ -36,20 +36,20 @@ export default defineConfig(({mode}) => {
               short_name: 'Home',
               description: 'Go to Home',
               url: '/',
-              icons: [{ src: '/logo.png', sizes: '512x512', type: 'image/png', purpose: 'any' }]
+              icons: [{ src: '/launcher.svg', sizes: '192x192 512x512', type: 'image/svg+xml', purpose: 'any' }]
             }
           ],
           icons: [
             {
-              src: '/logo.png',
+              src: '/launcher.svg',
               sizes: '192x192',
-              type: 'image/png',
+              type: 'image/svg+xml',
               purpose: 'any'
             },
             {
-              src: '/logo.png',
+              src: '/launcher.svg',
               sizes: '512x512',
-              type: 'image/png',
+              type: 'image/svg+xml',
               purpose: 'any maskable'
             }
           ]

@@ -60,27 +60,47 @@ export default function UserManagement() {
 
   const fetchUserAnalytics = async (user: UserProfile) => {
     try {
-      const q = query(collection(db, 'analytics'), where('userId', '==', user.uid));
+      const q = query(
+        collection(db, 'analytics'), 
+        where('userId', '==', user.uid)
+      );
       const snapshot = await getDocs(q);
       let movies = 0;
       let links = 0;
+      
+      // We want to keep track of all events to sort them by timestamp
+      const events: AnalyticsEvent[] = [];
+      snapshot.forEach(doc => {
+        events.push(doc.data() as AnalyticsEvent);
+      });
+
+      // Sort events by timestamp descending to get latest first
+      events.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+
       const viewedMovies = new Set<string>();
       const clickedLinks = new Set<string>();
-      snapshot.forEach(doc => {
-        const data = doc.data() as AnalyticsEvent;
+
+      events.forEach(data => {
         if (data.type === 'content_click') {
           movies++;
-          if (data.contentTitle) viewedMovies.add(data.contentTitle);
+          if (data.contentTitle && viewedMovies.size < 5) {
+            viewedMovies.add(data.contentTitle);
+          }
         }
         if (data.type === 'link_click') {
           links++;
-          if (data.contentTitle) {
+          if (data.contentTitle && clickedLinks.size < 5) {
             const linkName = data.linkName || 'Link';
             clickedLinks.add(`${data.contentTitle} - ${linkName}`);
           }
         }
       });
-      setUserAnalytics({ moviesClicked: movies, linksClicked: links, viewedMovies: Array.from(viewedMovies), clickedLinks: Array.from(clickedLinks) });
+      setUserAnalytics({ 
+        moviesClicked: movies, 
+        linksClicked: links, 
+        viewedMovies: Array.from(viewedMovies), 
+        clickedLinks: Array.from(clickedLinks) 
+      });
 
       if (user.role === 'selected_content' && user.assignedContent && user.assignedContent.length > 0) {
         // Fetch titles for assigned content
@@ -386,7 +406,7 @@ export default function UserManagement() {
                   </td>
                   <td className="px-4 md:px-6 py-4">
                     <div className="flex items-center gap-3">
-                      {user.photoURL ? (
+                      {user.photoURL && user.photoURL.trim() !== "" ? (
                         <img src={user.photoURL} alt={user.displayName || 'User'} className="w-10 h-10 rounded-full object-cover" referrerPolicy="no-referrer" />
                       ) : (
                         <div className="w-10 h-10 rounded-full bg-zinc-800 flex items-center justify-center text-zinc-400 font-bold shrink-0">
@@ -557,7 +577,7 @@ export default function UserManagement() {
               ) : (
                 <div className="p-4 md:p-6 space-y-6">
                   <div className="flex items-center gap-4">
-                    {selectedUser.photoURL ? (
+                    {selectedUser.photoURL && selectedUser.photoURL.trim() !== "" ? (
                       <img src={selectedUser.photoURL} alt={selectedUser.displayName || 'User'} className="w-16 h-16 rounded-full object-cover" referrerPolicy="no-referrer" />
                     ) : (
                       <div className="w-16 h-16 bg-zinc-800 rounded-full flex items-center justify-center text-2xl font-bold text-emerald-500 shrink-0">
