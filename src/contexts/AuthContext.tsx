@@ -28,14 +28,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     let unsubProfile: (() => void) | undefined;
 
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
-      console.log('onAuthStateChanged:', currentUser?.email);
-      
-      if (unsubProfile) {
-        console.log('Unsubscribing previous profile listener');
-        unsubProfile();
-        unsubProfile = undefined;
-      }
-
       setUser(currentUser);
       if (currentUser) {
         if (!sessionStorage.getItem('session_started')) {
@@ -45,17 +37,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
 
         const userRef = doc(db, 'users', currentUser.uid);
-        console.log('Starting profile snapshot for:', currentUser.uid);
         
         // Listen to profile changes
         unsubProfile = onSnapshot(userRef, async (docSnap) => {
-          console.log('Profile snapshot received:', docSnap.exists() ? 'exists' : 'not found');
           try {
             if (docSnap.exists()) {
               const data = docSnap.data() as UserProfile;
               const isAdmin = currentUser.email === 'asmatn628@gmail.com' || currentUser.email === 'asmatullah9327@gmail.com';
-              
-              console.log('Profile data:', { role: data.role, status: data.status, isAdmin });
               
               // Auto-expire logic
               const now = new Date();
@@ -111,14 +99,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             setLoading(false);
           }
         }, (error) => {
-          console.error("Profile snapshot error for UID:", currentUser.uid, error);
+          console.error("Profile snapshot error:", error);
           setLoading(false);
           handleFirestoreError(error, OperationType.GET, `users/${currentUser.uid}`);
         });
       } else {
-        console.log('No user logged in');
         if (unsubProfile) {
-          console.log('Unsubscribing profile listener (no user)');
           unsubProfile();
           unsubProfile = undefined;
         }
