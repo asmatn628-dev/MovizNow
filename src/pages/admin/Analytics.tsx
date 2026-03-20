@@ -267,7 +267,7 @@ export default function Analytics() {
                 <div className="flex items-center gap-4">
                   <span className="text-xl font-bold text-zinc-600 w-6">{index + 1}</span>
                   <div className="flex items-center gap-3">
-                    {user.photoURL && user.photoURL.trim() !== "" ? (
+                    {user.photoURL ? (
                       <img src={user.photoURL} alt={user.displayName} className="w-8 h-8 rounded-full" referrerPolicy="no-referrer" />
                     ) : (
                       <div className="w-8 h-8 rounded-full bg-zinc-800 flex items-center justify-center text-zinc-400 font-bold">
@@ -302,7 +302,7 @@ export default function Analytics() {
                 <div className="flex items-center gap-4">
                   <span className="text-xl font-bold text-zinc-600 w-6">{index + 1}</span>
                   <div className="flex items-center gap-3">
-                    {user.photoURL && user.photoURL.trim() !== "" ? (
+                    {user.photoURL ? (
                       <img src={user.photoURL} alt={user.displayName} className="w-8 h-8 rounded-full" referrerPolicy="no-referrer" />
                     ) : (
                       <div className="w-8 h-8 rounded-full bg-zinc-800 flex items-center justify-center text-zinc-400 font-bold">

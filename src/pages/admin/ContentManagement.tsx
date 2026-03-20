@@ -7,7 +7,6 @@ import { Plus, Edit2, Trash2, Share2, Film, Tv, X, Save, Upload, Search, Eye, Ey
 import ConfirmModal from '../../components/ConfirmModal';
 import AlertModal from '../../components/AlertModal';
 import { handleFirestoreError, OperationType } from '../../utils/firestoreErrorHandler';
-import { fetchContentDataWithAI } from '../../services/geminiService';
 
 export default function ContentManagement() {
   const [contentList, setContentList] = useState<Content[]>([]);
@@ -381,35 +380,121 @@ export default function ContentManagement() {
     });
   };
 
-
-  const fetchImdbData = async (query: string) => {
+  const fetchImdbData = async (link: string) => {
+    const ttMatch = link.match(/tt\d+/);
+    if (!ttMatch) return;
+    const ttId = ttMatch[0];
+    
     try {
       setFetchingImdb(true);
       setImdbCardData(null);
       
-      const data = await fetchContentDataWithAI(query);
-      
-      if (data) {
-        setImdbCardData({
-          title: data.title,
-          year: data.year,
-          description: data.description,
-          cast: data.cast.join(', '),
-          posterUrl: data.posterUrl,
-          type: data.type,
-          genres: data.genres
-        });
+      let fetchedData: any = {
+        title: '',
+        year: new Date().getFullYear(),
+        description: '',
+        cast: '',
+        posterUrl: '',
+        type: 'movie' as 'movie' | 'series'
+      };
+
+      // Try TVMaze first (great for series)
+      const tvmazeRes = await fetch(`https://api.tvmaze.com/lookup/shows?imdb=${ttId}`);
+      if (tvmazeRes.ok) {
+        const show = await tvmazeRes.json();
+        fetchedData.title = show.name;
+        fetchedData.description = show.summary?.replace(/<[^>]*>?/gm, '') || '';
+        if (show.image?.original) fetchedData.posterUrl = show.image.original;
+        if (show.premiered) fetchedData.year = parseInt(show.premiered.substring(0, 4));
+        fetchedData.type = 'series';
+        
+        // Fetch cast
+        try {
+          const castRes = await fetch(`https://api.tvmaze.com/shows/${show.id}/cast`);
+          if (castRes.ok) {
+            const castData = await castRes.json();
+            fetchedData.cast = castData.slice(0, 5).map((c: any) => c.person.name).join(', ');
+          }
+        } catch (e) {}
+        
+        // Fetch episodes
+        try {
+          const epRes = await fetch(`https://api.tvmaze.com/shows/${show.id}/episodes`);
+          if (epRes.ok) {
+            const epData = await epRes.json();
+            const seasonsMap = new Map<number, any[]>();
+            epData.forEach((ep: any) => {
+              if (!seasonsMap.has(ep.season)) seasonsMap.set(ep.season, []);
+              seasonsMap.get(ep.season)!.push(ep);
+            });
+            
+            const availableSeasons = Array.from(seasonsMap.keys()).sort((a, b) => a - b);
+            
+            if (availableSeasons.length > 1) {
+              setSelectedImdbSeasons(availableSeasons);
+              setImdbSeasonsPopup({
+                isOpen: true,
+                seasons: availableSeasons,
+                show: show,
+                epData: epData
+              });
+              setFetchingImdb(false);
+            } else {
+              processImdbSeasons(epData);
+            }
+          }
+        } catch (e) {}
       }
+      
+      // Fallback for movies or if TVMaze fails
+      try {
+        const suggestRes = await fetch(`https://v3.sg.media-imdb.com/suggestion/x/${ttId}.json`);
+        if (suggestRes.ok) {
+          const suggestData = await suggestRes.json();
+          const item = suggestData.d?.[0];
+          if (item) {
+            fetchedData.title = item.l || fetchedData.title;
+            fetchedData.year = item.y || fetchedData.year;
+            fetchedData.cast = item.s || fetchedData.cast;
+            if (item.i?.imageUrl) fetchedData.posterUrl = item.i.imageUrl;
+            fetchedData.type = item.q === 'TV series' ? 'series' : 'movie';
+          }
+        }
+      } catch (e) {}
+      
+      try {
+        const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(`https://www.imdb.com/title/${ttId}/`)}`;
+        const pageRes = await fetch(proxyUrl);
+        if (pageRes.ok) {
+          const html = await pageRes.text();
+          const parser = new DOMParser();
+          const doc = parser.parseFromString(html, 'text/html');
+          
+          let newDesc = fetchedData.description;
+          const descEl = doc.querySelector('[data-testid="plot-xl"]') || doc.querySelector('[data-testid="plot-l"]');
+          if (descEl && !fetchedData.description) {
+            newDesc = descEl.textContent || '';
+          }
+          
+          const ratingEl = doc.querySelector('[data-testid="hero-rating-bar__aggregate-rating__score"] span');
+          if (ratingEl) {
+            const rating = ratingEl.textContent;
+            if (rating && !newDesc.includes(`IMDb Rating:`)) {
+              newDesc = `IMDb Rating: ${rating}/10\n\n${newDesc}`;
+            }
+          }
+          fetchedData.description = newDesc;
+        }
+      } catch (e) {}
+
+      setImdbCardData(fetchedData);
+      
     } catch (error) {
-      console.error("Error fetching data with AI:", error);
+      console.error("Error fetching IMDb data:", error);
     } finally {
       setFetchingImdb(false);
     }
   };
-  
-
-      
-
 
   const handleDelete = () => {
     if (!deleteId) return;
@@ -1237,9 +1322,7 @@ export default function ContentManagement() {
                   {imdbCardData && (
                     <div className="md:col-span-2 bg-zinc-950 border border-emerald-500/30 rounded-2xl p-4 flex flex-col sm:flex-row gap-4">
                       <div className="w-full sm:w-32 aspect-[2/3] rounded-lg overflow-hidden flex-shrink-0">
-                        {imdbCardData.posterUrl && imdbCardData.posterUrl.trim() !== "" && (
-                          <img src={imdbCardData.posterUrl} alt={imdbCardData.title} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
-                        )}
+                        <img src={imdbCardData.posterUrl} alt={imdbCardData.title} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
                       </div>
                       <div className="flex-1 flex flex-col">
                         <div className="flex items-center justify-between gap-2 mb-2">

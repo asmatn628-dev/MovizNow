@@ -406,7 +406,7 @@ export default function UserManagement() {
                   </td>
                   <td className="px-4 md:px-6 py-4">
                     <div className="flex items-center gap-3">
-                      {user.photoURL && user.photoURL.trim() !== "" ? (
+                      {user.photoURL ? (
                         <img src={user.photoURL} alt={user.displayName || 'User'} className="w-10 h-10 rounded-full object-cover" referrerPolicy="no-referrer" />
                       ) : (
                         <div className="w-10 h-10 rounded-full bg-zinc-800 flex items-center justify-center text-zinc-400 font-bold shrink-0">
@@ -577,7 +577,7 @@ export default function UserManagement() {
               ) : (
                 <div className="p-4 md:p-6 space-y-6">
                   <div className="flex items-center gap-4">
-                    {selectedUser.photoURL && selectedUser.photoURL.trim() !== "" ? (
+                    {selectedUser.photoURL ? (
                       <img src={selectedUser.photoURL} alt={selectedUser.displayName || 'User'} className="w-16 h-16 rounded-full object-cover" referrerPolicy="no-referrer" />
                     ) : (
                       <div className="w-16 h-16 bg-zinc-800 rounded-full flex items-center justify-center text-2xl font-bold text-emerald-500 shrink-0">

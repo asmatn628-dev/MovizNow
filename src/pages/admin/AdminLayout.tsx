@@ -37,7 +37,7 @@ export default function AdminLayout() {
       {/* Mobile Header */}
       <div className="md:hidden flex items-center justify-between p-4 bg-zinc-900 border-b border-zinc-800">
         <h1 className="text-xl font-bold text-emerald-500 flex items-center gap-3">
-          <img src="/logo.svg" alt="Logo" className="w-6 h-6" />
+          <img src="/pwa-512x512.png" alt="Logo" className="w-6 h-6" />
           <span className="tracking-tight">MovizNow Admin</span>
         </h1>
         <button 
@@ -55,7 +55,7 @@ export default function AdminLayout() {
       )}>
         <div className="p-6 hidden md:block">
           <h1 className="text-2xl font-bold text-emerald-500 flex items-center gap-3">
-            <img src="/logo.svg" alt="Logo" className="w-8 h-8" />
+            <img src="/pwa-512x512.png" alt="Logo" className="w-8 h-8" />
             <span className="tracking-tight">MovizNow</span>
           </h1>
           <p className="text-xs text-zinc-400 mt-1 uppercase tracking-wider font-semibold">Admin Panel</p>

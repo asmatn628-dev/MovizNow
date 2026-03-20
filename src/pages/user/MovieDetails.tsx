@@ -8,7 +8,6 @@ import { Film, ArrowLeft, Play, Clock, Heart, MessageCircle, AlertCircle, Downlo
 import { logEvent } from '../../services/analytics';
 import { handleFirestoreError, OperationType } from '../../utils/firestoreErrorHandler';
 import AlertModal from '../../components/AlertModal';
-import { fetchContentDataWithAI } from '../../services/geminiService';
 import ConfirmModal from '../../components/ConfirmModal';
 import { motion, AnimatePresence } from 'motion/react';
 import { formatContentTitle } from '../../utils/contentUtils';
@@ -112,32 +111,104 @@ export default function MovieDetails() {
     }
   }, [isPosterExpanded]);
 
-
   useEffect(() => {
-    if (content?.title) {
+    if (content?.imdbLink) {
       const fetchImdb = async () => {
         setFetchingImdb(true);
+        const ttMatch = content.imdbLink!.match(/tt\d+/);
+        if (!ttMatch) {
+          setFetchingImdb(false);
+          return;
+        }
+        const ttId = ttMatch[0];
+        let data: any = {};
+        
+        // Try TVMaze first
         try {
-          const data = await fetchContentDataWithAI(content.title);
-          if (data) {
-            setImdbData({
-              title: data.title,
-              year: data.year,
-              description: data.description,
-              cast: data.cast.join(', '),
-              posterUrl: data.posterUrl,
-              rating: 'N/A' // AI service doesn't return rating
-            });
+          const tvmazeRes = await fetch(`https://api.tvmaze.com/lookup/shows?imdb=${ttId}`);
+          if (tvmazeRes.ok) {
+            const show = await tvmazeRes.json();
+            data.title = show.name;
+            data.description = show.summary?.replace(/<[^>]*>?/gm, '') || '';
+            if (show.image?.original) data.posterUrl = show.image.original;
+            if (show.premiered) {
+              data.year = parseInt(show.premiered.substring(0, 4));
+              data.releaseDate = show.premiered;
+            }
+            data.duration = show.runtime ? `${show.runtime} min` : '';
+            data.rating = show.rating?.average ? `${show.rating.average}/10` : '';
+            
+            try {
+              const castRes = await fetch(`https://api.tvmaze.com/shows/${show.id}/cast`);
+              if (castRes.ok) {
+                const castData = await castRes.json();
+                data.cast = castData.slice(0, 5).map((c: any) => c.person.name).join(', ');
+              }
+            } catch (e) {}
           }
         } catch (error) {
-          console.error("Error fetching data with AI:", error);
-        } finally {
-          setFetchingImdb(false);
+          // TVMaze fetch failed, silently fallback
         }
+
+        if (Object.keys(data).length === 0) {
+          // Fallback to suggestion API
+          try {
+            let suggestRes = await fetch(`https://v3.sg.media-imdb.com/suggestion/t/${ttId}.json`).catch(() => null);
+            let suggestData = null;
+            
+            if (suggestRes && suggestRes.ok) {
+              suggestData = await suggestRes.json();
+            } else {
+              // Try via proxy
+              const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(`https://v3.sg.media-imdb.com/suggestion/t/${ttId}.json`)}`;
+              const proxyRes = await fetch(proxyUrl);
+              if (proxyRes.ok) {
+                const proxyData = await proxyRes.json();
+                suggestData = proxyData;
+              }
+            }
+
+            if (suggestData) {
+              const item = suggestData.d?.find((i: any) => i.id === ttId) || suggestData.d?.[0];
+              if (item) {
+                data.title = item.l || '';
+                data.year = item.y || '';
+                data.cast = item.s || '';
+                if (item.i?.imageUrl) data.posterUrl = item.i.imageUrl;
+              }
+            }
+          } catch (error) {
+            // IMDb suggestion fetch failed, silently fallback
+          }
+          
+          // Try to get more details via proxy
+          try {
+            const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(`https://www.imdb.com/title/${ttId}/`)}`;
+            const pageRes = await fetch(proxyUrl);
+            if (pageRes.ok) {
+              const html = await pageRes.text();
+              const parser = new DOMParser();
+              const doc = parser.parseFromString(html, 'text/html');
+              
+              const descEl = doc.querySelector('[data-testid="plot-xl"]') || doc.querySelector('[data-testid="plot-l"]');
+              if (descEl) data.description = descEl.textContent || '';
+              
+              const ratingEl = doc.querySelector('[data-testid="hero-rating-bar__aggregate-rating__score"] span');
+              if (ratingEl) data.rating = `${ratingEl.textContent}/10`;
+            }
+          } catch (error) {
+            // Proxy fetch failed, silently fallback
+          }
+        }
+        
+        if (Object.keys(data).length > 0) {
+          setImdbData(data);
+        }
+        setFetchingImdb(false);
       };
       fetchImdb();
     }
-  }, [content?.title]);
+  }, [content?.imdbLink]);
 
   const getYouTubeEmbedUrl = (url?: string) => {
     if (!url) return null;
@@ -627,7 +698,7 @@ export default function MovieDetails() {
               </div>
             ) : imdbData ? (
               <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-2xl p-6 md:p-8 flex flex-col md:flex-row gap-8">
-                {imdbData.posterUrl && imdbData.posterUrl.trim() !== "" && (
+                {imdbData.posterUrl && (
                   <img src={imdbData.posterUrl} alt="IMDb Poster" className="w-32 md:w-48 mx-auto md:mx-0 rounded-xl shadow-lg object-cover" referrerPolicy="no-referrer" />
                 )}
                 <div className="flex-1 space-y-4">
