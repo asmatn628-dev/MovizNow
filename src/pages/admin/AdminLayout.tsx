@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Outlet, Link, useLocation, useNavigate, Navigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
-import { Film, Users, Tags, Languages, Clock, LogOut, Menu, X, MonitorPlay, BarChart3, DollarSign } from 'lucide-react';
+import { Film, Users, Tags, Languages, Clock, LogOut, Menu, X, MonitorPlay, BarChart3, DollarSign, AlertTriangle } from 'lucide-react';
 import { clsx } from 'clsx';
 import ConfirmModal from '../../components/ConfirmModal';
 
@@ -22,13 +22,14 @@ export default function AdminLayout() {
     { path: '/admin/temporary-users', label: 'Temporary Users', icon: Clock },
     { path: '/admin/selected-content', label: 'Selected Content Only', icon: Film },
     { path: '/admin/income', label: 'Income / Earn', icon: DollarSign },
+    { path: '/admin/error-links', label: 'Error Links', icon: AlertTriangle },
   ];
 
   const navItems = profile?.role === 'data_editor' 
-    ? allNavItems.filter(item => ['/admin/content', '/admin/genres', '/admin/languages', '/admin/qualities'].includes(item.path))
+    ? allNavItems.filter(item => ['/admin/content', '/admin/genres', '/admin/languages', '/admin/qualities', '/admin/error-links'].includes(item.path))
     : allNavItems;
 
-  if (profile?.role === 'data_editor' && !['/admin/content', '/admin/genres', '/admin/languages', '/admin/qualities'].includes(location.pathname)) {
+  if (profile?.role === 'data_editor' && !['/admin/content', '/admin/genres', '/admin/languages', '/admin/qualities', '/admin/error-links'].includes(location.pathname)) {
     return <Navigate to="/admin/content" replace />;
   }
 
@@ -37,7 +38,7 @@ export default function AdminLayout() {
       {/* Mobile Header */}
       <div className="md:hidden flex items-center justify-between p-4 bg-zinc-900 border-b border-zinc-800">
         <h1 className="text-xl font-bold text-emerald-500 flex items-center gap-3">
-          <img src="/pwa-512x512.png" alt="Logo" className="w-6 h-6" />
+          <img src="/logo.svg?v=2" alt="Logo" className="w-6 h-6" />
           <span className="tracking-tight">MovizNow Admin</span>
         </h1>
         <button 
@@ -55,7 +56,7 @@ export default function AdminLayout() {
       )}>
         <div className="p-6 hidden md:block">
           <h1 className="text-2xl font-bold text-emerald-500 flex items-center gap-3">
-            <img src="/pwa-512x512.png" alt="Logo" className="w-8 h-8" />
+            <img src="/logo.svg?v=2" alt="Logo" className="w-8 h-8" />
             <span className="tracking-tight">MovizNow</span>
           </h1>
           <p className="text-xs text-zinc-400 mt-1 uppercase tracking-wider font-semibold">Admin Panel</p>

@@ -698,7 +698,7 @@ export default function MovieDetails() {
               </div>
             ) : imdbData ? (
               <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-2xl p-6 md:p-8 flex flex-col md:flex-row gap-8">
-                {imdbData.posterUrl && (
+                {imdbData.posterUrl && imdbData.posterUrl.trim() !== "" && (
                   <img src={imdbData.posterUrl} alt="IMDb Poster" className="w-32 md:w-48 mx-auto md:mx-0 rounded-xl shadow-lg object-cover" referrerPolicy="no-referrer" />
                 )}
                 <div className="flex-1 space-y-4">
@@ -762,63 +762,76 @@ export default function MovieDetails() {
               {content.type === 'movie' && content.movieLinks && (
                 <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6">
                   <h3 className="font-bold mb-4 text-zinc-400">Movie Links</h3>
-                  {renderLinks(JSON.parse(content.movieLinks))}
+                  {(() => {
+                    try {
+                      return renderLinks(JSON.parse(content.movieLinks));
+                    } catch (e) {
+                      console.error("Error parsing movie links:", e);
+                      return <p className="text-red-500">Error loading links</p>;
+                    }
+                  })()}
                 </div>
               )}
 
               {content.type === 'series' && content.seasons && (
                 <div className="space-y-6">
-                  {JSON.parse(content.seasons)
-                    .filter((season: Season) => hasFullAccess || allowedSeasons.includes(season.id))
-                    .map((season: Season) => (
-                    <div key={season.id} className="bg-zinc-900 border border-zinc-800 rounded-2xl overflow-hidden">
-                      <div className="bg-zinc-950/50 p-6 border-b border-zinc-800">
-                        <h3 className="text-xl font-bold">Season {season.seasonNumber}</h3>
-                      </div>
-                      
-                      <div className="p-6 space-y-8">
-                        {(() => {
-                          const zipLinks = season.zipLinks || [];
-                          const mkvLinks = season.mkvLinks || [];
-                          const otherLinks = (season as any).otherLinks || []; // Fallback if any
-                          
-                          return (
-                            <>
-                              {zipLinks.length > 0 && (
-                                <div>
-                                  <h4 className="font-semibold text-zinc-400 mb-3 text-sm uppercase tracking-wider">Full Season Zip</h4>
-                                  {renderLinks(zipLinks, true)}
-                                </div>
-                              )}
-                              {mkvLinks.length > 0 && (
-                                <div>
-                                  <h4 className="font-semibold text-zinc-400 mb-3 text-sm uppercase tracking-wider">Full Season MKV</h4>
-                                  {renderLinks(mkvLinks)}
-                                </div>
-                              )}
-                            </>
-                          );
-                        })()}
-
-                        {season.episodes && season.episodes.length > 0 && (
-                          <div>
-                            <h4 className="font-semibold text-zinc-400 mb-4 text-sm uppercase tracking-wider">Episodes</h4>
-                            <div className="space-y-4">
-                              {season.episodes.map(ep => (
-                                <div key={ep.id} className="bg-zinc-950 border border-zinc-800 rounded-xl p-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
-                                  <div>
-                                    <span className="text-emerald-500 font-bold mr-3">E{ep.episodeNumber}</span>
-                                    <span className="font-medium">{ep.title}</span>
-                                  </div>
-                                  {renderLinks(ep.links)}
-                                </div>
-                              ))}
-                            </div>
+                  {(() => {
+                    try {
+                      return JSON.parse(content.seasons)
+                        .filter((season: Season) => hasFullAccess || allowedSeasons.includes(season.id))
+                        .map((season: Season) => (
+                        <div key={season.id} className="bg-zinc-900 border border-zinc-800 rounded-2xl overflow-hidden">
+                          <div className="bg-zinc-950/50 p-6 border-b border-zinc-800">
+                            <h3 className="text-xl font-bold">Season {season.seasonNumber}</h3>
                           </div>
-                        )}
-                      </div>
-                    </div>
-                  ))}
+                          
+                          <div className="p-6 space-y-8">
+                            {(() => {
+                              const zipLinks = season.zipLinks || [];
+                              const mkvLinks = season.mkvLinks || [];
+                              
+                              return (
+                                <>
+                                  {zipLinks.length > 0 && (
+                                    <div>
+                                      <h4 className="font-semibold text-zinc-400 mb-3 text-sm uppercase tracking-wider">Full Season Zip</h4>
+                                      {renderLinks(zipLinks, true)}
+                                    </div>
+                                  )}
+                                  {mkvLinks.length > 0 && (
+                                    <div>
+                                      <h4 className="font-semibold text-zinc-400 mb-3 text-sm uppercase tracking-wider">Full Season MKV</h4>
+                                      {renderLinks(mkvLinks)}
+                                    </div>
+                                  )}
+                                </>
+                              );
+                            })()}
+
+                            {season.episodes && season.episodes.length > 0 && (
+                              <div>
+                                <h4 className="font-semibold text-zinc-400 mb-4 text-sm uppercase tracking-wider">Episodes</h4>
+                                <div className="space-y-4">
+                                  {season.episodes.map(ep => (
+                                    <div key={ep.id} className="bg-zinc-950 border border-zinc-800 rounded-xl p-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                                      <div>
+                                        <span className="text-emerald-500 font-bold mr-3">E{ep.episodeNumber}</span>
+                                        <span className="font-medium">{ep.title}</span>
+                                      </div>
+                                      {renderLinks(ep.links)}
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      ));
+                    } catch (e) {
+                      console.error("Error parsing series seasons:", e);
+                      return <p className="text-red-500">Error loading seasons</p>;
+                    }
+                  })()}
                 </div>
               )}
             </section>

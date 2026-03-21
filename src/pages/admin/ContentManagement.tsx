@@ -513,10 +513,16 @@ export default function ContentManagement() {
 
   const handleShare = (content: Content) => {
     if (content.type === 'series' && content.seasons) {
-      const parsedSeasons: Season[] = JSON.parse(content.seasons);
-      if (parsedSeasons.length > 1) {
-        setShareSeasonModal({ isOpen: true, content, seasons: parsedSeasons });
-        setSelectedShareSeasons(parsedSeasons.map(s => s.seasonNumber));
+      try {
+        const parsedSeasons: Season[] = JSON.parse(content.seasons);
+        if (parsedSeasons.length > 1) {
+          setShareSeasonModal({ isOpen: true, content, seasons: parsedSeasons });
+          setSelectedShareSeasons(parsedSeasons.map(s => s.seasonNumber));
+          return;
+        }
+      } catch (e) {
+        console.error("Error parsing seasons for share:", e);
+        setAlertConfig({ isOpen: true, title: 'Error', message: 'Failed to parse content data.' });
         return;
       }
     }
@@ -652,35 +658,40 @@ export default function ContentManagement() {
         if (l.url) text += `▪️ ${l.name} (${l.size}${l.unit}): ${l.url}\n`;
       });
     } else if (content.type === 'series' && content.seasons) {
-      const parsedSeasons: Season[] = JSON.parse(content.seasons);
-      parsedSeasons.forEach(season => {
-        text += `\n📺 *Season ${season.seasonNumber}${season.year ? ` (${season.year})` : content.year ? ` (${content.year})` : ''}*\n`;
-        const zipLinks = parseLinks(JSON.stringify(season.zipLinks));
-        const mkvLinks = parseLinks(JSON.stringify(season.mkvLinks || []));
-        
-        if (zipLinks.length > 0) {
-          text += `📦 *Full Season ZIP:*\n`;
-          zipLinks.forEach((link) => {
-            if (link && link.url) text += `  ▪️ ${link.name} (${link.size}${link.unit}): ${link.url}\n`;
-          });
-        }
-        if (mkvLinks.length > 0) {
-          text += `\n🎞️ *Full Season MKV:*\n`;
-          mkvLinks.forEach((link) => {
-            if (link && link.url) text += `  ▪️ ${link.name} (${link.size}${link.unit}): ${link.url}\n`;
-          });
-        }
-        if (season.episodes && season.episodes.length > 0) {
-          text += `\n🎬 *Episodes:*\n`;
-          season.episodes.forEach(ep => {
-            text += `  E${ep.episodeNumber}: ${ep.title}\n`;
-            const epLinks = parseLinks(JSON.stringify(ep.links));
-            epLinks.forEach((link) => {
-              if (link && link.url) text += `    - ${link.name} (${link.size}${link.unit}): ${link.url}\n`;
+      try {
+        const parsedSeasons: Season[] = JSON.parse(content.seasons);
+        parsedSeasons.forEach(season => {
+          text += `\n📺 *Season ${season.seasonNumber}${season.year ? ` (${season.year})` : content.year ? ` (${content.year})` : ''}*\n`;
+          const zipLinks = parseLinks(JSON.stringify(season.zipLinks));
+          const mkvLinks = parseLinks(JSON.stringify(season.mkvLinks || []));
+          
+          if (zipLinks.length > 0) {
+            text += `📦 *Full Season ZIP:*\n`;
+            zipLinks.forEach((link) => {
+              if (link && link.url) text += `  ▪️ ${link.name} (${link.size}${link.unit}): ${link.url}\n`;
             });
-          });
-        }
-      });
+          }
+          if (mkvLinks.length > 0) {
+            text += `\n🎞️ *Full Season MKV:*\n`;
+            mkvLinks.forEach((link) => {
+              if (link && link.url) text += `  ▪️ ${link.name} (${link.size}${link.unit}): ${link.url}\n`;
+            });
+          }
+          if (season.episodes && season.episodes.length > 0) {
+            text += `\n🎬 *Episodes:*\n`;
+            season.episodes.forEach(ep => {
+              text += `  E${ep.episodeNumber}: ${ep.title}\n`;
+              const epLinks = parseLinks(JSON.stringify(ep.links));
+              epLinks.forEach((link) => {
+                if (link && link.url) text += `    - ${link.name} (${link.size}${link.unit}): ${link.url}\n`;
+              });
+            });
+          }
+        });
+      } catch (e) {
+        console.error("Error parsing seasons for copy:", e);
+        text += `\n⚠️ Error parsing season data.\n`;
+      }
     }
 
     try {
@@ -791,9 +802,48 @@ export default function ContentManagement() {
         linkSection = 'movie';
         newType = 'movie';
       }
-      if (trimmed.includes('Full Season ZIP:')) linkSection = 'zip';
-      if (trimmed.includes('Full Season MKV:')) linkSection = 'mkv';
-      if (trimmed.includes('Episodes:')) linkSection = 'episode';
+      if (trimmed.includes('Full Season ZIP:')) {
+        linkSection = 'zip';
+        newType = 'series';
+        if (!currentSeason) {
+          currentSeason = {
+            id: Math.random().toString(36).substr(2, 9),
+            seasonNumber: 1,
+            zipLinks: [],
+            mkvLinks: [],
+            episodes: []
+          };
+          newSeasons.push(currentSeason);
+        }
+      }
+      if (trimmed.includes('Full Season MKV:')) {
+        linkSection = 'mkv';
+        newType = 'series';
+        if (!currentSeason) {
+          currentSeason = {
+            id: Math.random().toString(36).substr(2, 9),
+            seasonNumber: 1,
+            zipLinks: [],
+            mkvLinks: [],
+            episodes: []
+          };
+          newSeasons.push(currentSeason);
+        }
+      }
+      if (trimmed.includes('Episodes:')) {
+        linkSection = 'episode';
+        newType = 'series';
+        if (!currentSeason) {
+          currentSeason = {
+            id: Math.random().toString(36).substr(2, 9),
+            seasonNumber: 1,
+            zipLinks: [],
+            mkvLinks: [],
+            episodes: []
+          };
+          newSeasons.push(currentSeason);
+        }
+      }
 
       // Season Detection: 📺 *Season X (Year)*
       const seasonMatch = trimmed.match(/📺?\s*\*?Season\s*(\d+)/i);
@@ -812,7 +862,17 @@ export default function ContentManagement() {
 
       // Episode Detection: E1: Title or - E1: Title
       const epMatch = trimmed.match(/E(\d+):\s*(.*)/i);
-      if (epMatch && currentSeason) {
+      if (epMatch) {
+        if (!currentSeason) {
+          currentSeason = {
+            id: Math.random().toString(36).substr(2, 9),
+            seasonNumber: 1,
+            zipLinks: [],
+            mkvLinks: [],
+            episodes: []
+          };
+          newSeasons.push(currentSeason);
+        }
         const epNum = parseInt(epMatch[1]);
         currentEpisode = {
           id: Math.random().toString(36).substr(2, 9),
@@ -824,15 +884,57 @@ export default function ContentManagement() {
         linkSection = 'episode';
       }
 
-      // Link Parsing: ▪️ 720p (1.2GB): https://... or - 720p (1.2GB): https://...
-      const linkMatch = trimmed.match(/[▪️-]\s*([^(\s]+)\s*\(([\d.]+)\s*(MB|GB)\):\s*(https?:\/\/[^\s]+)/i);
-      if (linkMatch) {
+      // Link Parsing
+      // Skip metadata lines that might contain URLs to avoid adding them as download links
+      if (trimmed.startsWith('IMDb:') || trimmed.startsWith('Trailer:') || trimmed.startsWith('Sample:') || trimmed.startsWith('Poster:')) {
+        return;
+      }
+
+      const urlMatch = trimmed.match(/(https?:\/\/[^\s]+)/);
+      if (urlMatch && linkSection) {
+        let url = urlMatch[1];
+        
+        // Auto-convert /api/file/ to /u/ and /api/list/ to /l/
+        if (url.includes('/api/file/')) {
+          url = url.replace('/api/file/', '/u/');
+        } else if (url.includes('/api/list/')) {
+          url = url.replace('/api/list/', '/l/');
+        }
+        
+        const sizeMatch = trimmed.match(/([\d.]+)\s*(MB|GB)/i);
+        const size = sizeMatch ? sizeMatch[1] : '';
+        const unit = sizeMatch ? sizeMatch[2].toUpperCase() as 'MB' | 'GB' : 'MB';
+        
+        let name = '';
+        if (sizeMatch) {
+          name = trimmed.substring(0, sizeMatch.index)
+            .replace(/^[▪️\-*•\s]+/, '')
+            .replace(/[\[\]():]/g, '')
+            .replace(/[\-*\s]+$/, '')
+            .trim();
+        } else {
+          name = trimmed.substring(0, urlMatch.index)
+            .replace(/^[▪️\-*•\s]+/, '')
+            .replace(/[\[\]():]/g, '')
+            .replace(/[\-*\s]+$/, '')
+            .trim();
+        }
+        
+        if (!name || name.toLowerCase() === 'download' || name.toLowerCase() === 'link') {
+          let count = 1;
+          if (linkSection === 'movie') count = newMovieLinks.length + 1;
+          else if (linkSection === 'zip' && currentSeason) count = currentSeason.zipLinks.length + 1;
+          else if (linkSection === 'mkv' && currentSeason) count = (currentSeason.mkvLinks?.length || 0) + 1;
+          else if (linkSection === 'episode' && currentEpisode) count = currentEpisode.links.length + 1;
+          name = `Link ${count}`;
+        }
+
         const link: LinkDef = {
           id: Math.random().toString(36).substr(2, 9),
-          name: linkMatch[1].trim(),
-          size: linkMatch[2],
-          unit: linkMatch[3].toUpperCase() as 'MB' | 'GB',
-          url: linkMatch[4]
+          name,
+          size,
+          unit,
+          url
         };
 
         if (linkSection === 'movie') {
@@ -870,8 +972,48 @@ export default function ContentManagement() {
 
   const renderQualityInputs = (
     links: QualityLinks, 
-    onChange: (newLinks: QualityLinks) => void
+    onChange: React.Dispatch<React.SetStateAction<QualityLinks>>
   ) => {
+    const handleUrlBlur = async (url: string, idx: number) => {
+      const match = url.match(/pixeldrain\.(com|dev)\/(u|api\/file)\/([a-zA-Z0-9]+)/);
+      if (match) {
+        const id = match[3];
+        try {
+          const res = await fetch(`https://pixeldrain.com/api/file/${id}/info`);
+          if (res.ok) {
+            const data = await res.json();
+            if (data.size) {
+              let sizeInBytes = data.size;
+              let size = 0;
+              let unit: 'MB' | 'GB' = 'MB';
+              
+              if (sizeInBytes >= 1000 * 1000 * 1000) {
+                size = sizeInBytes / (1000 * 1000 * 1000);
+                unit = 'GB';
+              } else {
+                size = sizeInBytes / (1000 * 1000);
+                unit = 'MB';
+              }
+              
+              onChange(prevLinks => {
+                const newLinks = [...prevLinks];
+                if (newLinks[idx]) {
+                  newLinks[idx] = {
+                    ...newLinks[idx],
+                    size: size.toFixed(2).replace(/\.00$/, ''),
+                    unit: unit
+                  };
+                }
+                return newLinks;
+              });
+            }
+          }
+        } catch (e) {
+          console.error("Failed to fetch PixelDrain info", e);
+        }
+      }
+    };
+
     return (
       <div className="space-y-3">
         {links.map((link, idx) => (
@@ -882,17 +1024,18 @@ export default function ContentManagement() {
                 placeholder="Name (e.g. 1080p, WEB-DL)"
                 value={link.name}
                 onChange={(e) => {
-                  const newLinks = [...links];
-                  newLinks[idx].name = e.target.value;
-                  onChange(newLinks);
+                  onChange(prev => {
+                    const newLinks = [...prev];
+                    newLinks[idx] = { ...newLinks[idx], name: e.target.value };
+                    return newLinks;
+                  });
                 }}
                 className="flex-1 bg-zinc-950 border border-zinc-800 rounded-lg px-4 py-3 text-sm"
               />
               <button
                 type="button"
                 onClick={() => {
-                  const newLinks = links.filter((_, i) => i !== idx);
-                  onChange(newLinks);
+                  onChange(prev => prev.filter((_, i) => i !== idx));
                 }}
                 className="p-2 text-red-500 hover:bg-red-500/10 rounded-lg transition-colors shrink-0"
               >
@@ -905,18 +1048,22 @@ export default function ContentManagement() {
                 placeholder="Size"
                 value={link.size}
                 onChange={(e) => {
-                  const newLinks = [...links];
-                  newLinks[idx].size = e.target.value;
-                  onChange(newLinks);
+                  onChange(prev => {
+                    const newLinks = [...prev];
+                    newLinks[idx] = { ...newLinks[idx], size: e.target.value };
+                    return newLinks;
+                  });
                 }}
                 className="w-24 bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-3 text-sm"
               />
               <select
                 value={link.unit || 'MB'}
                 onChange={(e) => {
-                  const newLinks = [...links];
-                  newLinks[idx].unit = e.target.value as 'MB' | 'GB';
-                  onChange(newLinks);
+                  onChange(prev => {
+                    const newLinks = [...prev];
+                    newLinks[idx] = { ...newLinks[idx], unit: e.target.value as 'MB' | 'GB' };
+                    return newLinks;
+                  });
                 }}
                 className="bg-zinc-950 border border-zinc-800 rounded-lg px-2 py-3 text-sm"
               >
@@ -930,10 +1077,13 @@ export default function ContentManagement() {
                 placeholder="URL"
                 value={link.url}
                 onChange={(e) => {
-                  const newLinks = [...links];
-                  newLinks[idx].url = e.target.value;
-                  onChange(newLinks);
+                  onChange(prev => {
+                    const newLinks = [...prev];
+                    newLinks[idx] = { ...newLinks[idx], url: e.target.value };
+                    return newLinks;
+                  });
                 }}
+                onBlur={(e) => handleUrlBlur(e.target.value, idx)}
                 className="flex-1 bg-zinc-950 border border-zinc-800 rounded-lg px-4 py-3 text-sm"
               />
             </div>
@@ -942,7 +1092,7 @@ export default function ContentManagement() {
         <button
           type="button"
           onClick={() => {
-            onChange([...links, { id: Math.random().toString(36).substr(2, 9), name: '', url: '', size: '', unit: 'MB' }]);
+            onChange(prev => [...prev, { id: Math.random().toString(36).substr(2, 9), name: '', url: '', size: '', unit: 'MB' }]);
           }}
           className="text-emerald-500 hover:text-emerald-400 text-sm font-medium flex items-center gap-1 mt-2"
         >
@@ -1322,7 +1472,9 @@ export default function ContentManagement() {
                   {imdbCardData && (
                     <div className="md:col-span-2 bg-zinc-950 border border-emerald-500/30 rounded-2xl p-4 flex flex-col sm:flex-row gap-4">
                       <div className="w-full sm:w-32 aspect-[2/3] rounded-lg overflow-hidden flex-shrink-0">
-                        <img src={imdbCardData.posterUrl} alt={imdbCardData.title} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                        {imdbCardData.posterUrl && imdbCardData.posterUrl.trim() !== "" && (
+                          <img src={imdbCardData.posterUrl} alt={imdbCardData.title} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                        )}
                       </div>
                       <div className="flex-1 flex flex-col">
                         <div className="flex items-center justify-between gap-2 mb-2">
@@ -1555,19 +1707,25 @@ export default function ContentManagement() {
                           
                           <div className="mb-6">
                             <h5 className="text-sm font-medium text-zinc-400 mb-2">Season ZIP Links</h5>
-                            {renderQualityInputs(season.zipLinks, (newLinks) => {
-                              const newSeasons = [...seasons];
-                              newSeasons[sIdx].zipLinks = newLinks;
-                              setSeasons(newSeasons);
+                            {renderQualityInputs(season.zipLinks, (updater) => {
+                              setSeasons(prev => {
+                                const newSeasons = [...prev];
+                                const currentLinks = newSeasons[sIdx].zipLinks;
+                                newSeasons[sIdx].zipLinks = typeof updater === 'function' ? updater(currentLinks) : updater;
+                                return newSeasons;
+                              });
                             })}
                           </div>
 
                           <div className="mb-6">
                             <h5 className="text-sm font-medium text-zinc-400 mb-2">Season MKV Links</h5>
-                            {renderQualityInputs(season.mkvLinks || [], (newLinks) => {
-                              const newSeasons = [...seasons];
-                              newSeasons[sIdx].mkvLinks = newLinks;
-                              setSeasons(newSeasons);
+                            {renderQualityInputs(season.mkvLinks || [], (updater) => {
+                              setSeasons(prev => {
+                                const newSeasons = [...prev];
+                                const currentLinks = newSeasons[sIdx].mkvLinks || [];
+                                newSeasons[sIdx].mkvLinks = typeof updater === 'function' ? updater(currentLinks) : updater;
+                                return newSeasons;
+                              });
                             })}
                           </div>
 
@@ -1628,10 +1786,13 @@ export default function ContentManagement() {
                                       <Trash2 className="w-4 h-4" />
                                     </button>
                                   </div>
-                                  {renderQualityInputs(ep.links, (newLinks) => {
-                                    const newSeasons = [...seasons];
-                                    newSeasons[sIdx].episodes[eIdx].links = newLinks;
-                                    setSeasons(newSeasons);
+                                  {renderQualityInputs(ep.links, (updater) => {
+                                    setSeasons(prev => {
+                                      const newSeasons = [...prev];
+                                      const currentLinks = newSeasons[sIdx].episodes[eIdx].links;
+                                      newSeasons[sIdx].episodes[eIdx].links = typeof updater === 'function' ? updater(currentLinks) : updater;
+                                      return newSeasons;
+                                    });
                                   })}
                                 </div>
                               ))}
