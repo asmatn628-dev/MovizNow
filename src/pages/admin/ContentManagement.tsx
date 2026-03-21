@@ -3,7 +3,8 @@ import { useSearchParams, Link } from 'react-router-dom';
 import { db } from '../../firebase';
 import { collection, addDoc, deleteDoc, doc, updateDoc, onSnapshot, writeBatch } from 'firebase/firestore';
 import { Content, Genre, Language, Quality, QualityLinks, Season, Episode, LinkDef } from '../../types';
-import { Plus, Edit2, Trash2, Share2, Film, Tv, X, Save, Upload, Search, Eye, EyeOff, ArrowUp, ArrowDown, Copy, ClipboardPaste } from 'lucide-react';
+import { Plus, Edit2, Trash2, Share2, Film, Tv, X, Save, Upload, Search, Eye, EyeOff, ArrowUp, ArrowDown, Copy, ClipboardPaste, GripVertical } from 'lucide-react';
+import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
 import ConfirmModal from '../../components/ConfirmModal';
 import AlertModal from '../../components/AlertModal';
 import { handleFirestoreError, OperationType } from '../../utils/firestoreErrorHandler';
@@ -972,7 +973,8 @@ export default function ContentManagement() {
 
   const renderQualityInputs = (
     links: QualityLinks, 
-    onChange: React.Dispatch<React.SetStateAction<QualityLinks>>
+    onChange: React.Dispatch<React.SetStateAction<QualityLinks>>,
+    droppableId: string
   ) => {
     const handleUrlBlur = async (url: string, idx: number) => {
       const match = url.match(/pixeldrain\.(com|dev)\/(u|api\/file)\/([a-zA-Z0-9]+)/);
@@ -1014,91 +1016,123 @@ export default function ContentManagement() {
       }
     };
 
+    const onDragEnd = (result: DropResult) => {
+      if (!result.destination) return;
+      const items = Array.from(links);
+      const [reorderedItem] = items.splice(result.source.index, 1);
+      items.splice(result.destination.index, 0, reorderedItem);
+      onChange(items);
+    };
+
     return (
-      <div className="space-y-3">
-        {links.map((link, idx) => (
-          <div key={link.id} className="flex flex-col gap-2 bg-zinc-900 p-3 rounded-lg border border-zinc-800">
-            <div className="flex gap-2 items-center">
-              <input
-                type="text"
-                placeholder="Name (e.g. 1080p, WEB-DL)"
-                value={link.name}
-                onChange={(e) => {
-                  onChange(prev => {
-                    const newLinks = [...prev];
-                    newLinks[idx] = { ...newLinks[idx], name: e.target.value };
-                    return newLinks;
-                  });
-                }}
-                className="flex-1 bg-zinc-950 border border-zinc-800 rounded-lg px-4 py-3 text-sm"
-              />
+      <DragDropContext onDragEnd={onDragEnd}>
+        <Droppable droppableId={droppableId}>
+          {(provided) => (
+            <div 
+              {...provided.droppableProps}
+              ref={provided.innerRef}
+              className="space-y-3"
+            >
+              {links.map((link, idx) => (
+                <Draggable key={link.id} draggableId={link.id} index={idx}>
+                  {(provided, snapshot) => (
+                    <div 
+                      ref={provided.innerRef}
+                      {...provided.draggableProps}
+                      className={`flex flex-col gap-3 bg-zinc-900 p-4 rounded-xl border ${snapshot.isDragging ? 'border-emerald-500 shadow-lg shadow-emerald-500/20 z-50' : 'border-zinc-800'} transition-all`}
+                    >
+                      <div className="flex gap-3 items-center">
+                        <input
+                          type="text"
+                          placeholder="Name (e.g. 1080p, WEB-DL)"
+                          value={link.name}
+                          onChange={(e) => {
+                            onChange(prev => {
+                              const newLinks = [...prev];
+                              newLinks[idx] = { ...newLinks[idx], name: e.target.value };
+                              return newLinks;
+                            });
+                          }}
+                          className="flex-1 bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-3.5 text-base focus:outline-none focus:border-emerald-500"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            onChange(prev => prev.filter((_, i) => i !== idx));
+                          }}
+                          className="p-2.5 text-red-500 hover:bg-red-500/10 rounded-xl transition-colors shrink-0"
+                        >
+                          <Trash2 className="w-5 h-5" />
+                        </button>
+                      </div>
+                      <div className="flex gap-3 items-center">
+                        <div className="flex gap-2 items-center shrink-0">
+                          <input
+                            type="number"
+                            placeholder="Size"
+                            value={link.size}
+                            onChange={(e) => {
+                              onChange(prev => {
+                                const newLinks = [...prev];
+                                newLinks[idx] = { ...newLinks[idx], size: e.target.value };
+                                return newLinks;
+                              });
+                            }}
+                            className="w-28 bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-3.5 text-base text-center focus:outline-none focus:border-emerald-500"
+                          />
+                          <select
+                            value={link.unit || 'MB'}
+                            onChange={(e) => {
+                              onChange(prev => {
+                                const newLinks = [...prev];
+                                newLinks[idx] = { ...newLinks[idx], unit: e.target.value as 'MB' | 'GB' };
+                                return newLinks;
+                              });
+                            }}
+                            className="bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-3.5 text-base focus:outline-none focus:border-emerald-500"
+                          >
+                            <option value="MB">MB</option>
+                            <option value="GB">GB</option>
+                          </select>
+                        </div>
+                        <div {...provided.dragHandleProps} className="text-zinc-600 hover:text-zinc-400 cursor-grab active:cursor-grabbing p-2 hover:bg-zinc-800 rounded-lg transition-colors ml-auto">
+                          <GripVertical className="w-5 h-5" />
+                        </div>
+                      </div>
+                      <div className="flex gap-3 items-center">
+                        <input
+                          type="text"
+                          placeholder="URL"
+                          value={link.url}
+                          onChange={(e) => {
+                            onChange(prev => {
+                              const newLinks = [...prev];
+                              newLinks[idx] = { ...newLinks[idx], url: e.target.value };
+                              return newLinks;
+                            });
+                          }}
+                          onBlur={(e) => handleUrlBlur(e.target.value, idx)}
+                          className="flex-1 bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-3.5 text-base focus:outline-none focus:border-emerald-500"
+                        />
+                      </div>
+                    </div>
+                  )}
+                </Draggable>
+              ))}
+              {provided.placeholder}
               <button
                 type="button"
                 onClick={() => {
-                  onChange(prev => prev.filter((_, i) => i !== idx));
+                  onChange(prev => [...prev, { id: Math.random().toString(36).substr(2, 9), name: '', url: '', size: '', unit: 'MB' }]);
                 }}
-                className="p-2 text-red-500 hover:bg-red-500/10 rounded-lg transition-colors shrink-0"
+                className="w-full py-4 border-2 border-dashed border-zinc-800 rounded-xl text-zinc-500 hover:text-emerald-500 hover:border-emerald-500/50 hover:bg-emerald-500/5 transition-all flex items-center justify-center gap-2 font-medium"
               >
-                <Trash2 className="w-5 h-5" />
+                <Plus className="w-5 h-5" /> Add New Link
               </button>
             </div>
-            <div className="flex gap-2 items-center">
-              <input
-                type="number"
-                placeholder="Size"
-                value={link.size}
-                onChange={(e) => {
-                  onChange(prev => {
-                    const newLinks = [...prev];
-                    newLinks[idx] = { ...newLinks[idx], size: e.target.value };
-                    return newLinks;
-                  });
-                }}
-                className="w-24 bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-3 text-sm"
-              />
-              <select
-                value={link.unit || 'MB'}
-                onChange={(e) => {
-                  onChange(prev => {
-                    const newLinks = [...prev];
-                    newLinks[idx] = { ...newLinks[idx], unit: e.target.value as 'MB' | 'GB' };
-                    return newLinks;
-                  });
-                }}
-                className="bg-zinc-950 border border-zinc-800 rounded-lg px-2 py-3 text-sm"
-              >
-                <option value="MB">MB</option>
-                <option value="GB">GB</option>
-              </select>
-            </div>
-            <div className="flex gap-2 items-center">
-              <input
-                type="text"
-                placeholder="URL"
-                value={link.url}
-                onChange={(e) => {
-                  onChange(prev => {
-                    const newLinks = [...prev];
-                    newLinks[idx] = { ...newLinks[idx], url: e.target.value };
-                    return newLinks;
-                  });
-                }}
-                onBlur={(e) => handleUrlBlur(e.target.value, idx)}
-                className="flex-1 bg-zinc-950 border border-zinc-800 rounded-lg px-4 py-3 text-sm"
-              />
-            </div>
-          </div>
-        ))}
-        <button
-          type="button"
-          onClick={() => {
-            onChange(prev => [...prev, { id: Math.random().toString(36).substr(2, 9), name: '', url: '', size: '', unit: 'MB' }]);
-          }}
-          className="text-emerald-500 hover:text-emerald-400 text-sm font-medium flex items-center gap-1 mt-2"
-        >
-          <Plus className="w-4 h-4" /> Add Link
-        </button>
-      </div>
+          )}
+        </Droppable>
+      </DragDropContext>
     );
   };
 
@@ -1638,7 +1672,7 @@ export default function ContentManagement() {
                 {type === 'movie' ? (
                   <div>
                     <h3 className="text-lg font-bold mb-4">Movie Links</h3>
-                    {renderQualityInputs(movieLinks, setMovieLinks)}
+                    {renderQualityInputs(movieLinks, setMovieLinks, 'movie-links')}
                   </div>
                 ) : (
                   <div>
@@ -1714,7 +1748,7 @@ export default function ContentManagement() {
                                 newSeasons[sIdx].zipLinks = typeof updater === 'function' ? updater(currentLinks) : updater;
                                 return newSeasons;
                               });
-                            })}
+                            }, `season-zip-${sIdx}`)}
                           </div>
 
                           <div className="mb-6">
@@ -1726,7 +1760,7 @@ export default function ContentManagement() {
                                 newSeasons[sIdx].mkvLinks = typeof updater === 'function' ? updater(currentLinks) : updater;
                                 return newSeasons;
                               });
-                            })}
+                            }, `season-mkv-${sIdx}`)}
                           </div>
 
                           <div>
@@ -1786,14 +1820,17 @@ export default function ContentManagement() {
                                       <Trash2 className="w-4 h-4" />
                                     </button>
                                   </div>
-                                  {renderQualityInputs(ep.links, (updater) => {
-                                    setSeasons(prev => {
-                                      const newSeasons = [...prev];
-                                      const currentLinks = newSeasons[sIdx].episodes[eIdx].links;
-                                      newSeasons[sIdx].episodes[eIdx].links = typeof updater === 'function' ? updater(currentLinks) : updater;
-                                      return newSeasons;
-                                    });
-                                  })}
+                                  <div className="mb-4">
+                                    <h6 className="text-xs font-medium text-zinc-500 mb-2 uppercase tracking-wider">Episode Links</h6>
+                                    {renderQualityInputs(ep.links, (updater) => {
+                                      setSeasons(prev => {
+                                        const newSeasons = [...prev];
+                                        const currentLinks = newSeasons[sIdx].episodes[eIdx].links;
+                                        newSeasons[sIdx].episodes[eIdx].links = typeof updater === 'function' ? updater(currentLinks) : updater;
+                                        return newSeasons;
+                                      });
+                                    }, `episode-links-${sIdx}-${eIdx}`)}
+                                  </div>
                                 </div>
                               ))}
                             </div>
