@@ -11,6 +11,8 @@ import { format } from 'date-fns';
 import ConfirmModal from '../../components/ConfirmModal';
 import { formatContentTitle } from '../../utils/contentUtils';
 
+import { NotificationMenu } from '../../components/NotificationMenu';
+
 export default function Home() {
   const { profile, logout } = useAuth();
   const [contentList, setContentList] = useState<Content[]>([]);
@@ -133,6 +135,7 @@ export default function Home() {
       case 'data_editor': return 'bg-blue-500/20 text-blue-400 border-blue-500/30';
       case 'selected_content': return 'bg-amber-500/20 text-amber-400 border-amber-500/30';
       case 'temporary': return 'bg-orange-500/20 text-orange-400 border-orange-500/30';
+      case 'trial': return 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30';
       default: return 'bg-zinc-500/20 text-zinc-400 border-zinc-500/30';
     }
   };
@@ -177,8 +180,8 @@ export default function Home() {
     result.sort((a, b) => {
       // For temporary and selected_content users, prioritize assigned content
       if (profile?.role === 'temporary' || profile?.role === 'selected_content') {
-        const aAssigned = profile.assignedContent?.includes(a.id) ? 1 : 0;
-        const bAssigned = profile.assignedContent?.includes(b.id) ? 1 : 0;
+        const aAssigned = profile.assignedContent?.some(id => id === a.id || id.startsWith(`${a.id}:`)) ? 1 : 0;
+        const bAssigned = profile.assignedContent?.some(id => id === b.id || id.startsWith(`${b.id}:`)) ? 1 : 0;
         if (aAssigned !== bAssigned) return bAssigned - aAssigned;
       }
 
@@ -276,6 +279,7 @@ export default function Home() {
             <Link to="/favorites" className="text-zinc-400 hover:text-white transition-colors" title="Favorites">
               <Heart className="w-5 h-5" />
             </Link>
+            {profile && <NotificationMenu profile={profile} />}
             {(profile?.role === 'admin' || profile?.role === 'data_editor') && (
               <Link to="/admin" className="text-sm font-medium text-emerald-500 hover:text-emerald-400">
                 Admin Panel
@@ -352,7 +356,15 @@ export default function Home() {
             </a>
           </div>
         )}
-        {profile?.status === 'expired' && (
+        {profile?.status === 'expired' && profile?.role === 'trial' && (
+          <div className="bg-red-500/10 border border-red-500/20 text-red-500 p-4 rounded-2xl mb-8 flex items-center justify-between">
+            <p>Your Free Trial is Expired. Contact admin and get your membership to enjoy watching.</p>
+            <a href="https://wa.me/923363284466" target="_blank" rel="noreferrer" className="flex items-center gap-2 bg-red-500/20 px-4 py-2 rounded-xl font-medium hover:bg-red-500/30 transition-colors">
+              <MessageCircle className="w-4 h-4" /> Contact Now
+            </a>
+          </div>
+        )}
+        {profile?.status === 'expired' && profile?.role !== 'trial' && (
           <div className="bg-red-500/10 border border-red-500/20 text-red-500 p-4 rounded-2xl mb-8 flex items-center justify-between">
             <p>Your membership has expired. Please renew to continue watching.</p>
             <a href="https://wa.me/923363284466" target="_blank" rel="noreferrer" className="flex items-center gap-2 bg-red-500/20 px-4 py-2 rounded-xl font-medium hover:bg-red-500/30 transition-colors">
@@ -370,7 +382,7 @@ export default function Home() {
             </h2>
             <div className="flex gap-4 overflow-x-auto pb-4 snap-x">
               {recentlyAddedContent.map((content) => {
-                const isAssigned = (profile?.role === 'temporary' || profile?.role === 'selected_content') && profile?.assignedContent?.includes(content.id);
+                const isAssigned = (profile?.role === 'temporary' || profile?.role === 'selected_content') && profile?.assignedContent?.some(id => id === content.id || id.startsWith(`${content.id}:`));
                 const isLocked = profile?.status !== 'active' || ((profile?.role === 'temporary' || profile?.role === 'selected_content') && !isAssigned);
                 
                 const contentQuality = qualities.find(q => q.id === content.qualityId)?.name;
@@ -381,13 +393,13 @@ export default function Home() {
                   <Link
                     key={`recent-${content.id}`}
                     to={`/movie/${content.id}`}
-                    className={`snap-start shrink-0 w-28 sm:w-36 group relative flex flex-col bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden transition-transform hover:scale-105 hover:border-emerald-500/50 ${isLocked ? 'opacity-50' : ''}`}
+                    className={`snap-start shrink-0 w-28 sm:w-36 group relative flex flex-col bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden transition-transform hover:scale-105 hover:border-emerald-500/50`}
                   >
                     <div className="relative aspect-[2/3] w-full">
                       <img src={content.posterUrl || 'https://picsum.photos/seed/movie/400/600'} alt={content.title} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
                       <div className="absolute inset-0 bg-gradient-to-t from-zinc-900 via-zinc-900/20 to-transparent opacity-60 group-hover:opacity-80 transition-opacity" />
                       
-                      <div className="absolute top-2 right-2 flex flex-col gap-1 items-end">
+                      <div className="absolute top-2 right-2 flex flex-col gap-1 items-end z-10">
                         <div className="bg-black/80 backdrop-blur-md px-1.5 py-0.5 rounded text-[8px] font-bold uppercase tracking-wider">
                           {content.type}
                         </div>
@@ -399,8 +411,8 @@ export default function Home() {
                       </div>
 
                       {isLocked && (
-                        <div className="absolute inset-0 flex items-center justify-center bg-zinc-900/80 backdrop-blur-sm">
-                          <Lock className="w-6 h-6 text-zinc-500" />
+                        <div className="absolute inset-0 flex items-center justify-center z-20 pointer-events-none">
+                          <Lock className="w-8 h-8 text-red-500 drop-shadow-[0_0_8px_rgba(0,0,0,0.8)]" />
                         </div>
                       )}
                     </div>
@@ -515,7 +527,7 @@ export default function Home() {
           <>
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4 md:gap-6">
               {paginatedContent.map((content) => {
-                const isAssigned = (profile?.role === 'temporary' || profile?.role === 'selected_content') && profile.assignedContent?.includes(content.id);
+                const isAssigned = (profile?.role === 'temporary' || profile?.role === 'selected_content') && profile.assignedContent?.some(id => id === content.id || id.startsWith(`${content.id}:`));
                 const isLocked = profile?.status !== 'active' || ((profile?.role === 'temporary' || profile?.role === 'selected_content') && !isAssigned);
                 
                 const contentQuality = qualities.find(q => q.id === content.qualityId)?.name;
@@ -526,7 +538,7 @@ export default function Home() {
                   <Link
                     key={content.id}
                     to={`/movie/${content.id}`}
-                    className={`group relative flex flex-col bg-zinc-900 border border-zinc-800 rounded-2xl overflow-hidden transition-transform hover:scale-105 hover:border-emerald-500/50 ${isLocked ? 'opacity-50' : ''}`}
+                    className={`group relative flex flex-col bg-zinc-900 border border-zinc-800 rounded-2xl overflow-hidden transition-transform hover:scale-105 hover:border-emerald-500/50`}
                   >
                     <div className="relative aspect-[2/3] w-full">
                       <img
@@ -540,7 +552,7 @@ export default function Home() {
                         {content.type}
                       </div>
                       {isLocked && (
-                        <div className="absolute top-2 left-2 bg-red-500/90 backdrop-blur-md px-2 py-1 rounded text-xs font-bold uppercase tracking-wider flex items-center gap-1 shadow-lg text-white">
+                        <div className="absolute top-2 left-2 bg-red-500/90 backdrop-blur-md px-2 py-1 rounded text-xs font-bold uppercase tracking-wider flex items-center gap-1 shadow-lg text-white z-20">
                           <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
                           Locked
                         </div>

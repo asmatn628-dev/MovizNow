@@ -3,6 +3,7 @@ import { Suspense, lazy } from 'react';
 import { AuthProvider } from './contexts/AuthContext';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import { Loader2 } from 'lucide-react';
+import { SystemNotificationWrapper } from './components/SystemNotificationWrapper';
 
 // Pages
 const Login = lazy(() => import('./pages/Login'));
@@ -23,6 +24,7 @@ const TemporaryUsers = lazy(() => import('./pages/admin/TemporaryUsers'));
 const SelectedContentUsers = lazy(() => import('./pages/admin/SelectedContentUsers'));
 const IncomeManagement = lazy(() => import('./pages/admin/IncomeManagement'));
 const ErrorLinks = lazy(() => import('./pages/admin/ErrorLinks'));
+const Notifications = lazy(() => import('./pages/admin/Notifications'));
 
 const LoadingFallback = () => (
   <div className="min-h-screen bg-zinc-950 flex items-center justify-center">
@@ -33,6 +35,7 @@ const LoadingFallback = () => (
 export default function App() {
   return (
     <AuthProvider>
+      <SystemNotificationWrapper />
       <BrowserRouter>
         <Suspense fallback={<LoadingFallback />}>
           <Routes>
@@ -57,6 +60,7 @@ export default function App() {
               <Route path="selected-content" element={<SelectedContentUsers />} />
               <Route path="income" element={<IncomeManagement />} />
               <Route path="error-links" element={<ErrorLinks />} />
+              <Route path="notifications" element={<Notifications />} />
             </Route>
           </Routes>
         </Suspense>

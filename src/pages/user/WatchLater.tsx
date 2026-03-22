@@ -7,6 +7,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { Film, Clock, ArrowLeft } from 'lucide-react';
 import { handleFirestoreError, OperationType } from '../../utils/firestoreErrorHandler';
 import { formatContentTitle } from '../../utils/contentUtils';
+import { NotificationMenu } from '../../components/NotificationMenu';
 
 export default function WatchLater() {
   const { profile } = useAuth();
@@ -64,21 +65,24 @@ export default function WatchLater() {
   return (
     <div className="min-h-screen bg-zinc-950 text-white flex flex-col">
       <header className="sticky top-0 z-40 bg-zinc-950/80 backdrop-blur-xl border-b border-zinc-800">
-        <div className="max-w-7xl mx-auto px-4 h-16 flex items-center gap-4">
-          <Link to="/" className="text-zinc-400 hover:text-white transition-colors">
-            <ArrowLeft className="w-5 h-5" />
-          </Link>
-          <h1 className="text-xl font-bold flex items-center gap-2">
-            <Clock className="w-5 h-5 text-emerald-500" />
-            Watch Later
-          </h1>
+        <div className="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <Link to="/" className="text-zinc-400 hover:text-white transition-colors">
+              <ArrowLeft className="w-5 h-5" />
+            </Link>
+            <h1 className="text-xl font-bold flex items-center gap-2">
+              <Clock className="w-5 h-5 text-emerald-500" />
+              Watch Later
+            </h1>
+          </div>
+          {profile && <NotificationMenu profile={profile} />}
         </div>
       </header>
 
       <main className="flex-1 max-w-7xl mx-auto w-full px-4 py-8">
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4 md:gap-6">
           {watchLaterContent.map((content) => {
-            const isAssigned = (profile?.role === 'temporary' || profile?.role === 'selected_content') && profile.assignedContent?.includes(content.id);
+            const isAssigned = (profile?.role === 'temporary' || profile?.role === 'selected_content') && profile.assignedContent?.some(id => id === content.id || id.startsWith(`${content.id}:`));
             const isLocked = profile?.status !== 'active' || ((profile?.role === 'temporary' || profile?.role === 'selected_content') && !isAssigned);
             
             const contentQuality = qualities.find(q => q.id === content.qualityId)?.name;
@@ -89,20 +93,8 @@ export default function WatchLater() {
               <Link
                 key={content.id}
                 to={`/movie/${content.id}`}
-                className={`group relative flex flex-col bg-zinc-900 border border-zinc-800 rounded-2xl overflow-hidden transition-transform hover:scale-105 hover:border-emerald-500/50 ${isLocked ? 'opacity-50' : ''}`}
+                className={`group relative flex flex-col bg-zinc-900 border border-zinc-800 rounded-2xl overflow-hidden transition-transform hover:scale-105 hover:border-emerald-500/50`}
               >
-                {isLocked && (
-                  <div className="absolute inset-0 bg-black/80 z-20 flex items-center justify-center backdrop-blur-sm">
-                    <div className="text-center p-4">
-                      <div className="bg-red-500/20 p-3 rounded-full inline-block mb-2">
-                        <svg className="w-6 h-6 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-                        </svg>
-                      </div>
-                      <p className="text-white font-bold text-sm">Locked</p>
-                    </div>
-                  </div>
-                )}
                 <div className="relative aspect-[2/3] w-full">
                   <img
                     src={content.posterUrl || 'https://picsum.photos/seed/movie/400/600'}
@@ -114,6 +106,12 @@ export default function WatchLater() {
                   <div className={`absolute top-2 right-2 backdrop-blur-md px-2 py-1 rounded text-xs font-bold uppercase tracking-wider text-white ${content.type === 'movie' ? 'bg-blue-500/80' : 'bg-purple-500/80'}`}>
                     {content.type}
                   </div>
+                  {isLocked && (
+                    <div className="absolute top-2 left-2 bg-red-500/90 backdrop-blur-md px-2 py-1 rounded text-xs font-bold uppercase tracking-wider flex items-center gap-1 shadow-lg text-white z-20">
+                      <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
+                      Locked
+                    </div>
+                  )}
                 </div>
                 <div className="p-4 flex flex-col flex-1">
                   <h3 className="font-bold text-base md:text-lg leading-tight mb-2">{formatContentTitle(content)}</h3>

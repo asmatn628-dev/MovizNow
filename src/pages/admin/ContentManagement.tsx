@@ -3,7 +3,7 @@ import { useSearchParams, Link } from 'react-router-dom';
 import { db } from '../../firebase';
 import { collection, addDoc, deleteDoc, doc, updateDoc, onSnapshot, writeBatch } from 'firebase/firestore';
 import { Content, Genre, Language, Quality, QualityLinks, Season, Episode, LinkDef } from '../../types';
-import { Plus, Edit2, Trash2, Share2, Film, Tv, X, Save, Upload, Search, Eye, EyeOff, ArrowUp, ArrowDown, Copy, ClipboardPaste, GripVertical } from 'lucide-react';
+import { Plus, Edit2, Trash2, Share2, Film, Tv, X, Save, Upload, Search, Eye, EyeOff, ArrowUp, ArrowDown, Copy, ClipboardPaste, GripVertical, Bell } from 'lucide-react';
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
 import ConfirmModal from '../../components/ConfirmModal';
 import AlertModal from '../../components/AlertModal';
@@ -72,6 +72,7 @@ export default function ContentManagement() {
   const [imdbSeasonsPopup, setImdbSeasonsPopup] = useState<{ isOpen: boolean; seasons: any[]; show: any; epData: any[] } | null>(null);
   const [selectedImdbSeasons, setSelectedImdbSeasons] = useState<number[]>([]);
   const [shareSeasonModal, setShareSeasonModal] = useState<{ isOpen: boolean; content: Content | null; seasons: Season[] }>({ isOpen: false, content: null, seasons: [] });
+  const [notificationModal, setNotificationModal] = useState<{ isOpen: boolean; content: Content | null; status: 'idle' | 'sending' | 'success' | 'error' }>({ isOpen: false, content: null, status: 'idle' });
   const [selectedShareSeasons, setSelectedShareSeasons] = useState<number[]>([]);
 
   useEffect(() => {
@@ -505,6 +506,38 @@ export default function ContentManagement() {
       console.error('Error deleting content:', error);
       setAlertConfig({ isOpen: true, title: 'Error', message: 'Failed to delete content' });
     });
+  };
+
+  const handleSendNotification = async () => {
+    if (!notificationModal.content) return;
+    
+    setNotificationModal(prev => ({ ...prev, status: 'sending' }));
+    
+    try {
+      const content = notificationModal.content;
+      const notification = {
+        title: `🎬 New ${content.type === 'movie' ? 'Movie' : 'Series'} Added: ${content.title}`,
+        body: content.description.substring(0, 100) + (content.description.length > 100 ? '...' : ''),
+        contentId: content.id,
+        posterUrl: content.posterUrl,
+        type: content.type,
+        createdAt: new Date().toISOString(),
+        createdBy: 'admin' // In a real app, this would be the admin's UID
+      };
+
+      await addDoc(collection(db, 'notifications'), notification);
+      
+      setNotificationModal(prev => ({ ...prev, status: 'success' }));
+      
+      // Close modal after 2 seconds on success
+      setTimeout(() => {
+        setNotificationModal({ isOpen: false, content: null, status: 'idle' });
+      }, 2000);
+      
+    } catch (error) {
+      console.error('Error sending notification:', error);
+      setNotificationModal(prev => ({ ...prev, status: 'error' }));
+    }
   };
 
   const getSizeInMB = (sizeStr: string, unit: string) => {
@@ -1369,12 +1402,17 @@ export default function ContentManagement() {
                 <p className="text-zinc-400 text-xs mb-2">{content.year}</p>
                 
                 <div className="mt-auto flex items-center justify-between pt-2 border-t border-zinc-800/50">
-                  <button onClick={() => handleShare(content)} className="text-emerald-500 hover:text-emerald-400 p-1.5 transition-colors" title="Share to WhatsApp">
-                    <Share2 className="w-4 h-4 md:w-5 md:h-5" />
-                  </button>
-                  <button onClick={() => handleCopyData(content)} className="text-zinc-400 hover:text-white p-1.5 transition-colors" title="Copy Data">
-                    <Copy className="w-4 h-4 md:w-5 md:h-5" />
-                  </button>
+                  <div className="flex gap-1">
+                    <button onClick={() => handleShare(content)} className="text-emerald-500 hover:text-emerald-400 p-1.5 transition-colors" title="Share to WhatsApp">
+                      <Share2 className="w-4 h-4 md:w-5 md:h-5" />
+                    </button>
+                    <button onClick={() => setNotificationModal({ isOpen: true, content, status: 'idle' })} className="text-blue-500 hover:text-blue-400 p-1.5 transition-colors" title="Send Notification">
+                      <Bell className="w-4 h-4 md:w-5 md:h-5" />
+                    </button>
+                    <button onClick={() => handleCopyData(content)} className="text-zinc-400 hover:text-white p-1.5 transition-colors" title="Copy Data">
+                      <Copy className="w-4 h-4 md:w-5 md:h-5" />
+                    </button>
+                  </div>
                   <div className="flex gap-1">
                     <button onClick={() => handleEdit(content)} className="text-zinc-400 hover:text-white p-1.5 transition-colors">
                       <Edit2 className="w-4 h-4 md:w-5 md:h-5" />
@@ -2067,6 +2105,92 @@ export default function ContentManagement() {
                 <Share2 className="w-4 h-4" /> Share ({selectedShareSeasons.length})
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Notification Modal */}
+      {notificationModal.isOpen && notificationModal.content && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 z-[60]">
+          <div className="bg-zinc-900 rounded-2xl p-6 max-w-md w-full border border-zinc-800 shadow-2xl">
+            <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
+              <Bell className="w-6 h-6 text-blue-500" />
+              Send Notification
+            </h2>
+            
+            <div className="bg-zinc-950 p-4 rounded-xl border border-zinc-800 mb-6 flex gap-4">
+              {notificationModal.content.posterUrl && (
+                <img 
+                  src={notificationModal.content.posterUrl} 
+                  alt="Poster" 
+                  className="w-16 h-24 object-cover rounded-md shrink-0"
+                  referrerPolicy="no-referrer"
+                />
+              )}
+              <div>
+                <h3 className="font-bold text-white mb-1">🎬 New {notificationModal.content.type === 'movie' ? 'Movie' : 'Series'} Added</h3>
+                <p className="text-sm text-zinc-400 line-clamp-2">{notificationModal.content.title}</p>
+              </div>
+            </div>
+
+            {notificationModal.status === 'idle' && (
+              <p className="text-zinc-400 mb-6">
+                This will send a push notification to all users about this new content. Do you want to proceed?
+              </p>
+            )}
+
+            {notificationModal.status === 'sending' && (
+              <div className="flex flex-col items-center justify-center py-6">
+                <div className="animate-spin rounded-full h-10 w-10 border-t-2 border-b-2 border-blue-500 mb-4"></div>
+                <p className="text-blue-500 font-medium">Sending notification...</p>
+              </div>
+            )}
+
+            {notificationModal.status === 'success' && (
+              <div className="flex flex-col items-center justify-center py-6">
+                <div className="w-12 h-12 bg-emerald-500/20 rounded-full flex items-center justify-center mb-4">
+                  <svg className="w-6 h-6 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7"></path></svg>
+                </div>
+                <p className="text-emerald-500 font-medium">Notification successfully pushed!</p>
+              </div>
+            )}
+
+            {notificationModal.status === 'error' && (
+              <div className="flex flex-col items-center justify-center py-6">
+                <div className="w-12 h-12 bg-red-500/20 rounded-full flex items-center justify-center mb-4">
+                  <X className="w-6 h-6 text-red-500" />
+                </div>
+                <p className="text-red-500 font-medium">Error sending notification.</p>
+              </div>
+            )}
+
+            {notificationModal.status === 'idle' && (
+              <div className="flex justify-end gap-3">
+                <button
+                  onClick={() => setNotificationModal({ isOpen: false, content: null, status: 'idle' })}
+                  className="px-6 py-2 rounded-xl font-medium hover:bg-zinc-800 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleSendNotification}
+                  className="bg-blue-500 hover:bg-blue-600 text-white px-6 py-2 rounded-xl font-bold transition-colors flex items-center gap-2"
+                >
+                  <Bell className="w-4 h-4" /> Send Now
+                </button>
+              </div>
+            )}
+            
+            {notificationModal.status === 'error' && (
+              <div className="flex justify-end gap-3 mt-4">
+                <button
+                  onClick={() => setNotificationModal({ isOpen: false, content: null, status: 'idle' })}
+                  className="bg-zinc-800 hover:bg-zinc-700 text-white px-6 py-2 rounded-xl font-bold transition-colors"
+                >
+                  Close
+                </button>
+              </div>
+            )}
           </div>
         </div>
       )}

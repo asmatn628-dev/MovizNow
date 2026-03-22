@@ -4,13 +4,15 @@ import { db } from '../../firebase';
 import { doc, onSnapshot, updateDoc, arrayUnion, arrayRemove, collection, deleteDoc } from 'firebase/firestore';
 import { Content, Genre, Language, QualityLinks, Season, Quality } from '../../types';
 import { useAuth } from '../../contexts/AuthContext';
-import { Film, ArrowLeft, Play, Clock, Heart, MessageCircle, AlertCircle, Download, Share2, Chrome, Copy, Youtube, X, Edit2, Trash2, Settings } from 'lucide-react';
+import { Film, ArrowLeft, Play, Clock, Heart, MessageCircle, AlertCircle, Download, Share2, Chrome, Copy, Youtube, X, Edit2, Trash2, Settings, Lock } from 'lucide-react';
 import { logEvent } from '../../services/analytics';
 import { handleFirestoreError, OperationType } from '../../utils/firestoreErrorHandler';
 import AlertModal from '../../components/AlertModal';
 import ConfirmModal from '../../components/ConfirmModal';
 import { motion, AnimatePresence } from 'motion/react';
 import { formatContentTitle } from '../../utils/contentUtils';
+
+import { NotificationMenu } from '../../components/NotificationMenu';
 
 export default function MovieDetails() {
   const { id } = useParams<{ id: string }>();
@@ -271,9 +273,17 @@ export default function MovieDetails() {
 
   const handlePlayClick = (url: string, linkName?: string, linkId?: string, isZip?: boolean) => {
     if (!canPlay) {
-      if (isPending) setAlertConfig({ isOpen: true, title: 'Account Pending', message: 'Your account is pending admin approval. Please contact admin to activate your account.' });
-      else if (isExpired) setAlertConfig({ isOpen: true, title: 'Membership Expired', message: 'Your membership has expired. Please renew to continue watching.' });
-      else if ((isTemp || isSelectedContent) && !isAssigned) setAlertConfig({ isOpen: true, title: 'Access Denied', message: 'You do not have permission to watch this content.' });
+      if (isPending) {
+        setAlertConfig({ isOpen: true, title: 'Account Pending', message: 'Your account is pending admin approval. Please contact admin to activate your account.' });
+      } else if (isExpired) {
+        if (profile?.role === 'trial') {
+          setAlertConfig({ isOpen: true, title: 'Trial Expired', message: 'Your free Trial has expired. Please get Membership to continue watching.' });
+        } else {
+          setAlertConfig({ isOpen: true, title: 'Membership Expired', message: 'Your membership has expired. Please renew to continue watching.' });
+        }
+      } else {
+        setAlertConfig({ isOpen: true, title: 'Content Locked', message: 'This content is locked. Please contact admin to get access to this movie/series.' });
+      }
       return;
     }
     
@@ -557,13 +567,16 @@ export default function MovieDetails() {
           <div className="absolute inset-0 bg-gradient-to-t from-zinc-950 via-zinc-950/60 to-transparent" />
         </div>
         
-        <div className="absolute top-0 left-0 w-full p-4 z-[100] pointer-events-none">
+        <div className="absolute top-0 left-0 w-full p-4 z-[100] pointer-events-none flex justify-between items-center">
           <button 
             onClick={() => navigate('/')} 
             className="inline-flex items-center gap-2 text-zinc-300 hover:text-white bg-black/40 backdrop-blur-md px-4 py-2 rounded-full transition-colors pointer-events-auto cursor-pointer"
           >
             <ArrowLeft className="w-5 h-5" /> Back
           </button>
+          <div className="pointer-events-auto">
+            {profile && <NotificationMenu profile={profile} />}
+          </div>
         </div>
 
         <div className="absolute inset-0 flex items-center justify-center p-8 z-10 pt-20">
@@ -680,7 +693,7 @@ export default function MovieDetails() {
               <h3 className="font-bold text-lg mb-1">Access Restricted</h3>
               <p className="text-red-400 mb-4">
                 {isPending ? 'Your account is pending admin approval.' : 
-                 isExpired ? 'Your membership has expired.' : 
+                 isExpired ? (profile?.role === 'trial' ? 'Your free Trial has expired. Please get Membership to continue watching.' : 'Your membership has expired.') : 
                  'You do not have permission to access links for this content.'}
               </p>
               <a href="https://wa.me/923363284466" target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 bg-red-500/20 px-4 py-2 rounded-xl font-medium hover:bg-red-500/30 transition-colors">
@@ -777,56 +790,80 @@ export default function MovieDetails() {
                 <div className="space-y-6">
                   {(() => {
                     try {
-                      return JSON.parse(content.seasons)
-                        .filter((season: Season) => hasFullAccess || allowedSeasons.includes(season.id))
-                        .map((season: Season) => (
-                        <div key={season.id} className="bg-zinc-900 border border-zinc-800 rounded-2xl overflow-hidden">
-                          <div className="bg-zinc-950/50 p-6 border-b border-zinc-800">
+                      const allSeasons = JSON.parse(content.seasons);
+                      const sortedSeasons = [...allSeasons].sort((a: Season, b: Season) => {
+                        const aAccess = hasFullAccess || allowedSeasons.includes(a.id);
+                        const bAccess = hasFullAccess || allowedSeasons.includes(b.id);
+                        if (aAccess && !bAccess) return -1;
+                        if (!aAccess && bAccess) return 1;
+                        return a.seasonNumber - b.seasonNumber;
+                      });
+
+                      return sortedSeasons.map((season: Season) => {
+                        const isAccessible = hasFullAccess || allowedSeasons.includes(season.id);
+                        
+                        return (
+                        <div key={season.id} className={`bg-zinc-900 border border-zinc-800 rounded-2xl overflow-hidden ${!isAccessible ? 'opacity-75' : ''}`}>
+                          <div className="bg-zinc-950/50 p-6 border-b border-zinc-800 flex justify-between items-center">
                             <h3 className="text-xl font-bold">Season {season.seasonNumber}</h3>
+                            {!isAccessible && (
+                              <span className="bg-red-500/10 text-red-500 px-3 py-1 rounded-full text-sm font-bold flex items-center gap-2">
+                                <Lock className="w-4 h-4" /> Restricted
+                              </span>
+                            )}
                           </div>
                           
                           <div className="p-6 space-y-8">
-                            {(() => {
-                              const zipLinks = season.zipLinks || [];
-                              const mkvLinks = season.mkvLinks || [];
-                              
-                              return (
-                                <>
-                                  {zipLinks.length > 0 && (
-                                    <div>
-                                      <h4 className="font-semibold text-zinc-400 mb-3 text-sm uppercase tracking-wider">Full Season Zip</h4>
-                                      {renderLinks(zipLinks, true)}
-                                    </div>
-                                  )}
-                                  {mkvLinks.length > 0 && (
-                                    <div>
-                                      <h4 className="font-semibold text-zinc-400 mb-3 text-sm uppercase tracking-wider">Full Season MKV</h4>
-                                      {renderLinks(mkvLinks)}
-                                    </div>
-                                  )}
-                                </>
-                              );
-                            })()}
+                            {isAccessible ? (
+                              <>
+                                {(() => {
+                                  const zipLinks = season.zipLinks || [];
+                                  const mkvLinks = season.mkvLinks || [];
+                                  
+                                  return (
+                                    <>
+                                      {zipLinks.length > 0 && (
+                                        <div>
+                                          <h4 className="font-semibold text-zinc-400 mb-3 text-sm uppercase tracking-wider">Full Season Zip</h4>
+                                          {renderLinks(zipLinks, true)}
+                                        </div>
+                                      )}
+                                      {mkvLinks.length > 0 && (
+                                        <div>
+                                          <h4 className="font-semibold text-zinc-400 mb-3 text-sm uppercase tracking-wider">Full Season MKV</h4>
+                                          {renderLinks(mkvLinks)}
+                                        </div>
+                                      )}
+                                    </>
+                                  );
+                                })()}
 
-                            {season.episodes && season.episodes.length > 0 && (
-                              <div>
-                                <h4 className="font-semibold text-zinc-400 mb-4 text-sm uppercase tracking-wider">Episodes</h4>
-                                <div className="space-y-4">
-                                  {season.episodes.map(ep => (
-                                    <div key={ep.id} className="bg-zinc-950 border border-zinc-800 rounded-xl p-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
-                                      <div>
-                                        <span className="text-emerald-500 font-bold mr-3">E{ep.episodeNumber}</span>
-                                        <span className="font-medium">{ep.title}</span>
-                                      </div>
-                                      {renderLinks(ep.links)}
+                                {season.episodes && season.episodes.length > 0 && (
+                                  <div>
+                                    <h4 className="font-semibold text-zinc-400 mb-4 text-sm uppercase tracking-wider">Episodes</h4>
+                                    <div className="space-y-4">
+                                      {season.episodes.map(ep => (
+                                        <div key={ep.id} className="bg-zinc-950 border border-zinc-800 rounded-xl p-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                                          <div>
+                                            <span className="text-emerald-500 font-bold mr-3">E{ep.episodeNumber}</span>
+                                            <span className="font-medium">{ep.title}</span>
+                                          </div>
+                                          {renderLinks(ep.links)}
+                                        </div>
+                                      ))}
                                     </div>
-                                  ))}
-                                </div>
+                                  </div>
+                                )}
+                              </>
+                            ) : (
+                              <div className="text-center py-8 text-zinc-500">
+                                <Lock className="w-12 h-12 mx-auto mb-4 opacity-20" />
+                                <p>You do not have access to this season.</p>
                               </div>
                             )}
                           </div>
                         </div>
-                      ));
+                      )});
                     } catch (e) {
                       console.error("Error parsing series seasons:", e);
                       return <p className="text-red-500">Error loading seasons</p>;

@@ -88,9 +88,28 @@
         "name": { "type": "string" }
       },
       "required": ["id", "name"]
+    },
+    "Notification": {
+      "title": "Notification",
+      "description": "A notification for users.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "body": { "type": "string" },
+        "contentId": { "type": "string" },
+        "posterUrl": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "createdBy": { "type": "string" }
+      },
+      "required": ["id", "title", "body", "contentId", "createdAt", "createdBy"]
     }
   },
   "firestore": {
+    "/notifications/{notificationId}": {
+      "schema": { "$ref": "#/entities/Notification" },
+      "description": "Stores notifications."
+    },
     "/users/{userId}": {
       "schema": { "$ref": "#/entities/User" },
       "description": "Stores user profiles."

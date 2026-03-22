@@ -1,4 +1,4 @@
-export type Role = 'admin' | 'user' | 'temporary' | 'selected_content' | 'data_editor';
+export type Role = 'admin' | 'user' | 'temporary' | 'selected_content' | 'data_editor' | 'trial';
 export type Status = 'pending' | 'active' | 'expired';
 
 export interface UserProfile {
@@ -16,6 +16,18 @@ export interface UserProfile {
   createdAt: string;
   sessionsCount?: number;
   timeSpent?: number; // in minutes
+  lastNotificationCheck?: string; // ISO string
+}
+
+export interface AppNotification {
+  id: string;
+  title: string;
+  body: string;
+  contentId: string;
+  posterUrl?: string;
+  type?: 'movie' | 'series';
+  createdAt: string;
+  createdBy: string;
 }
 
 export interface AnalyticsEvent {

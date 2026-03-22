@@ -343,6 +343,8 @@ export default function UserManagement() {
             <option value="user">User</option>
             <option value="temporary">Temporary</option>
             <option value="selected_content">Selected Content</option>
+            <option value="trial">Trial</option>
+            <option value="data_editor">Data Editor</option>
             <option value="admin">Admin</option>
           </select>
 
@@ -432,6 +434,7 @@ export default function UserManagement() {
                           user.role === 'data_editor' ? 'bg-indigo-500/10 text-indigo-500' :
                           user.role === 'temporary' ? 'bg-orange-500/10 text-orange-500' : 
                           user.role === 'selected_content' ? 'bg-pink-500/10 text-pink-500' :
+                          user.role === 'trial' ? 'bg-yellow-500/10 text-yellow-500' :
                           'bg-blue-500/10 text-blue-500'}`}
                       >
                         {user.role === 'selected_content' ? 'Selected Content' : user.role.replace('_', ' ')}
@@ -548,6 +551,7 @@ export default function UserManagement() {
                       <option value="user">User</option>
                       <option value="temporary">Temporary</option>
                       <option value="selected_content">Selected Content</option>
+                      <option value="trial">Trial</option>
                       <option value="data_editor">Data Editor</option>
                       <option value="admin">Admin</option>
                     </select>
@@ -604,7 +608,7 @@ export default function UserManagement() {
                       <div className="text-zinc-500 text-xs uppercase font-bold mb-1">Accessible Movies</div>
                       <div className="capitalize font-medium text-white">
                         {selectedUser.role === 'admin' || selectedUser.role === 'data_editor' ? 'All' :
-                         selectedUser.role === 'user' ? (selectedUser.status === 'active' ? 'All' : 'None') :
+                         selectedUser.role === 'user' || selectedUser.role === 'trial' ? (selectedUser.status === 'active' ? 'All' : 'None') :
                          (selectedUser.assignedContent?.length || 0)}
                       </div>
                       {selectedUser.role === 'selected_content' && assignedContentTitles.length > 0 && (
