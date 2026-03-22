@@ -30,7 +30,12 @@ export default function ErrorLinks() {
 
   const analyzeErrorWithAI = async (url: string, status: number, data: any): Promise<string> => {
     try {
-      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+      const apiKey = process.env.GEMINI_API_KEY;
+      if (!apiKey) {
+        console.warn("GEMINI_API_KEY is not defined, skipping AI analysis");
+        return `Error ${status}`;
+      }
+      const ai = new GoogleGenAI({ apiKey });
       const prompt = `
         Analyze this Pixeldrain API response and determine the exact reason why the link is unavailable or problematic.
         URL: ${url}
@@ -367,20 +372,7 @@ export default function ErrorLinks() {
       
       if (editingLink.listType === 'movie') {
         const links = parseLinks(content.movieLinks);
-        links[editingLink.linkIndex] = {
-          ...links[editingLink.linkIndex],
-          url: editUrl,
-          size: editSize,
-          unit: editUnit,
-          name: editName
-        };
-        updateData.movieLinks = JSON.stringify(links);
-      } else if (content.type === 'series' && content.seasons) {
-        const seasons: Season[] = JSON.parse(content.seasons);
-        const sIdx = editingLink.seasonIndex!;
-        
-        if (editingLink.listType === 'zip') {
-          const links = parseLinks(JSON.stringify(seasons[sIdx].zipLinks));
+        if (links[editingLink.linkIndex]) {
           links[editingLink.linkIndex] = {
             ...links[editingLink.linkIndex],
             url: editUrl,
@@ -388,30 +380,60 @@ export default function ErrorLinks() {
             unit: editUnit,
             name: editName
           };
-          seasons[sIdx].zipLinks = links;
-        } else if (editingLink.listType === 'mkv') {
-          const links = parseLinks(JSON.stringify(seasons[sIdx].mkvLinks || []));
-          links[editingLink.linkIndex] = {
-            ...links[editingLink.linkIndex],
-            url: editUrl,
-            size: editSize,
-            unit: editUnit,
-            name: editName
-          };
-          seasons[sIdx].mkvLinks = links;
-        } else if (editingLink.listType === 'episode') {
-          const eIdx = editingLink.episodeIndex!;
-          const links = parseLinks(JSON.stringify(seasons[sIdx].episodes[eIdx].links));
-          links[editingLink.linkIndex] = {
-            ...links[editingLink.linkIndex],
-            url: editUrl,
-            size: editSize,
-            unit: editUnit,
-            name: editName
-          };
-          seasons[sIdx].episodes[eIdx].links = links;
+          updateData.movieLinks = JSON.stringify(links);
         }
-        updateData.seasons = JSON.stringify(seasons);
+      } else if (content.type === 'series' && content.seasons) {
+        try {
+          const seasons: Season[] = JSON.parse(content.seasons);
+          const sIdx = editingLink.seasonIndex!;
+          
+          if (seasons[sIdx]) {
+            if (editingLink.listType === 'zip') {
+              const links = parseLinks(JSON.stringify(seasons[sIdx].zipLinks));
+              if (links[editingLink.linkIndex]) {
+                links[editingLink.linkIndex] = {
+                  ...links[editingLink.linkIndex],
+                  url: editUrl,
+                  size: editSize,
+                  unit: editUnit,
+                  name: editName
+                };
+                seasons[sIdx].zipLinks = links;
+              }
+            } else if (editingLink.listType === 'mkv') {
+              const links = parseLinks(JSON.stringify(seasons[sIdx].mkvLinks || []));
+              if (links[editingLink.linkIndex]) {
+                links[editingLink.linkIndex] = {
+                  ...links[editingLink.linkIndex],
+                  url: editUrl,
+                  size: editSize,
+                  unit: editUnit,
+                  name: editName
+                };
+                seasons[sIdx].mkvLinks = links;
+              }
+            } else if (editingLink.listType === 'episode') {
+              const eIdx = editingLink.episodeIndex!;
+              if (seasons[sIdx].episodes && seasons[sIdx].episodes[eIdx]) {
+                const links = parseLinks(JSON.stringify(seasons[sIdx].episodes[eIdx].links));
+                if (links[editingLink.linkIndex]) {
+                  links[editingLink.linkIndex] = {
+                    ...links[editingLink.linkIndex],
+                    url: editUrl,
+                    size: editSize,
+                    unit: editUnit,
+                    name: editName
+                  };
+                  seasons[sIdx].episodes[eIdx].links = links;
+                }
+              }
+            }
+            updateData.seasons = JSON.stringify(seasons);
+          }
+        } catch (e) {
+          console.error("Error parsing seasons for update", e);
+          throw new Error("Invalid seasons data format");
+        }
       }
 
       await updateDoc(doc(db, 'content', editingLink.contentId), updateData);

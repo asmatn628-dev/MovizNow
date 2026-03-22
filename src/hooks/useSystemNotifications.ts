@@ -23,7 +23,8 @@ export function useSystemNotifications(profile: UserProfile | null) {
 
     // Register service worker for reliable notifications (especially on mobile)
     if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('/sw.js').catch(err => console.error('SW registration failed:', err));
+      // Versioning the SW registration to force an update if needed
+      navigator.serviceWorker.register('/notification-sw.js?v=3').catch(err => console.error('SW registration failed:', err));
     }
 
     const q = query(
@@ -55,15 +56,34 @@ export function useSystemNotifications(profile: UserProfile | null) {
         if (Notification.permission === 'granted') {
           try {
             if ('serviceWorker' in navigator) {
-              navigator.serviceWorker.ready.then(registration => {
-                registration.showNotification(notification.title, {
-                  body: notification.body,
-                  icon: notification.posterUrl || '/favicon.ico',
-                  tag: notification.id,
-                  data: {
-                    url: notification.contentId ? `/movie/${notification.contentId}` : '/'
-                  }
-                });
+              navigator.serviceWorker.getRegistrations().then(registrations => {
+                const myReg = registrations.find(reg => reg.active && reg.active.scriptURL.includes('notification-sw.js'));
+                
+                if (myReg) {
+                  myReg.showNotification(notification.title, {
+                    body: notification.body,
+                    icon: notification.posterUrl || '/favicon.ico',
+                    tag: notification.id,
+                    data: {
+                      url: notification.contentId ? `/movie/${notification.contentId}` : '/'
+                    }
+                  });
+                } else {
+                  // Fallback to standard Notification if SW not found or not active yet
+                  const sysNotif = new Notification(notification.title, {
+                    body: notification.body,
+                    icon: notification.posterUrl || '/favicon.ico',
+                    tag: notification.id,
+                  });
+
+                  sysNotif.onclick = () => {
+                    window.focus();
+                    if (notification.contentId) {
+                      window.location.href = `/movie/${notification.contentId}`;
+                    }
+                    sysNotif.close();
+                  };
+                }
               });
             } else {
               const sysNotif = new Notification(notification.title, {
