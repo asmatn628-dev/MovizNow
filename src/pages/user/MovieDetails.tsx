@@ -1,4 +1,4 @@
-import { GoogleGenAI, Type } from "@google/genai";
+import { aiService } from '../../services/aiService';
 import { useState, useEffect, useRef } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { db } from '../../firebase';
@@ -31,46 +31,6 @@ export default function MovieDetails() {
   const [fetchingImdb, setFetchingImdb] = useState(false);
   const hasLoggedView = useRef(false);
   const navigate = useNavigate();
-
-  const fetchAiData = async (title: string, year: string, type: string, currentImdbId: string | null) => {
-    try {
-      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY! });
-      const response = await ai.models.generateContent({
-        model: "gemini-3-flash-preview",
-        contents: `Search for the official IMDb details for the ${type} "${title}" (${year}). 
-        Current IMDb ID provided: ${currentImdbId || 'None'}.
-        If the provided ID is missing or seems incorrect for this title, find the correct official IMDb 'tt' ID.
-        Return the data in JSON format including:
-        - imdbId: The official IMDb ID (e.g., tt0111161)
-        - rating: The current IMDb rating (e.g., 9.3/10)
-        - releaseDate: The official release date
-        - duration: The runtime in minutes
-        - cast: Top 5 lead actors
-        - description: A concise synopsis
-        - posterUrl: A direct link to a high-quality official poster (prefer IMDb or TMDB CDN links).`,
-        config: {
-          tools: [{ googleSearch: {} }],
-          responseMimeType: "application/json",
-          responseSchema: {
-            type: Type.OBJECT,
-            properties: {
-              imdbId: { type: Type.STRING, description: "Official IMDb tt ID" },
-              rating: { type: Type.STRING, description: "IMDb rating" },
-              releaseDate: { type: Type.STRING, description: "Release date" },
-              duration: { type: Type.STRING, description: "Runtime" },
-              cast: { type: Type.STRING, description: "Top cast members" },
-              description: { type: Type.STRING, description: "Synopsis" },
-              posterUrl: { type: Type.STRING, description: "High quality poster URL" }
-            }
-          }
-        }
-      });
-      return JSON.parse(response.text);
-    } catch (error) {
-      console.error("AI fetch error:", error);
-      return null;
-    }
-  };
 
   // Initialize IMDb data from content and cache
   useEffect(() => {
@@ -199,7 +159,7 @@ export default function MovieDetails() {
 
         // 1. Parallel API & AI Fetching
         // We start AI fetch immediately if we're missing critical data
-        const aiPromise = fetchAiData(content.title, String(content.year || ''), content.type, ttId);
+        const aiPromise = aiService.fetchMovieData(content.title, String(content.year || ''), content.type, ttId);
         const fetchPromises: Promise<any>[] = [aiPromise];
 
         if (ttId) {

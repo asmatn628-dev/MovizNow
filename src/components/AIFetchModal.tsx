@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { X, Check, Loader2, AlertCircle } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { GoogleGenAI, Type } from '@google/genai';
+import { aiService } from '../services/aiService';
+import { Type } from '@google/genai';
 
 interface AIFetchModalProps {
   isOpen: boolean;
@@ -49,10 +50,6 @@ export default function AIFetchModal({ isOpen, onClose, initialTitle, initialYea
     setLoading(true);
     setError(null);
     try {
-      const apiKey = process.env.GEMINI_API_KEY;
-      if (!apiKey) throw new Error("Gemini API key is not configured.");
-      const ai = new GoogleGenAI({ apiKey });
-      
       const genreNames = availableGenres.map(g => g.name).join(', ');
       
       const prompt = `Fetch accurate metadata for the movie or TV show titled "${initialTitle}" ${initialYear ? `(${initialYear})` : ''}. 
@@ -67,55 +64,47 @@ export default function AIFetchModal({ isOpen, onClose, initialTitle, initialYea
       // Run AI fetch and YouTube trailer fetch in parallel
       const ytPromise = fetch(`/api/youtube/search?q=${encodeURIComponent(initialTitle + " " + (initialYear || "") + " trailer")}`).catch(() => null);
       
-      const responseStream = await ai.models.generateContentStream({
-        model: 'gemini-3-flash-preview',
-        contents: prompt,
-        config: {
-          tools: [{ googleSearch: {} }],
-          responseMimeType: 'application/json',
-          responseSchema: {
-            type: Type.OBJECT,
-            properties: {
-              title: { type: Type.STRING },
-              year: { type: Type.INTEGER },
-              type: { type: Type.STRING, description: "Either 'movie' or 'series'" },
-              description: { type: Type.STRING },
-              cast: { type: Type.STRING, description: "Comma separated list of main actors" },
-              genres: { type: Type.ARRAY, items: { type: Type.STRING } },
-              releaseDate: { type: Type.STRING, description: "YYYY-MM-DD" },
-              runtime: { type: Type.STRING, description: "Must be in hh:mm format" },
-              imdbLink: { type: Type.STRING },
-              rating: { type: Type.STRING, description: "IMDb rating like 8.5/10" },
-              posterUrl: { type: Type.STRING },
-              trailerUrl: { type: Type.STRING, description: "YouTube trailer URL if found" },
-              seasons: {
-                type: Type.ARRAY,
-                items: {
-                  type: Type.OBJECT,
-                  properties: {
-                    seasonNumber: { type: Type.INTEGER },
-                    seasonYear: { type: Type.INTEGER, description: "Release year of this season" },
-                    episodes: {
-                      type: Type.ARRAY,
-                      items: {
-                        type: Type.OBJECT,
-                        properties: {
-                          episodeNumber: { type: Type.INTEGER },
-                          title: { type: Type.STRING },
-                          description: { type: Type.STRING },
-                          duration: { type: Type.STRING }
-                        },
-                        required: ["episodeNumber", "title", "duration"]
-                      }
-                    }
-                  },
-                  required: ["seasonNumber", "episodes", "seasonYear"]
+      const responseStream = await aiService.fetchMovieDataStream(prompt, {
+        type: Type.OBJECT,
+        properties: {
+          title: { type: Type.STRING },
+          year: { type: Type.INTEGER },
+          type: { type: Type.STRING, description: "Either 'movie' or 'series'" },
+          description: { type: Type.STRING },
+          cast: { type: Type.STRING, description: "Comma separated list of main actors" },
+          genres: { type: Type.ARRAY, items: { type: Type.STRING } },
+          releaseDate: { type: Type.STRING, description: "YYYY-MM-DD" },
+          runtime: { type: Type.STRING, description: "Must be in hh:mm format" },
+          imdbLink: { type: Type.STRING },
+          rating: { type: Type.STRING, description: "IMDb rating like 8.5/10" },
+          posterUrl: { type: Type.STRING },
+          trailerUrl: { type: Type.STRING, description: "YouTube trailer URL if found" },
+          seasons: {
+            type: Type.ARRAY,
+            items: {
+              type: Type.OBJECT,
+              properties: {
+                seasonNumber: { type: Type.INTEGER },
+                seasonYear: { type: Type.INTEGER, description: "Release year of this season" },
+                episodes: {
+                  type: Type.ARRAY,
+                  items: {
+                    type: Type.OBJECT,
+                    properties: {
+                      episodeNumber: { type: Type.INTEGER },
+                      title: { type: Type.STRING },
+                      description: { type: Type.STRING },
+                      duration: { type: Type.STRING }
+                    },
+                    required: ["episodeNumber", "title", "duration"]
+                  }
                 }
-              }
-            },
-            required: ["title", "type", "description"]
+              },
+              required: ["seasonNumber", "episodes", "seasonYear"]
+            }
           }
-        }
+        },
+        required: ["title", "type", "description"]
       });
 
       let fullText = '';
