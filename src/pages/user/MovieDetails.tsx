@@ -1,4 +1,4 @@
-import { aiService } from '../../services/aiService';
+import { GoogleGenAI, Type } from "@google/genai";
 import { useState, useEffect, useRef } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { db } from '../../firebase';
@@ -31,6 +31,33 @@ export default function MovieDetails() {
   const [fetchingImdb, setFetchingImdb] = useState(false);
   const hasLoggedView = useRef(false);
   const navigate = useNavigate();
+
+  const fetchAiData = async (title: string, year: string, type: string) => {
+    try {
+      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY! });
+      const response = await ai.models.generateContent({
+        model: "gemini-3-flash-preview",
+        contents: `Provide details for the ${type} "${title}" released in ${year}. Include IMDb rating, release date, runtime (if movie), cast (top 5), and a short synopsis.`,
+        config: {
+          responseMimeType: "application/json",
+          responseSchema: {
+            type: Type.OBJECT,
+            properties: {
+              rating: { type: Type.STRING, description: "IMDb rating like 8.5/10" },
+              releaseDate: { type: Type.STRING, description: "Release date like 2023-10-27" },
+              duration: { type: Type.STRING, description: "Runtime like 120 min" },
+              cast: { type: Type.STRING, description: "Top cast members separated by comma" },
+              description: { type: Type.STRING, description: "Short synopsis" }
+            }
+          }
+        }
+      });
+      return JSON.parse(response.text);
+    } catch (error) {
+      console.error("AI fetch error:", error);
+      return null;
+    }
+  };
 
   // Initialize IMDb data from content and cache
   useEffect(() => {
@@ -152,139 +179,159 @@ export default function MovieDetails() {
     if (content) {
       const fetchData = async () => {
         const ttMatch = content.imdbLink?.match(/tt\d+/);
-        let ttId = ttMatch ? ttMatch[0] : null;
+        const ttId = ttMatch ? ttMatch[0] : null;
+
+        // Check cache for initial state, but we'll still fetch fresh data
+        const cacheKey = `imdb_${ttId || content.id}`;
+        const cached = localStorage.getItem(cacheKey);
+        if (cached) {
+          try {
+            const parsed = JSON.parse(cached);
+            if (ttId && parsed.ttId === ttId) {
+              // We have cached data, but we'll still fetch to ensure it's fresh
+            }
+          } catch (e) {}
+        }
 
         setFetchingImdb(true);
         let data: any = { ttId, timestamp: Date.now(), fetchedFields: [] };
-
-        // 1. Parallel API & AI Fetching
-        // We start AI fetch immediately if we're missing critical data
-        const aiPromise = aiService.fetchMovieData(content.title, String(content.year || ''), content.type, ttId);
-        const fetchPromises: Promise<any>[] = [aiPromise];
-
+        
         if (ttId) {
-          // TVMaze
-          fetchPromises.push(
-            fetch(`https://api.tvmaze.com/lookup/shows?imdb=${ttId}`)
-              .then(res => res.ok ? res.json() : null)
-              .then(show => {
-                if (show) {
-                  if (show.image?.original && !content.posterUrl && !data.posterUrl) {
-                    data.posterUrl = show.image.original;
-                    if (!data.fetchedFields.includes('posterUrl')) data.fetchedFields.push('posterUrl');
-                  }
-                  if (show.rating?.average && !data.rating) {
-                    data.rating = `${show.rating.average}/10`;
-                    if (!data.fetchedFields.includes('rating')) data.fetchedFields.push('rating');
-                  }
-                  if (show.premiered && !content.releaseDate && !data.releaseDate) {
-                    data.releaseDate = show.premiered;
-                    if (!data.fetchedFields.includes('releaseDate')) data.fetchedFields.push('releaseDate');
-                  }
-                  if (show.runtime && !content.runtime && content.type !== 'series' && !data.duration) {
-                    data.duration = `${show.runtime} min`;
-                    if (!data.fetchedFields.includes('duration')) data.fetchedFields.push('duration');
-                  }
-                  if (show.summary && !content.description && !data.description) {
-                    data.description = show.summary.replace(/<[^>]*>/g, '');
-                    if (!data.fetchedFields.includes('description')) data.fetchedFields.push('description');
-                  }
+          // Try TVMaze first
+          try {
+            const tvmazeRes = await fetch(`https://api.tvmaze.com/lookup/shows?imdb=${ttId}`);
+            if (tvmazeRes.ok) {
+              const show = await tvmazeRes.json();
+              if (show.image?.original && !content.posterUrl) {
+                data.posterUrl = show.image.original;
+                data.fetchedFields.push('posterUrl');
+              }
+              if (show.rating?.average) {
+                data.rating = `${show.rating.average}/10`;
+                data.fetchedFields.push('rating');
+              }
+              if (show.premiered && !content.releaseDate) {
+                data.releaseDate = show.premiered;
+                data.fetchedFields.push('releaseDate');
+              }
+              if (show.runtime && !content.runtime && content.type !== 'series') {
+                data.duration = `${show.runtime} min`;
+                data.fetchedFields.push('duration');
+              }
+              if (show.summary && !content.description) {
+                data.description = show.summary.replace(/<[^>]*>/g, '');
+                data.fetchedFields.push('description');
+              }
+            }
+          } catch (error) {
+            // TVMaze fetch failed, silently fallback
+          }
+
+          // Fallback to suggestion API for poster
+          if (!content.posterUrl && !data.posterUrl) {
+            try {
+              let suggestRes = await fetch(`/api/imdb/suggestion/${ttId}`).catch(() => null);
+              let suggestData = null;
+              
+              if (suggestRes && suggestRes.ok) {
+                suggestData = await suggestRes.json();
+              }
+
+              if (suggestData) {
+                const item = suggestData.d?.find((i: any) => i.id === ttId) || suggestData.d?.[0];
+                if (item && item.i?.imageUrl) {
+                  data.posterUrl = item.i.imageUrl;
+                  if (!data.fetchedFields.includes('posterUrl')) data.fetchedFields.push('posterUrl');
                 }
-              })
-              .catch(() => null)
-          );
-
-          // IMDb Suggestion API
-          fetchPromises.push(
-            fetch(`/api/imdb/suggestion/${ttId}`)
-              .then(res => res.ok ? res.json() : null)
-              .then(suggestData => {
-                if (suggestData) {
-                  const item = suggestData.d?.find((i: any) => i.id === ttId) || suggestData.d?.[0];
-                  if (item && item.i?.imageUrl && !content.posterUrl && !data.posterUrl) {
-                    data.posterUrl = item.i.imageUrl;
-                    if (!data.fetchedFields.includes('posterUrl')) data.fetchedFields.push('posterUrl');
-                  }
-                }
-              })
-              .catch(() => null)
-          );
-
-          // IMDb Scraper Proxy
-          fetchPromises.push(
-            fetch(`/api/imdb/title/${ttId}`)
-              .then(res => res.ok ? res.text() : null)
-              .then(html => {
-                if (html) {
-                  const parser = new DOMParser();
-                  const doc = parser.parseFromString(html, 'text/html');
-                  
-                  if (!data.rating) {
-                    const ratingEl = doc.querySelector('[data-testid="hero-rating-bar__aggregate-rating__score"] span');
-                    if (ratingEl && ratingEl.textContent?.trim()) {
-                      data.rating = `${ratingEl.textContent.trim()}/10`;
-                      if (!data.fetchedFields.includes('rating')) data.fetchedFields.push('rating');
-                    }
-                  }
-                  if (!content.releaseDate && !data.releaseDate) {
-                    const releaseEl = doc.querySelector('[data-testid="title-details-releasedate"] .ipc-metadata-list-item__list-content-item');
-                    if (releaseEl) {
-                      data.releaseDate = releaseEl.textContent?.trim();
-                      if (!data.fetchedFields.includes('releaseDate')) data.fetchedFields.push('releaseDate');
-                    }
-                  }
-                  if (!content.runtime && !data.duration && content.type !== 'series') {
-                    const runtimeEl = doc.querySelector('[data-testid="title-techspec_runtime"] .ipc-metadata-list-item__list-content-item');
-                    if (runtimeEl) {
-                      data.duration = runtimeEl.textContent?.trim();
-                      if (!data.fetchedFields.includes('duration')) data.fetchedFields.push('duration');
-                    }
-                  }
-                  if (!content.cast || content.cast.length === 0) {
-                    const castEls = doc.querySelectorAll('[data-testid="title-cast-item__actor"]');
-                    if (castEls.length > 0 && !data.cast) {
-                      data.cast = Array.from(castEls).slice(0, 10).map(el => el.textContent?.trim()).join(', ');
-                      if (!data.fetchedFields.includes('cast')) data.fetchedFields.push('cast');
-                    }
-                  }
-                  if (!content.description && !data.description) {
-                    const descEl = doc.querySelector('[data-testid="plot-l"]');
-                    if (descEl) {
-                      data.description = descEl.textContent?.trim();
-                      if (!data.fetchedFields.includes('description')) data.fetchedFields.push('description');
-                    }
-                  }
-                }
-              })
-              .catch(() => null)
-          );
-        }
-
-        // Wait for all fetches to complete
-        const results = await Promise.all(fetchPromises);
-        const aiResult = results[0]; // The first promise was AI
-
-        // 2. Merge AI results for missing fields
-        if (aiResult) {
-          if (aiResult.imdbId && !ttId) {
-            ttId = aiResult.imdbId;
-            data.ttId = ttId;
-            if (!data.fetchedFields.includes('imdbId')) data.fetchedFields.push('imdbId');
+              }
+            } catch (error) {
+              // IMDb suggestion fetch failed, silently fallback
+            }
           }
           
-          const fieldsToFill = ['rating', 'releaseDate', 'duration', 'cast', 'description', 'posterUrl'];
-          fieldsToFill.forEach(field => {
-            // Only use AI data if we don't have it from standard APIs and it's missing in content
-            const isMissingInContent = field === 'duration' ? !content.runtime : 
-                                      field === 'cast' ? (!content.cast || content.cast.length === 0) :
-                                      !(content as any)[field];
+          // Try to get rating and other data via proxy
+          try {
+            const proxyUrl = `/api/imdb/title/${ttId}`;
+            let pageRes = await fetch(proxyUrl);
+            let html = '';
             
-            if (aiResult[field] && !data[field] && isMissingInContent) {
-              data[field] = aiResult[field];
-              if (!data.fetchedFields.includes(field)) data.fetchedFields.push(field);
-              data.isAiGenerated = true;
+            if (pageRes.ok) {
+              html = await pageRes.text();
             }
-          });
+            
+            if (html) {
+              const parser = new DOMParser();
+              const doc = parser.parseFromString(html, 'text/html');
+              
+              // Rating
+              if (!data.rating) {
+                const ratingEl = doc.querySelector('[data-testid="hero-rating-bar__aggregate-rating__score"] span');
+                if (ratingEl && ratingEl.textContent?.trim()) {
+                  data.rating = `${ratingEl.textContent.trim()}/10`;
+                  if (!data.fetchedFields.includes('rating')) data.fetchedFields.push('rating');
+                }
+              }
+
+              // Release Date
+              if (!content.releaseDate && !data.releaseDate) {
+                const releaseEl = doc.querySelector('[data-testid="title-details-releasedate"] .ipc-metadata-list-item__list-content-item');
+                if (releaseEl) {
+                  data.releaseDate = releaseEl.textContent?.trim();
+                  if (!data.fetchedFields.includes('releaseDate')) data.fetchedFields.push('releaseDate');
+                }
+              }
+
+              // Runtime
+              if (!content.runtime && !data.duration && content.type !== 'series') {
+                const runtimeEl = doc.querySelector('[data-testid="title-techspec_runtime"] .ipc-metadata-list-item__list-content-item');
+                if (runtimeEl) {
+                  data.duration = runtimeEl.textContent?.trim();
+                  if (!data.fetchedFields.includes('duration')) data.fetchedFields.push('duration');
+                }
+              }
+
+              // Cast
+              if (!content.cast || content.cast.length === 0) {
+                const castEls = doc.querySelectorAll('[data-testid="title-cast-item__actor"]');
+                if (castEls.length > 0) {
+                  data.cast = Array.from(castEls).slice(0, 10).map(el => el.textContent?.trim()).join(', ');
+                  if (!data.fetchedFields.includes('cast')) data.fetchedFields.push('cast');
+                }
+              }
+
+              // Description
+              if (!content.description && !data.description) {
+                const descEl = doc.querySelector('[data-testid="plot-l"]');
+                if (descEl) {
+                  data.description = descEl.textContent?.trim();
+                  if (!data.fetchedFields.includes('description')) data.fetchedFields.push('description');
+                }
+              }
+            }
+          } catch (error) {
+            console.error("IMDb proxy fetch error", error);
+          }
+        }
+
+        // AI Fallback for missing fields
+        const missingFields = [];
+        if (!data.rating) missingFields.push('rating');
+        if (!data.releaseDate && !content.releaseDate) missingFields.push('releaseDate');
+        if (!data.duration && !content.runtime && content.type !== 'series') missingFields.push('duration');
+        if (!data.cast && (!content.cast || content.cast.length === 0)) missingFields.push('cast');
+        if (!data.description && !content.description) missingFields.push('description');
+
+        if (missingFields.length > 0) {
+          const aiResult = await fetchAiData(content.title, String(content.year || ''), content.type);
+          if (aiResult) {
+            missingFields.forEach(field => {
+              if (aiResult[field] && !data[field]) {
+                data[field] = aiResult[field];
+                if (!data.fetchedFields.includes(field)) data.fetchedFields.push(field);
+              }
+            });
+            data.isAiGenerated = true;
+          }
         }
 
         if (data.fetchedFields.length > 0) {
@@ -799,20 +846,8 @@ export default function MovieDetails() {
                       <span className="text-[9px] font-bold text-cyan-400 uppercase tracking-tighter">Updating</span>
                     </div>
                   )}
-                  {imdbData.isAiGenerated && !fetchingImdb && (
-                    <div className="absolute top-3 right-3 flex items-center gap-1.5 bg-purple-500/20 backdrop-blur-md px-2 py-1 rounded-full border border-purple-500/30 z-10">
-                      <div className="w-1.5 h-1.5 rounded-full bg-purple-400 animate-pulse" />
-                      <span className="text-[9px] font-bold text-purple-400 uppercase tracking-tighter">AI Enhanced</span>
-                    </div>
-                  )}
-                  {(imdbData.posterUrl || content.posterUrl) && (
-                    <img 
-                      src={imdbData.posterUrl || content.posterUrl} 
-                      alt="Poster" 
-                      className="w-32 md:w-48 mx-auto md:mx-0 rounded-xl shadow-lg object-cover cursor-pointer hover:scale-105 transition-transform" 
-                      referrerPolicy="no-referrer"
-                      onClick={() => setIsPosterExpanded(true)}
-                    />
+                  {imdbData.posterUrl && imdbData.posterUrl.trim() !== "" && imdbData.fetchedFields?.includes('posterUrl') && (
+                    <img src={imdbData.posterUrl} alt="Poster" className="w-32 md:w-48 mx-auto md:mx-0 rounded-xl shadow-lg object-cover" referrerPolicy="no-referrer" />
                   )}
                   <div className="flex-1 space-y-4">
                     <div className="flex justify-between items-start">
