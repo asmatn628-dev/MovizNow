@@ -496,14 +496,35 @@ export default function Home() {
               {languages.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
             </select>
 
-            <select
-              value={selectedQuality}
-              onChange={(e) => setSelectedQuality(e.target.value)}
-              className="bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-2 focus:outline-none focus:border-emerald-500 min-w-[140px] text-sm"
-            >
-              <option value="">All Qualities</option>
-              {qualities.map(q => <option key={q.id} value={q.id}>{q.name}</option>)}
-            </select>
+            <div className="flex gap-2 items-center min-w-fit">
+              <span className="text-xs text-zinc-500 uppercase tracking-wider font-bold whitespace-nowrap">Quality:</span>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setSelectedQuality('')}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap ${selectedQuality === '' ? 'bg-cyan-500 text-black shadow-[0_0_10px_rgba(6,182,212,0.4)]' : 'bg-zinc-900 text-zinc-400 border border-zinc-800 hover:border-zinc-700'}`}
+                >
+                  ALL
+                </button>
+                {qualities.map(q => {
+                  const isHighQuality = ['WEB-DL', 'WebRip', 'HDRip', 'BluRay'].some(hq => q.name.toUpperCase().includes(hq.toUpperCase()));
+                  return (
+                    <button
+                      key={q.id}
+                      onClick={() => setSelectedQuality(q.id)}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap ${
+                        selectedQuality === q.id 
+                          ? isHighQuality 
+                            ? 'bg-cyan-500 text-black shadow-[0_0_10px_rgba(6,182,212,0.4)]' 
+                            : 'bg-amber-500 text-black shadow-[0_0_10px_rgba(245,158,11,0.4)]'
+                          : 'bg-zinc-900 text-zinc-400 border border-zinc-800 hover:border-zinc-700'
+                      }`}
+                    >
+                      {q.name}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
 
             <select
               value={selectedYear}
@@ -554,6 +575,15 @@ export default function Home() {
                       <div className={`absolute top-2 right-2 backdrop-blur-md px-2 py-1 rounded text-xs font-bold uppercase tracking-wider text-white ${content.type === 'movie' ? 'bg-blue-500/80' : 'bg-purple-500/80'}`}>
                         {content.type}
                       </div>
+                      {contentQuality && (
+                        <div className={`absolute top-9 right-2 backdrop-blur-md px-2 py-1 rounded text-[10px] font-bold uppercase tracking-wider ${
+                          ['WEB-DL', 'WebRip', 'HDRip', 'BluRay'].some(hq => contentQuality.toUpperCase().includes(hq.toUpperCase()))
+                            ? 'bg-cyan-500 text-black shadow-[0_0_10px_rgba(6,182,212,0.5)]'
+                            : 'bg-amber-500 text-black shadow-[0_0_10px_rgba(245,158,11,0.5)]'
+                        }`}>
+                          {contentQuality}
+                        </div>
+                      )}
                       {isLocked && (
                         <div className="absolute top-2 left-2 bg-red-500/90 backdrop-blur-md px-2 py-1 rounded text-xs font-bold uppercase tracking-wider flex items-center gap-1 shadow-lg text-white z-20">
                           <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
@@ -565,12 +595,6 @@ export default function Home() {
                       <h3 className="font-bold text-base md:text-lg leading-tight mb-2">{formatContentTitle(content)}</h3>
                       <div className="flex flex-wrap items-center gap-2 text-zinc-400 text-xs mb-2">
                         <span>{content.year}</span>
-                        {contentQuality && (
-                          <>
-                            <span>•</span>
-                            <span className="text-emerald-400 font-medium">{contentQuality}</span>
-                          </>
-                        )}
                       </div>
                       <div className="flex flex-col gap-1 mt-auto">
                         {contentGenres && (

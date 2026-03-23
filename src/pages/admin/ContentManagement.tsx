@@ -1,12 +1,14 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useSearchParams, Link } from 'react-router-dom';
 import { db } from '../../firebase';
+import { GoogleGenAI } from "@google/genai";
 import { collection, addDoc, deleteDoc, doc, updateDoc, onSnapshot, writeBatch } from 'firebase/firestore';
 import { Content, Genre, Language, Quality, QualityLinks, Season, Episode, LinkDef } from '../../types';
-import { Plus, Edit2, Trash2, Share2, Film, Tv, X, Save, Upload, Search, Eye, EyeOff, ArrowUp, ArrowDown, Copy, ClipboardPaste, GripVertical, Bell } from 'lucide-react';
+import { Plus, Edit2, Trash2, Share2, Film, Tv, X, Save, Upload, Search, Eye, EyeOff, ArrowUp, ArrowDown, Copy, ClipboardPaste, GripVertical, Bell, RefreshCw, ChevronDown, ChevronUp } from 'lucide-react';
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
 import ConfirmModal from '../../components/ConfirmModal';
 import AlertModal from '../../components/AlertModal';
+import AIFetchModal from '../../components/AIFetchModal';
 import { handleFirestoreError, OperationType } from '../../utils/firestoreErrorHandler';
 
 export default function ContentManagement() {
@@ -27,6 +29,7 @@ export default function ContentManagement() {
   const [description, setDescription] = useState('');
   const [posterUrl, setPosterUrl] = useState('');
   const [trailerUrl, setTrailerUrl] = useState('');
+  const [trailerTitle, setTrailerTitle] = useState('');
   const [sampleUrl, setSampleUrl] = useState('');
   const [imdbLink, setImdbLink] = useState('');
   const [selectedGenres, setSelectedGenres] = useState<string[]>([]);
@@ -34,12 +37,15 @@ export default function ContentManagement() {
   const [selectedQuality, setSelectedQuality] = useState<string>('');
   const [cast, setCast] = useState('');
   const [year, setYear] = useState(new Date().getFullYear());
+  const [releaseDate, setReleaseDate] = useState('');
+  const [runtime, setRuntime] = useState('');
   
   // Movie specific
   const [movieLinks, setMovieLinks] = useState<QualityLinks>([]);
   
   // Series specific
   const [seasons, setSeasons] = useState<Season[]>([]);
+  const [expandedEpisodes, setExpandedEpisodes] = useState<Record<string, boolean>>({});
 
   // Search States
   const [searchTerm, setSearchTerm] = useState('');
@@ -71,6 +77,8 @@ export default function ContentManagement() {
     runtime?: string;
   } | null>(null);
   const [fetchingImdb, setFetchingImdb] = useState(false);
+  const [isAIFetchModalOpen, setIsAIFetchModalOpen] = useState(false);
+  const [fetchingPoster, setFetchingPoster] = useState(false);
   const [isAutoFillModalOpen, setIsAutoFillModalOpen] = useState(false);
   const [autoFillText, setAutoFillText] = useState('');
   const [imdbSeasonsPopup, setImdbSeasonsPopup] = useState<{ isOpen: boolean; seasons: any[]; show: any; epData: any[] } | null>(null);
@@ -154,6 +162,8 @@ export default function ContentManagement() {
     setSelectedQuality('');
     setCast('');
     setYear(new Date().getFullYear());
+    setReleaseDate('');
+    setRuntime('');
     setMovieLinks([
       { id: Math.random().toString(36).substr(2, 9), name: '480p', url: '', size: '', unit: 'MB' },
       { id: Math.random().toString(36).substr(2, 9), name: '720p', url: '', size: '', unit: 'GB' },
@@ -198,6 +208,8 @@ export default function ContentManagement() {
     setSelectedQuality(content.qualityId || '');
     setCast((content.cast || []).join(', '));
     setYear(content.year);
+    setReleaseDate(content.releaseDate || '');
+    setRuntime(content.runtime || '');
     
     if (content.type === 'movie') {
       setMovieLinks(parseLinks(content.movieLinks));
@@ -290,6 +302,8 @@ export default function ContentManagement() {
         qualityId: selectedQuality,
         cast: cast.split(',').map(c => c.trim()).filter(Boolean),
         year,
+        releaseDate,
+        runtime,
         updatedAt: new Date().toISOString(),
       };
 
@@ -384,6 +398,148 @@ export default function ContentManagement() {
       });
       return newSeasons.sort((a, b) => a.seasonNumber - b.seasonNumber);
     });
+  };
+
+  const handleMasterAutoFetch = () => {
+    if (!title) return;
+    setIsAIFetchModalOpen(true);
+  };
+
+  const fetchPosterWithAI = async () => {
+    if (!title) return;
+    setFetchingPoster(true);
+    try {
+      const apiKey = process.env.GEMINI_API_KEY;
+      if (!apiKey) throw new Error("Gemini API key is not configured.");
+      const ai = new GoogleGenAI({ apiKey });
+      
+      const prompt = `Find a high-resolution, official HD poster URL for the ${type === 'movie' ? 'movie' : 'TV series'} titled "${title}" ${year ? `(${year})` : ''}. 
+      Return ONLY a valid, direct image URL (e.g., from IMDb, TMDB, or a major movie database). 
+      Do not include any other text, just the URL. 
+      Ensure it is a high-quality vertical poster.`;
+
+      const result = await ai.models.generateContent({
+        model: 'gemini-3-flash-preview',
+        contents: prompt,
+      });
+
+      const url = result.text.trim();
+      if (url && url.startsWith('http')) {
+        setPosterUrl(url);
+      } else {
+        throw new Error("Invalid URL returned from AI");
+      }
+    } catch (error) {
+      console.error("Error fetching poster with AI:", error);
+      setAlertConfig({ isOpen: true, title: 'Error', message: 'Failed to fetch HD poster using AI.' });
+    } finally {
+      setFetchingPoster(false);
+    }
+  };
+
+  const applyAIFetchedData = (data: any) => {
+    if (data.title) setTitle(data.title);
+    if (data.year) setYear(data.year);
+    if (data.type) setType(data.type);
+    if (data.description) setDescription(data.description);
+    if (data.cast) setCast(data.cast);
+    if (data.releaseDate) setReleaseDate(data.releaseDate);
+    if (data.runtime) setRuntime(data.runtime);
+    if (data.imdbLink) setImdbLink(data.imdbLink);
+    if (data.posterUrl) setPosterUrl(data.posterUrl);
+    if (data.trailerUrl) {
+      setTrailerUrl(data.trailerUrl);
+      if (data.trailerTitle) {
+        // We can store the trailer title in a temporary state or just use it in the UI
+        // Let's add a state for it if not already there
+        setTrailerTitle(data.trailerTitle);
+      }
+    }
+
+    if (data.genres && Array.isArray(data.genres)) {
+      const fetchedGenreNames = data.genres.map((g: string) => g.trim().toLowerCase());
+      const matchedGenreIds = genres.filter(g => {
+        const gName = g.name.toLowerCase();
+        return fetchedGenreNames.some((fetched: string) => 
+          fetched === gName || 
+          fetched.includes(gName) || 
+          gName.includes(fetched) ||
+          (fetched === 'history' && gName === 'historical') ||
+          (fetched === 'historical' && gName === 'history') ||
+          (fetched === 'sci-fi' && gName.includes('sci')) ||
+          (fetched === 'science fiction' && gName.includes('sci'))
+        );
+      }).map(g => g.id);
+      if (matchedGenreIds.length > 0) {
+        setSelectedGenres(prev => [...new Set([...prev, ...matchedGenreIds])]);
+      }
+    }
+
+    if (data.type === 'series' && data.seasons && Array.isArray(data.seasons)) {
+      setSeasons(prevSeasons => {
+        const updatedSeasons = [...prevSeasons];
+        
+        data.seasons.forEach((fetchedSeason: any) => {
+          const existingSeasonIndex = updatedSeasons.findIndex(s => s.seasonNumber === fetchedSeason.seasonNumber);
+          
+          if (existingSeasonIndex !== -1) {
+            // Merge episodes
+            const existingSeason = updatedSeasons[existingSeasonIndex];
+            if (fetchedSeason.seasonYear) existingSeason.year = fetchedSeason.seasonYear;
+            fetchedSeason.episodes.forEach((fetchedEp: any) => {
+              const existingEpIndex = existingSeason.episodes.findIndex(ep => ep.episodeNumber === fetchedEp.episodeNumber);
+              if (existingEpIndex !== -1) {
+                // Update title, description, duration, keep links
+                existingSeason.episodes[existingEpIndex] = {
+                  ...existingSeason.episodes[existingEpIndex],
+                  title: fetchedEp.title || existingSeason.episodes[existingEpIndex].title,
+                  description: fetchedEp.description || existingSeason.episodes[existingEpIndex].description,
+                  duration: fetchedEp.duration || existingSeason.episodes[existingEpIndex].duration,
+                };
+              } else {
+                // Add new episode with pre-filled 720p link
+                existingSeason.episodes.push({
+                  id: Math.random().toString(36).substr(2, 9),
+                  episodeNumber: fetchedEp.episodeNumber,
+                  title: fetchedEp.title || `Episode ${fetchedEp.episodeNumber}`,
+                  description: fetchedEp.description || '',
+                  duration: fetchedEp.duration || '',
+                  links: [{ id: Math.random().toString(36).substr(2, 9), name: '720p', url: '', size: '', unit: 'MB' }],
+                });
+              }
+            });
+            // Sort episodes
+            existingSeason.episodes.sort((a, b) => a.episodeNumber - b.episodeNumber);
+          } else {
+            // Add new season with pre-filled links
+            updatedSeasons.push({
+              id: Math.random().toString(36).substr(2, 9),
+              seasonNumber: fetchedSeason.seasonNumber,
+              year: fetchedSeason.seasonYear,
+              zipLinks: [
+                { id: Math.random().toString(36).substr(2, 9), name: '480p', url: '', size: '', unit: 'GB' },
+                { id: Math.random().toString(36).substr(2, 9), name: '720p', url: '', size: '', unit: 'GB' },
+                { id: Math.random().toString(36).substr(2, 9), name: '1080p', url: '', size: '', unit: 'GB' }
+              ],
+              mkvLinks: [
+                { id: Math.random().toString(36).substr(2, 9), name: '480p', url: '', size: '', unit: 'GB' },
+                { id: Math.random().toString(36).substr(2, 9), name: '720p', url: '', size: '', unit: 'GB' },
+                { id: Math.random().toString(36).substr(2, 9), name: '1080p', url: '', size: '', unit: 'GB' }
+              ],
+              episodes: fetchedSeason.episodes.map((ep: any) => ({
+                id: Math.random().toString(36).substr(2, 9),
+                episodeNumber: ep.episodeNumber,
+                title: ep.title || `Episode ${ep.episodeNumber}`,
+                description: ep.description || '',
+                links: [{ id: Math.random().toString(36).substr(2, 9), name: '720p', url: '', size: '', unit: 'MB' }],
+              })).sort((a: any, b: any) => a.episodeNumber - b.episodeNumber)
+            });
+          }
+        });
+        
+        return updatedSeasons.sort((a, b) => a.seasonNumber - b.seasonNumber);
+      });
+    }
   };
 
   const fetchImdbData = async (link: string) => {
@@ -513,6 +669,11 @@ export default function ContentManagement() {
           
           if (descEl && (!fetchedData.description || fetchedData.description.length < 50)) {
             newDesc = descEl.textContent?.trim() || fetchedData.description;
+          } else if (!newDesc || newDesc.length < 50) {
+            const metaDesc = doc.querySelector('meta[name="description"]')?.getAttribute('content');
+            if (metaDesc) {
+              newDesc = metaDesc.split('. ').slice(1).join('. ').trim() || metaDesc;
+            }
           }
           
           const ratingEl = doc.querySelector('[data-testid="hero-rating-bar__aggregate-rating__score"] span');
@@ -821,7 +982,19 @@ export default function ContentManagement() {
     let newMovieLinks: QualityLinks = [];
     let newSeasons: Season[] = [];
 
-    const findGenreId = (name: string) => genres.find(g => g.name.toLowerCase() === name.toLowerCase())?.id;
+    const findGenreId = (name: string) => {
+      const fetched = name.toLowerCase();
+      return genres.find(g => {
+        const gName = g.name.toLowerCase();
+        return fetched === gName || 
+          fetched.includes(gName) || 
+          gName.includes(fetched) ||
+          (fetched === 'history' && gName === 'historical') ||
+          (fetched === 'historical' && gName === 'history') ||
+          (fetched === 'sci-fi' && gName.includes('sci')) ||
+          (fetched === 'science fiction' && gName.includes('sci'));
+      })?.id;
+    };
     const findLanguageId = (name: string) => languages.find(l => l.name.toLowerCase() === name.toLowerCase())?.id;
     const findQualityId = (name: string) => qualities.find(q => q.name.toLowerCase() === name.toLowerCase())?.id;
 
@@ -1074,6 +1247,7 @@ export default function ContentManagement() {
     onChange: React.Dispatch<React.SetStateAction<QualityLinks>>,
     droppableId: string
   ) => {
+    const safeLinks = links || [];
     const handleUrlBlur = async (url: string, idx: number) => {
       const match = url.match(/pixeldrain\.(com|dev)\/(u|api\/file)\/([a-zA-Z0-9]+)/);
       if (match) {
@@ -1131,7 +1305,7 @@ export default function ContentManagement() {
               ref={provided.innerRef}
               className="space-y-3"
             >
-              {links.map((link, idx) => (
+              {safeLinks.map((link, idx) => (
                 <Draggable key={link.id} draggableId={link.id} index={idx}>
                   {(provided, snapshot) => (
                     <div 
@@ -1570,41 +1744,96 @@ export default function ContentManagement() {
                     </div>
                   </div>
                   
-                  <div className="md:col-span-2 grid grid-cols-1 md:grid-cols-4 gap-4">
-                    <div className="md:col-span-3">
+                  <div className="md:col-span-2 grid grid-cols-1 md:grid-cols-12 gap-4">
+                    <div className="md:col-span-6">
                       <label className="block text-xs font-medium text-zinc-500 mb-1">Title</label>
                       <input type="text" value={title} onChange={(e) => setTitle(e.target.value)} className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-emerald-500" />
                     </div>
-                    <div>
+                    <div className="md:col-span-2">
                       <label className="block text-xs font-medium text-zinc-500 mb-1">Release Year</label>
-                      <input type="number" value={year || ''} onChange={(e) => setYear(parseInt(e.target.value) || new Date().getFullYear())} className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-emerald-500" />
+                      <div className="flex gap-2">
+                        <input type="number" value={year || ''} onChange={(e) => setYear(parseInt(e.target.value) || new Date().getFullYear())} className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-emerald-500" />
+                        <button type="button" onClick={handleMasterAutoFetch} disabled={!title} className="bg-emerald-500 hover:bg-emerald-600 disabled:bg-emerald-500/50 text-white px-3 py-2 rounded-lg text-xs font-medium transition-colors flex items-center justify-center whitespace-nowrap" title="Auto Fetch All with AI">
+                          <RefreshCw className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
+                    <div className="md:col-span-2">
+                      <label className="block text-xs font-medium text-zinc-500 mb-1">Release Date</label>
+                      <input type="text" placeholder="YYYY-MM-DD" value={releaseDate} onChange={(e) => setReleaseDate(e.target.value)} className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-emerald-500" />
+                    </div>
+                    <div className="md:col-span-2">
+                      <label className="block text-xs font-medium text-zinc-500 mb-1">Runtime</label>
+                      <input type="text" placeholder="e.g. 120 min" value={runtime} onChange={(e) => setRuntime(e.target.value)} className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-emerald-500" />
                     </div>
                   </div>
 
-                  <div className="md:col-span-2">
-                    <label className="block text-xs font-medium text-zinc-500 mb-1">Description</label>
-                    <textarea rows={3} value={description} onChange={(e) => setDescription(e.target.value)} className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-emerald-500" />
+                  <div className="md:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-xs font-medium text-zinc-500 mb-1">Description</label>
+                      <textarea rows={3} value={description} onChange={(e) => setDescription(e.target.value)} className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-emerald-500" />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-zinc-500 mb-1">Cast (comma separated)</label>
+                      <textarea rows={3} value={cast} onChange={(e) => setCast(e.target.value)} className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-emerald-500" />
+                    </div>
                   </div>
 
-                  <div>
-                    <label className="block text-xs font-medium text-zinc-500 mb-1">Poster (URL or Upload)</label>
-                    <div className="flex gap-2">
-                      <input type="text" placeholder="https://..." value={posterUrl} onChange={(e) => setPosterUrl(e.target.value)} className="flex-1 bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-emerald-500" />
-                      <label className="flex items-center justify-center bg-zinc-800 hover:bg-zinc-700 text-white px-3 rounded-lg cursor-pointer transition-colors">
-                        <Upload className="w-4 h-4" />
-                        <input type="file" accept="image/*" onChange={handleImageUpload} className="hidden" />
-                      </label>
+                  <div className="flex flex-col sm:flex-row gap-4">
+                    <div className="flex-1">
+                      <label className="block text-xs font-medium text-zinc-500 mb-1">Poster (URL or Upload)</label>
+                      <div className="flex gap-2">
+                        <input type="text" placeholder="https://..." value={posterUrl} onChange={(e) => setPosterUrl(e.target.value)} className="flex-1 bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-emerald-500" />
+                        <button
+                          type="button"
+                          onClick={fetchPosterWithAI}
+                          disabled={fetchingPoster || !title}
+                          className="bg-emerald-500 hover:bg-emerald-600 disabled:bg-emerald-500/50 text-white px-3 py-2 rounded-lg text-xs font-medium transition-colors flex items-center justify-center min-w-[40px]"
+                          title="Auto Fetch HD Poster with AI"
+                        >
+                          {fetchingPoster ? (
+                            <div className="animate-spin rounded-full h-4 w-4 border-t-2 border-b-2 border-white"></div>
+                          ) : (
+                            <Search className="w-4 h-4" />
+                          )}
+                        </button>
+                        <label className="flex items-center justify-center bg-zinc-800 hover:bg-zinc-700 text-white px-3 rounded-lg cursor-pointer transition-colors">
+                          <Upload className="w-4 h-4" />
+                          <input type="file" accept="image/*" onChange={handleImageUpload} className="hidden" />
+                        </label>
+                      </div>
+                      {posterUrl && (
+                        <div className="mt-1 text-[10px] text-emerald-500 truncate">
+                          {posterUrl.startsWith('data:image') ? 'Image uploaded successfully' : 'Using image URL'}
+                        </div>
+                      )}
                     </div>
                     {posterUrl && (
-                      <div className="mt-1 text-[10px] text-emerald-500 truncate">
-                        {posterUrl.startsWith('data:image') ? 'Image uploaded successfully' : 'Using image URL'}
+                      <div className="w-20 aspect-[2/3] rounded-lg overflow-hidden border border-zinc-800 bg-zinc-950 shrink-0">
+                        <img 
+                          src={posterUrl} 
+                          alt="Mini Poster" 
+                          className="w-full h-full object-cover"
+                          referrerPolicy="no-referrer"
+                          onError={(e) => {
+                            (e.target as HTMLImageElement).src = 'https://picsum.photos/seed/error/200/300';
+                          }}
+                        />
                       </div>
                     )}
                   </div>
 
                   <div>
                     <label className="block text-xs font-medium text-zinc-500 mb-1">Trailer URL (YouTube)</label>
-                    <input type="url" value={trailerUrl} onChange={(e) => setTrailerUrl(e.target.value)} className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-emerald-500" />
+                    <div className="space-y-2">
+                      <input type="url" value={trailerUrl} onChange={(e) => setTrailerUrl(e.target.value)} className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-emerald-500" />
+                      {trailerTitle && (
+                        <div className="flex items-center gap-2 px-3 py-1.5 bg-zinc-950 border border-zinc-800 rounded-lg">
+                          <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse" />
+                          <span className="text-xs text-zinc-400 truncate font-medium">{trailerTitle}</span>
+                        </div>
+                      )}
+                    </div>
                   </div>
 
                   <div>
@@ -1773,11 +2002,6 @@ export default function ContentManagement() {
                         </button>
                       ))}
                     </div>
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-medium text-zinc-500 mb-1">Cast (comma separated)</label>
-                    <input type="text" value={cast} onChange={(e) => setCast(e.target.value)} className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-emerald-500" />
                   </div>
 
                   <div>
@@ -1984,6 +2208,25 @@ export default function ContentManagement() {
                                       className="flex-1 bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm"
                                       placeholder="Episode Title"
                                     />
+                                    <input
+                                      type="text"
+                                      value={ep.duration || ''}
+                                      onChange={(e) => {
+                                        const newSeasons = [...seasons];
+                                        newSeasons[sIdx].episodes[eIdx].duration = e.target.value;
+                                        setSeasons(newSeasons);
+                                      }}
+                                      className="w-24 bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm"
+                                      placeholder="Duration"
+                                    />
+                                    <button
+                                      type="button"
+                                      onClick={() => setExpandedEpisodes(prev => ({ ...prev, [ep.id]: !prev[ep.id] }))}
+                                      className="text-zinc-400 hover:text-white p-2 transition-colors"
+                                      title="Toggle Description"
+                                    >
+                                      {expandedEpisodes[ep.id] ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                                    </button>
                                     <button type="button" onClick={() => {
                                       const newSeasons = [...seasons];
                                       newSeasons[sIdx].episodes = newSeasons[sIdx].episodes.filter((_, i) => i !== eIdx);
@@ -1992,6 +2235,22 @@ export default function ContentManagement() {
                                       <Trash2 className="w-4 h-4" />
                                     </button>
                                   </div>
+                                  
+                                  {expandedEpisodes[ep.id] && (
+                                    <div className="mb-4">
+                                      <textarea
+                                        value={ep.description || ''}
+                                        onChange={(e) => {
+                                          const newSeasons = [...seasons];
+                                          newSeasons[sIdx].episodes[eIdx].description = e.target.value;
+                                          setSeasons(newSeasons);
+                                        }}
+                                        className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm min-h-[80px]"
+                                        placeholder="Episode Description..."
+                                      />
+                                    </div>
+                                  )}
+
                                   <div className="mb-4">
                                     <h6 className="text-xs font-medium text-zinc-500 mb-2 uppercase tracking-wider">Episode Links</h6>
                                     {renderQualityInputs(ep.links, (updater) => {
@@ -2083,6 +2342,15 @@ export default function ContentManagement() {
           </div>
         </div>
       )}
+
+      <AIFetchModal
+        isOpen={isAIFetchModalOpen}
+        onClose={() => setIsAIFetchModalOpen(false)}
+        initialTitle={title}
+        initialYear={year || ''}
+        availableGenres={genres}
+        onApply={applyAIFetchedData}
+      />
 
       <ConfirmModal
         isOpen={!!deleteId}

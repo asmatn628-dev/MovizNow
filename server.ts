@@ -67,6 +67,36 @@ async function startServer() {
     }
   });
 
+  // YouTube Search Proxy
+  app.get("/api/youtube/search", async (req, res) => {
+    try {
+      const { q } = req.query;
+      if (!q) return res.status(400).json({ error: "Query required" });
+      const response = await fetch(`https://www.youtube.com/results?search_query=${encodeURIComponent(q as string)}`, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+          'Accept-Language': 'en-US,en;q=0.9',
+        }
+      });
+      const html = await response.text();
+      // Extract the first video ID and title
+      const match = html.match(/"videoId":"([^"]+)"/);
+      const titleMatch = html.match(/"title":\{"runs":\[\{"text":"([^"]+)"\}\]/);
+      
+      if (match && match[1]) {
+        return res.json({ 
+          videoId: match[1], 
+          url: `https://www.youtube.com/watch?v=${match[1]}`,
+          title: titleMatch ? titleMatch[1] : "YouTube Video"
+        });
+      }
+      res.status(404).json({ error: "No video found" });
+    } catch (error) {
+      console.error("YouTube Proxy Error:", error);
+      res.status(500).json({ error: "Internal Server Error" });
+    }
+  });
+
   // Vite middleware for development
   if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({

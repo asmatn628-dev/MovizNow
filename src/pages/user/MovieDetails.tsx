@@ -1,18 +1,17 @@
+import { GoogleGenAI, Type } from "@google/genai";
 import { useState, useEffect, useRef } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { db } from '../../firebase';
 import { doc, onSnapshot, updateDoc, arrayUnion, arrayRemove, collection, deleteDoc } from 'firebase/firestore';
 import { Content, Genre, Language, QualityLinks, Season, Quality } from '../../types';
 import { useAuth } from '../../contexts/AuthContext';
-import { Film, ArrowLeft, Play, Clock, Heart, MessageCircle, AlertCircle, Download, Share2, Chrome, Copy, Youtube, X, Edit2, Trash2, Settings, Lock } from 'lucide-react';
+import { Film, ArrowLeft, Play, Clock, Heart, MessageCircle, AlertCircle, Download, Share2, Chrome, Copy, Youtube, X, Edit2, Trash2, Settings, Lock, ChevronDown, ChevronUp, Star, Loader2 } from 'lucide-react';
 import { logEvent } from '../../services/analytics';
 import { handleFirestoreError, OperationType } from '../../utils/firestoreErrorHandler';
 import AlertModal from '../../components/AlertModal';
 import ConfirmModal from '../../components/ConfirmModal';
 import { motion, AnimatePresence } from 'motion/react';
 import { formatContentTitle } from '../../utils/contentUtils';
-
-import { NotificationMenu } from '../../components/NotificationMenu';
 
 export default function MovieDetails() {
   const { id } = useParams<{ id: string }>();
@@ -27,10 +26,79 @@ export default function MovieDetails() {
   const [linkPopup, setLinkPopup] = useState<{ isOpen: boolean; url: string; name: string; id: string; isZip?: boolean } | null>(null);
   const [isPosterExpanded, setIsPosterExpanded] = useState(false);
   const [isTrailerPopupOpen, setIsTrailerPopupOpen] = useState(false);
+  const [expandedEpisodes, setExpandedEpisodes] = useState<Record<string, boolean>>({});
   const [imdbData, setImdbData] = useState<any>(null);
   const [fetchingImdb, setFetchingImdb] = useState(false);
   const hasLoggedView = useRef(false);
   const navigate = useNavigate();
+
+  const fetchAiData = async (title: string, year: string, type: string, currentImdbId: string | null) => {
+    try {
+      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY! });
+      const response = await ai.models.generateContent({
+        model: "gemini-3-flash-preview",
+        contents: `Provide accurate details for the ${type} "${title}" released in ${year}. 
+        Current IMDb ID: ${currentImdbId || 'Unknown'}.
+        If IMDb ID is unknown, please try to find the correct 'tt' ID.
+        Include IMDb rating, release date, runtime (if movie), cast (top 5), and a short synopsis.
+        Also, suggest a high-quality official poster image URL if possible.`,
+        config: {
+          responseMimeType: "application/json",
+          responseSchema: {
+            type: Type.OBJECT,
+            properties: {
+              imdbId: { type: Type.STRING, description: "IMDb tt ID like tt1234567" },
+              rating: { type: Type.STRING, description: "IMDb rating like 8.5/10" },
+              releaseDate: { type: Type.STRING, description: "Release date like 2023-10-27" },
+              duration: { type: Type.STRING, description: "Runtime like 120 min" },
+              cast: { type: Type.STRING, description: "Top cast members separated by comma" },
+              description: { type: Type.STRING, description: "Short synopsis" },
+              posterUrl: { type: Type.STRING, description: "High quality poster URL" }
+            }
+          }
+        }
+      });
+      return JSON.parse(response.text);
+    } catch (error) {
+      console.error("AI fetch error:", error);
+      return null;
+    }
+  };
+
+  // Initialize IMDb data from content and cache
+  useEffect(() => {
+    if (content) {
+      const ttMatch = content.imdbLink?.match(/tt\d+/);
+      const ttId = ttMatch ? ttMatch[0] : null;
+      const cacheKey = `imdb_${ttId || content.id}`;
+      const cached = localStorage.getItem(cacheKey);
+      
+      const initialData = {
+        title: content.title,
+        year: content.year,
+        description: content.description,
+        cast: content.cast?.join(', '),
+        posterUrl: content.posterUrl,
+        genres: genres.filter(g => content.genreIds?.includes(g.id)).map(g => g.name).join(', '),
+        releaseDate: content.releaseDate,
+        duration: content.runtime,
+        type: content.type
+      };
+
+      if (cached) {
+        try {
+          const parsed = JSON.parse(cached);
+          // Only use cache if it's for the same content
+          if (ttId && parsed.ttId === ttId) {
+            setImdbData({ ...initialData, ...parsed });
+            return;
+          }
+        } catch (e) {}
+      }
+      
+      setImdbData(initialData);
+    }
+  }, [content, genres]);
 
   useEffect(() => {
     window.scrollTo(0, 0);
@@ -114,135 +182,155 @@ export default function MovieDetails() {
   }, [isPosterExpanded]);
 
   useEffect(() => {
-    if (content?.imdbLink) {
-      const fetchImdb = async () => {
+    if (content) {
+      const fetchData = async () => {
+        const ttMatch = content.imdbLink?.match(/tt\d+/);
+        let ttId = ttMatch ? ttMatch[0] : null;
+
         setFetchingImdb(true);
-        const ttMatch = content.imdbLink!.match(/tt\d+/);
-        if (!ttMatch) {
-          setFetchingImdb(false);
-          return;
-        }
-        const ttId = ttMatch[0];
-        let data: any = {};
-        
-        // Try TVMaze first
-        try {
-          const tvmazeRes = await fetch(`https://api.tvmaze.com/lookup/shows?imdb=${ttId}`);
-          if (tvmazeRes.ok) {
-            const show = await tvmazeRes.json();
-            data.title = show.name;
-            data.description = show.summary?.replace(/<[^>]*>?/gm, '') || '';
-            if (show.image?.original) data.posterUrl = show.image.original;
-          if (show.premiered) {
-            data.year = parseInt(show.premiered.substring(0, 4));
-            data.releaseDate = show.premiered;
-          }
-          data.duration = show.runtime ? `${show.runtime} min` : '';
-          data.rating = show.rating?.average ? `${show.rating.average}/10` : '';
-          if (show.genres) data.genres = show.genres.join(', ');
-          
-          try {
-              const castRes = await fetch(`https://api.tvmaze.com/shows/${show.id}/cast`);
-              if (castRes.ok) {
-                const castData = await castRes.json();
-                data.cast = castData.slice(0, 5).map((c: any) => c.person.name).join(', ');
-              }
-            } catch (e) {}
-          }
-        } catch (error) {
-          // TVMaze fetch failed, silently fallback
-        }
+        let data: any = { ttId, timestamp: Date.now(), fetchedFields: [] };
 
-        if (Object.keys(data).length === 0) {
-          // Fallback to suggestion API
-          try {
-            let suggestRes = await fetch(`/api/imdb/suggestion/${ttId}`).catch(() => null);
-            let suggestData = null;
-            
-            if (suggestRes && suggestRes.ok) {
-              suggestData = await suggestRes.json();
-            }
+        // 1. Parallel API Fetching
+        const fetchPromises = [];
 
-            if (suggestData) {
-              const item = suggestData.d?.find((i: any) => i.id === ttId) || suggestData.d?.[0];
-              if (item) {
-                data.title = item.l || '';
-                data.year = item.y || '';
-                data.cast = item.s || '';
-                if (item.i?.imageUrl) data.posterUrl = item.i.imageUrl;
-              }
-            }
-          } catch (error) {
-            // IMDb suggestion fetch failed, silently fallback
-          }
-          
-        // Try to get more details via proxy
-        try {
-          const proxyUrl = `/api/imdb/title/${ttId}`;
-          let pageRes = await fetch(proxyUrl);
-          let html = '';
-          
-          if (pageRes.ok) {
-            html = await pageRes.text();
-          }
-          
-          if (html) {
-            const parser = new DOMParser();
-            const doc = parser.parseFromString(html, 'text/html');
-            
-            const descEl = doc.querySelector('[data-testid="plot-xl"]') || 
-                           doc.querySelector('[data-testid="plot-l"]') ||
-                           doc.querySelector('[data-testid="plot-xs"]') ||
-                           doc.querySelector('.ipc-html-content-inner-div');
-            
-            if (descEl && (!data.description || data.description.length < 50)) {
-              data.description = descEl.textContent?.trim() || data.description;
-            }
-            
-            const ratingEl = doc.querySelector('[data-testid="hero-rating-bar__aggregate-rating__score"] span');
-            if (ratingEl && !data.rating) data.rating = `${ratingEl.textContent}/10`;
-
-            const genresEls = doc.querySelectorAll('[data-testid="genres"] a, .ipc-chip-list__scroller a');
-            if (genresEls.length > 0 && !data.genres) {
-              const genresArr: string[] = [];
-              genresEls.forEach(el => {
-                if (el.textContent) genresArr.push(el.textContent.trim());
-              });
-              data.genres = [...new Set(genresArr)].join(', ');
-            }
-
-            const metadataItems = doc.querySelectorAll('[data-testid="hero-title-block__metadata"] li');
-            if (metadataItems.length > 0) {
-              metadataItems.forEach(item => {
-                const text = item.textContent || '';
-                if (text.includes('h') && text.includes('m')) {
-                  if (!data.duration) data.duration = text.trim();
-                } else if (text.match(/^\d{4}$/)) {
-                  if (!data.year) data.year = parseInt(text);
+        if (ttId) {
+          // TVMaze
+          fetchPromises.push(
+            fetch(`https://api.tvmaze.com/lookup/shows?imdb=${ttId}`)
+              .then(res => res.ok ? res.json() : null)
+              .then(show => {
+                if (show) {
+                  if (show.image?.original && !content.posterUrl) {
+                    data.posterUrl = show.image.original;
+                    if (!data.fetchedFields.includes('posterUrl')) data.fetchedFields.push('posterUrl');
+                  }
+                  if (show.rating?.average && !data.rating) {
+                    data.rating = `${show.rating.average}/10`;
+                    if (!data.fetchedFields.includes('rating')) data.fetchedFields.push('rating');
+                  }
+                  if (show.premiered && !content.releaseDate && !data.releaseDate) {
+                    data.releaseDate = show.premiered;
+                    if (!data.fetchedFields.includes('releaseDate')) data.fetchedFields.push('releaseDate');
+                  }
+                  if (show.runtime && !content.runtime && content.type !== 'series' && !data.duration) {
+                    data.duration = `${show.runtime} min`;
+                    if (!data.fetchedFields.includes('duration')) data.fetchedFields.push('duration');
+                  }
+                  if (show.summary && !content.description && !data.description) {
+                    data.description = show.summary.replace(/<[^>]*>/g, '');
+                    if (!data.fetchedFields.includes('description')) data.fetchedFields.push('description');
+                  }
                 }
-              });
-            }
+              })
+              .catch(() => null)
+          );
 
-            const releaseDateEl = doc.querySelector('[data-testid="title-details-releasedate"] a');
-            if (releaseDateEl && !data.releaseDate) {
-              data.releaseDate = releaseDateEl.textContent?.trim().split(' (')[0] || '';
+          // IMDb Suggestion API
+          fetchPromises.push(
+            fetch(`/api/imdb/suggestion/${ttId}`)
+              .then(res => res.ok ? res.json() : null)
+              .then(suggestData => {
+                if (suggestData) {
+                  const item = suggestData.d?.find((i: any) => i.id === ttId) || suggestData.d?.[0];
+                  if (item && item.i?.imageUrl && !content.posterUrl && !data.posterUrl) {
+                    data.posterUrl = item.i.imageUrl;
+                    if (!data.fetchedFields.includes('posterUrl')) data.fetchedFields.push('posterUrl');
+                  }
+                }
+              })
+              .catch(() => null)
+          );
+
+          // IMDb Scraper Proxy
+          fetchPromises.push(
+            fetch(`/api/imdb/title/${ttId}`)
+              .then(res => res.ok ? res.text() : null)
+              .then(html => {
+                if (html) {
+                  const parser = new DOMParser();
+                  const doc = parser.parseFromString(html, 'text/html');
+                  
+                  if (!data.rating) {
+                    const ratingEl = doc.querySelector('[data-testid="hero-rating-bar__aggregate-rating__score"] span');
+                    if (ratingEl && ratingEl.textContent?.trim()) {
+                      data.rating = `${ratingEl.textContent.trim()}/10`;
+                      if (!data.fetchedFields.includes('rating')) data.fetchedFields.push('rating');
+                    }
+                  }
+                  if (!content.releaseDate && !data.releaseDate) {
+                    const releaseEl = doc.querySelector('[data-testid="title-details-releasedate"] .ipc-metadata-list-item__list-content-item');
+                    if (releaseEl) {
+                      data.releaseDate = releaseEl.textContent?.trim();
+                      if (!data.fetchedFields.includes('releaseDate')) data.fetchedFields.push('releaseDate');
+                    }
+                  }
+                  if (!content.runtime && !data.duration && content.type !== 'series') {
+                    const runtimeEl = doc.querySelector('[data-testid="title-techspec_runtime"] .ipc-metadata-list-item__list-content-item');
+                    if (runtimeEl) {
+                      data.duration = runtimeEl.textContent?.trim();
+                      if (!data.fetchedFields.includes('duration')) data.fetchedFields.push('duration');
+                    }
+                  }
+                  if (!content.cast || content.cast.length === 0) {
+                    const castEls = doc.querySelectorAll('[data-testid="title-cast-item__actor"]');
+                    if (castEls.length > 0 && !data.cast) {
+                      data.cast = Array.from(castEls).slice(0, 10).map(el => el.textContent?.trim()).join(', ');
+                      if (!data.fetchedFields.includes('cast')) data.fetchedFields.push('cast');
+                    }
+                  }
+                  if (!content.description && !data.description) {
+                    const descEl = doc.querySelector('[data-testid="plot-l"]');
+                    if (descEl) {
+                      data.description = descEl.textContent?.trim();
+                      if (!data.fetchedFields.includes('description')) data.fetchedFields.push('description');
+                    }
+                  }
+                }
+              })
+              .catch(() => null)
+          );
+        }
+
+        // Wait for all standard API calls
+        await Promise.all(fetchPromises);
+
+        // 2. AI Master Fallback
+        const missingFields = [];
+        if (!ttId) missingFields.push('imdbId');
+        if (!data.rating) missingFields.push('rating');
+        if (!data.releaseDate && !content.releaseDate) missingFields.push('releaseDate');
+        if (!data.duration && !content.runtime && content.type !== 'series') missingFields.push('duration');
+        if (!data.cast && (!content.cast || content.cast.length === 0)) missingFields.push('cast');
+        if (!data.description && !content.description) missingFields.push('description');
+        if (!data.posterUrl && !content.posterUrl) missingFields.push('posterUrl');
+
+        if (missingFields.length > 0) {
+          const aiResult = await fetchAiData(content.title, String(content.year || ''), content.type, ttId);
+          if (aiResult) {
+            if (aiResult.imdbId && !ttId) {
+              ttId = aiResult.imdbId;
+              data.ttId = ttId;
+              data.fetchedFields.push('imdbId');
             }
-          } else {
-            console.error("IMDb proxy fetch failed", pageRes.status, pageRes.statusText);
+            missingFields.forEach(field => {
+              if (aiResult[field] && !data[field]) {
+                data[field] = aiResult[field];
+                if (!data.fetchedFields.includes(field)) data.fetchedFields.push(field);
+              }
+            });
+            data.isAiGenerated = true;
           }
-        } catch (error) {
-          console.error("IMDb proxy fetch error", error);
         }
-        }
-        
-        if (Object.keys(data).length > 0) {
-          setImdbData(data);
+
+        if (data.fetchedFields.length > 0) {
+          setImdbData(prev => ({ ...prev, ...data, isFetched: true }));
+          localStorage.setItem(`imdb_${ttId || content.id}`, JSON.stringify({ ...data, ttId, timestamp: Date.now(), isFetched: true }));
         }
         setFetchingImdb(false);
       };
-      fetchImdb();
+      fetchData();
     }
-  }, [content?.imdbLink]);
+  }, [content?.id, content?.imdbLink]);
 
   const getYouTubeEmbedUrl = (url?: string) => {
     if (!url) return null;
@@ -607,7 +695,6 @@ export default function MovieDetails() {
             <ArrowLeft className="w-5 h-5" /> Back
           </button>
           <div className="pointer-events-auto">
-            {profile && <NotificationMenu profile={profile} />}
           </div>
         </div>
 
@@ -628,7 +715,14 @@ export default function MovieDetails() {
                 </span>
                 <span className="text-zinc-300 font-medium">{content.year}</span>
                 {content.qualityId && (
-                  <span className="bg-zinc-800 text-emerald-400 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider border border-zinc-700">
+                  <span className={`px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider ${
+                    (() => {
+                      const qName = qualities.find(q => q.id === content.qualityId)?.name || '';
+                      return ['WEB-DL', 'WebRip', 'HDRip', 'BluRay'].some(hq => qName.toUpperCase().includes(hq.toUpperCase()))
+                        ? 'bg-cyan-500 text-black shadow-[0_0_10px_rgba(6,182,212,0.5)]'
+                        : 'bg-amber-500 text-black shadow-[0_0_10px_rgba(245,158,11,0.5)]';
+                    })()
+                  }`}>
                     {qualities.find(q => q.id === content.qualityId)?.name}
                   </span>
                 )}
@@ -636,12 +730,6 @@ export default function MovieDetails() {
               
               <h1 className="text-4xl md:text-6xl font-bold mb-4 leading-tight">{formatContentTitle(content)}</h1>
               
-              <div className="flex flex-wrap items-center justify-center gap-4 text-sm text-zinc-300 mb-6">
-                {contentGenres && <span>{contentGenres}</span>}
-                {contentGenres && contentLangs && <span>•</span>}
-                {contentLangs && <span>{contentLangs}</span>}
-              </div>
-
               <div className="flex flex-wrap items-center justify-center gap-4">
                 {content.trailerUrl && (
                   <button 
@@ -717,7 +805,7 @@ export default function MovieDetails() {
       </div>
 
       {/* Main Content Area */}
-      <div className="max-w-7xl mx-auto px-8 py-12">
+      <div className="max-w-7xl mx-auto px-8 pt-0 pb-12">
         {!canPlay && (
           <div className="bg-red-500/10 border border-red-500/20 text-red-500 p-6 rounded-2xl mb-12 flex items-start gap-4">
             <AlertCircle className="w-6 h-6 shrink-0 mt-0.5" />
@@ -737,69 +825,147 @@ export default function MovieDetails() {
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-12">
           <div className="lg:col-span-2 space-y-12">
-            {fetchingImdb ? (
-              <div className="flex justify-center items-center py-12">
-                <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-yellow-500"></div>
-              </div>
-            ) : imdbData ? (
-              <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-2xl p-6 md:p-8 flex flex-col md:flex-row gap-8">
-                {imdbData.posterUrl && imdbData.posterUrl.trim() !== "" && (
-                  <img src={imdbData.posterUrl} alt="IMDb Poster" className="w-32 md:w-48 mx-auto md:mx-0 rounded-xl shadow-lg object-cover" referrerPolicy="no-referrer" />
-                )}
-                <div className="flex-1 space-y-4">
-                  <h2 className="text-3xl font-bold text-yellow-500">
-                    {imdbData.title} {imdbData.year ? `(${imdbData.year})` : ''}
-                  </h2>
-                  
-                  <div className="flex flex-wrap gap-4 text-sm font-medium text-yellow-500/80">
-                    {imdbData.releaseDate && <span>Release: {imdbData.releaseDate}</span>}
-                    {imdbData.duration && <span>Duration: {imdbData.duration}</span>}
-                    {imdbData.rating && <span className="flex items-center gap-1">IMDb Rating: ⭐ <span className="text-yellow-500 font-bold">{imdbData.rating}</span></span>}
-                    {imdbData.genres && <span className="flex items-center gap-1">Genres: <span className="text-emerald-500">{imdbData.genres}</span></span>}
-                  </div>
-                  
-                  {(imdbData.description || content.description) && (
-                    <div>
-                      <h3 className="text-lg font-bold text-yellow-500 mb-2">Synopsis</h3>
-                      <p className="text-zinc-300 leading-relaxed">{imdbData.description || content.description}</p>
+            <section className="-mt-4 md:-mt-8 relative z-20">
+              {imdbData ? (
+                <div className="bg-cyan-500/10 border border-cyan-500/30 rounded-2xl p-6 md:p-8 flex flex-col md:flex-row gap-8 relative overflow-hidden">
+                  {fetchingImdb && (
+                    <div className="absolute top-3 right-3 flex items-center gap-1.5 bg-cyan-500/20 backdrop-blur-md px-2 py-1 rounded-full border border-cyan-500/30 z-10">
+                      <Loader2 className="w-3 h-3 animate-spin text-cyan-400" />
+                      <span className="text-[9px] font-bold text-cyan-400 uppercase tracking-tighter">Updating</span>
                     </div>
                   )}
-                  
-                  {(imdbData.cast || (content.cast && content.cast.length > 0)) && (
-                    <div>
-                      <h3 className="text-lg font-bold text-yellow-500 mb-2">Cast</h3>
-                      <div className="flex flex-wrap gap-2">
-                        {(imdbData.cast ? imdbData.cast.split(',').map(c => c.trim()) : content.cast).map((actor, idx) => (
-                          <span key={idx} className="bg-zinc-800/80 border border-zinc-700 px-3 py-1.5 rounded-full text-sm text-zinc-300">
-                            {actor}
-                          </span>
-                        ))}
+                  {imdbData.isAiGenerated && !fetchingImdb && (
+                    <div className="absolute top-3 right-3 flex items-center gap-1.5 bg-purple-500/20 backdrop-blur-md px-2 py-1 rounded-full border border-purple-500/30 z-10">
+                      <div className="w-1.5 h-1.5 rounded-full bg-purple-400 animate-pulse" />
+                      <span className="text-[9px] font-bold text-purple-400 uppercase tracking-tighter">AI Enhanced</span>
+                    </div>
+                  )}
+                  {(imdbData.posterUrl || content.posterUrl) && (
+                    <img 
+                      src={imdbData.posterUrl || content.posterUrl} 
+                      alt="Poster" 
+                      className="w-32 md:w-48 mx-auto md:mx-0 rounded-xl shadow-lg object-cover cursor-pointer hover:scale-105 transition-transform" 
+                      referrerPolicy="no-referrer"
+                      onClick={() => setIsPosterExpanded(true)}
+                    />
+                  )}
+                  <div className="flex-1 space-y-4">
+                    <div className="flex justify-between items-start">
+                      <h3 className="text-3xl font-bold text-cyan-400">
+                        {imdbData.title} {imdbData.year ? `(${imdbData.year})` : ''}
+                      </h3>
+                      <div className="flex flex-col items-end gap-2">
+                        {imdbData.rating && imdbData.fetchedFields?.includes('rating') && (
+                          <div className="bg-[#f5c518] text-black px-2.5 py-1 rounded-md flex items-center gap-2 font-bold text-sm shadow-[0_0_20px_rgba(245,197,24,0.2)]">
+                            <span className="bg-black text-[#f5c518] px-1 rounded-sm text-[10px] font-black leading-none py-0.5 tracking-tighter">IMDb</span>
+                            <div className="flex items-center gap-1">
+                              <Star className="w-3.5 h-3.5 fill-current" />
+                              <span>{imdbData.rating.replace('/10', '')}</span>
+                            </div>
+                          </div>
+                        )}
                       </div>
                     </div>
-                  )}
-                </div>
-              </div>
-            ) : (
-              <>
-                <section>
-                  <h2 className="text-2xl font-bold mb-4">Synopsis</h2>
-                  <p className="text-zinc-300 text-lg leading-relaxed">{content.description}</p>
-                </section>
-
-                {content.cast && content.cast.length > 0 && (
-                  <section>
-                    <h2 className="text-2xl font-bold mb-4">Cast</h2>
-                    <div className="flex flex-wrap gap-2">
-                      {content.cast.map((actor, idx) => (
-                        <span key={idx} className="bg-zinc-900 border border-zinc-800 px-4 py-2 rounded-full text-sm">
-                          {actor}
-                        </span>
-                      ))}
+                    
+                    <div className="grid grid-cols-2 md:grid-cols-3 gap-4 text-sm font-medium text-cyan-400/80">
+                      {imdbData.releaseDate && (
+                        <div className="flex flex-col">
+                          <span className="text-zinc-500 text-[10px] uppercase tracking-wider">Release Date</span>
+                          <span>{imdbData.releaseDate}</span>
+                        </div>
+                      )}
+                      {imdbData.duration && content.type !== 'series' && (
+                        <div className="flex flex-col">
+                          <span className="text-zinc-500 text-[10px] uppercase tracking-wider">Runtime</span>
+                          <span>{imdbData.duration}</span>
+                        </div>
+                      )}
                     </div>
+
+                    <div className="flex flex-col gap-2 pt-2 border-t border-cyan-500/10">
+                      {imdbData.genres && (
+                        <div className="flex items-baseline gap-2">
+                          <span className="text-zinc-500 text-xs font-medium">Genre</span>
+                          <span className="text-sm font-medium text-cyan-400/80">{imdbData.genres}</span>
+                        </div>
+                      )}
+                      {contentLangs && (
+                        <div className="flex items-baseline gap-2">
+                          <span className="text-zinc-500 text-xs font-medium">Language</span>
+                          <span className="text-sm font-medium text-cyan-400/80">{contentLangs}</span>
+                        </div>
+                      )}
+                    </div>
+                    
+                    {(imdbData.cast || (content.cast && content.cast.length > 0)) && (
+                      <div className="pt-2">
+                        <h4 className="text-sm font-bold text-cyan-400 mb-2 uppercase tracking-wider opacity-70">Cast</h4>
+                        <div className="flex flex-wrap gap-1.5">
+                          {(imdbData.cast ? imdbData.cast.split(',').map(c => c.trim()) : content.cast).map((actor, idx) => (
+                            <span key={idx} className="bg-cyan-500/5 border border-cyan-500/10 px-2 py-1 rounded-md text-[11px] text-zinc-400">
+                              {actor}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {(imdbData.description || content.description) && (
+                      <div className="pt-2">
+                        <h4 className="text-sm font-bold text-cyan-400 mb-1 uppercase tracking-wider opacity-70">Synopsis</h4>
+                        <p className="text-zinc-400 text-xs leading-relaxed">{imdbData.description || content.description}</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-12">
+                  <section className="bg-cyan-500/5 border border-cyan-500/20 rounded-2xl p-8 relative overflow-hidden">
+                    {fetchingImdb && (
+                      <div className="absolute top-3 right-3 flex items-center gap-1.5 bg-cyan-500/20 backdrop-blur-md px-2 py-1 rounded-full border border-cyan-500/30 z-10">
+                        <Loader2 className="w-3 h-3 animate-spin text-cyan-400" />
+                        <span className="text-[9px] font-bold text-cyan-400 uppercase tracking-tighter">Updating</span>
+                      </div>
+                    )}
+                    <div className="flex flex-wrap gap-6 mb-8 text-sm font-medium text-cyan-400/80">
+                      {content.year && <span className="flex items-center gap-2 bg-cyan-500/10 px-3 py-1.5 rounded-lg"><Clock className="w-4 h-4 text-cyan-500" /> {content.year}</span>}
+                      {content.runtime && content.type !== 'series' && <span className="flex items-center gap-2 bg-cyan-500/10 px-3 py-1.5 rounded-lg"><Clock className="w-4 h-4 text-cyan-500" /> {content.runtime}</span>}
+                      {content.releaseDate && <span className="flex items-center gap-2 bg-cyan-500/10 px-3 py-1.5 rounded-lg"><Film className="w-4 h-4 text-cyan-500" /> {content.releaseDate}</span>}
+                      {contentGenres && <span className="flex items-center gap-2 bg-cyan-500/10 px-3 py-1.5 rounded-lg">Genre: {contentGenres}</span>}
+                      {contentLangs && <span className="flex items-center gap-2 bg-cyan-500/10 px-3 py-1.5 rounded-lg">Language: {contentLangs}</span>}
+                      {content.qualityId && (
+                        <span className={`flex items-center gap-2 px-3 py-1.5 rounded-lg font-bold ${
+                          (() => {
+                            const qName = qualities.find(q => q.id === content.qualityId)?.name || '';
+                            return ['WEB-DL', 'WebRip', 'HDRip', 'BluRay'].some(hq => qName.toUpperCase().includes(hq.toUpperCase()))
+                              ? 'bg-cyan-500 text-black shadow-[0_0_10px_rgba(6,182,212,0.5)]'
+                              : 'bg-amber-500 text-black shadow-[0_0_10px_rgba(245,158,11,0.5)]';
+                          })()
+                        }`}>
+                          Quality: {qualities.find(q => q.id === content.qualityId)?.name}
+                        </span>
+                      )}
+                    </div>
+                    
+                    {content.cast && content.cast.length > 0 && (
+                      <div className="mb-6">
+                        <h3 className="text-sm font-bold text-cyan-400 mb-2 uppercase tracking-wider opacity-70">Cast</h3>
+                        <div className="flex flex-wrap gap-1.5">
+                          {content.cast.map((actor, idx) => (
+                            <span key={idx} className="bg-cyan-500/5 border border-cyan-500/10 px-2 py-1 rounded-md text-[11px] text-zinc-400">
+                              {actor}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    <h3 className="text-sm font-bold mb-1 text-cyan-400 uppercase tracking-wider opacity-70">Synopsis</h3>
+                    <p className="text-zinc-400 text-xs leading-relaxed">{content.description}</p>
                   </section>
-                )}
-              </>
-            )}
+                </div>
+              )}
+            </section>
 
             {/* Links Section */}
             <section>
@@ -876,12 +1042,32 @@ export default function MovieDetails() {
                                     <h4 className="font-semibold text-zinc-400 mb-4 text-sm uppercase tracking-wider">Episodes</h4>
                                     <div className="space-y-4">
                                       {season.episodes.map(ep => (
-                                        <div key={ep.id} className="bg-zinc-950 border border-zinc-800 rounded-xl p-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
-                                          <div>
-                                            <span className="text-emerald-500 font-bold mr-3">E{ep.episodeNumber}</span>
-                                            <span className="font-medium">{ep.title}</span>
+                                        <div key={ep.id} className="bg-zinc-950 border border-zinc-800 rounded-xl p-4 flex flex-col gap-4">
+                                          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                                            <div>
+                                              <span className="text-emerald-500 font-bold mr-3">E{ep.episodeNumber}</span>
+                                              <span className="font-medium">{ep.title}</span>
+                                              {ep.description && (
+                                                <button
+                                                  onClick={() => setExpandedEpisodes(prev => ({ ...prev, [ep.id]: !prev[ep.id] }))}
+                                                  className="ml-3 text-xs text-zinc-400 hover:text-emerald-500 transition-colors"
+                                                >
+                                                  {expandedEpisodes[ep.id] ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                                                </button>
+                                              )}
+                                              {ep.duration && (
+                                                <span className="ml-3 text-xs text-zinc-500 bg-zinc-800 px-2 py-0.5 rounded">
+                                                  {ep.duration}
+                                                </span>
+                                              )}
+                                            </div>
+                                            {renderLinks(ep.links)}
                                           </div>
-                                          {renderLinks(ep.links)}
+                                          {ep.description && expandedEpisodes[ep.id] && (
+                                            <div className="text-sm text-zinc-400 mt-2 bg-zinc-900/50 p-3 rounded-lg">
+                                              {ep.description}
+                                            </div>
+                                          )}
                                         </div>
                                       ))}
                                     </div>

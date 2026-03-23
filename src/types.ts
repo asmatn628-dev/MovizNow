@@ -76,6 +76,8 @@ export interface Episode {
   id: string;
   episodeNumber: number;
   title: string;
+  description?: string;
+  duration?: string;
   links: QualityLinks;
 }
 
@@ -111,6 +113,8 @@ export interface Content {
   imdbLink?: string; // Added imdbLink
   cast: string[];
   year: number;
+  releaseDate?: string;
+  runtime?: string;
   createdAt: string;
   updatedAt: string;
   status?: 'draft' | 'published';
