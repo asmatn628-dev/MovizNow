@@ -1,23 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { db } from '../../firebase';
-import { collection, onSnapshot, doc, updateDoc } from 'firebase/firestore';
+import { collection, onSnapshot, doc, updateDoc, getDoc } from 'firebase/firestore';
 import { Content, Season, QualityLinks, LinkDef } from '../../types';
-import { AlertTriangle, Edit2, ExternalLink, RefreshCw, X, Save, Trash2, CheckCircle2, Filter, ArrowUpDown } from 'lucide-react';
+import { AlertTriangle, Edit2, ExternalLink, RefreshCw, X, Save, CheckCircle2, Filter, ArrowUpDown } from 'lucide-react';
 import { handleFirestoreError, OperationType } from '../../utils/firestoreErrorHandler';
-import { GoogleGenAI } from "@google/genai";
-
-interface ErrorLinkInfo {
-  contentId: string;
-  contentTitle: string;
-  contentType: 'movie' | 'series';
-  location: string; // e.g., "Movie Links", "Season 1 ZIP", "Season 1 Episode 2"
-  link: LinkDef;
-  linkIndex: number;
-  seasonIndex?: number;
-  episodeIndex?: number;
-  listType?: 'movie' | 'zip' | 'mkv' | 'episode';
-  errorDetail: string;
-}
+import { scannerService, ErrorLinkInfo, ScanState } from '../../services/ScannerService';
 
 export default function ErrorLinks() {
   const [contentList, setContentList] = useState<Content[]>([]);
@@ -28,44 +15,6 @@ export default function ErrorLinks() {
   const [scannedCount, setScannedCount] = useState(0);
   const [totalLinks, setTotalLinks] = useState(0);
 
-  const analyzeErrorWithAI = async (url: string, status: number, data: any): Promise<string> => {
-    try {
-      const apiKey = process.env.GEMINI_API_KEY;
-      if (!apiKey) {
-        console.warn("GEMINI_API_KEY is not defined, skipping AI analysis");
-        return `Error ${status}`;
-      }
-      const ai = new GoogleGenAI({ apiKey });
-      const prompt = `
-        Analyze this Pixeldrain API response and determine the exact reason why the link is unavailable or problematic.
-        URL: ${url}
-        HTTP Status: ${status}
-        API Response Body: ${JSON.stringify(data)}
-        
-        Provide a short, clear, and professional error message (max 50 characters).
-        If it's a copyright/legal issue, say "451 - Copyright/Legal Removal".
-        If it's deleted by user, say "Deleted by uploader".
-        If it's expired, say "Link Expired".
-        If it's a 404, say "File Not Found".
-        If it's a 403, say "Access Forbidden".
-        If it's a 410, say "File Gone/Deleted".
-        If it's a 451, say "Legal/Abuse Removal".
-        
-        Just return the error message text, nothing else.
-      `;
-
-      const result = await ai.models.generateContent({
-        model: "gemini-3-flash-preview",
-        contents: prompt,
-      });
-
-      return result.text.trim() || `Error ${status}`;
-    } catch (e) {
-      console.error("AI Analysis failed", e);
-      return `Error ${status}`;
-    }
-  };
-  
   const [editingLink, setEditingLink] = useState<ErrorLinkInfo | null>(null);
   const [editUrl, setEditUrl] = useState('');
   const [editSize, setEditSize] = useState('');
@@ -101,7 +50,22 @@ export default function ErrorLinks() {
       setLoading(false);
       handleFirestoreError(error, OperationType.LIST, 'content');
     });
-    return () => unsubContent();
+
+    const unsubScan = onSnapshot(doc(db, 'scans', 'current'), (snapshot) => {
+      if (snapshot.exists()) {
+        const data = snapshot.data() as ScanState;
+        setScanStatus(data.status);
+        setScanning(data.status === 'scanning');
+        setScannedCount(data.scannedCount);
+        setTotalLinks(data.totalLinks);
+        setErrorLinks(data.errorLinks || []);
+      }
+    });
+
+    return () => {
+      unsubContent();
+      unsubScan();
+    };
   }, []);
 
   const parseLinks = (linksStr: string | undefined): QualityLinks => {
@@ -124,68 +88,8 @@ export default function ErrorLinks() {
     return [];
   };
 
-  const checkPixeldrainLink = async (url: string): Promise<string | null> => {
-    if (!url || url.trim() === '') return "Empty link";
-    
-    if (!url.includes('pixeldrain.com') && !url.includes('pixeldrain.dev')) {
-      return null; // Not a Pixeldrain link, we can't check it, so assume OK unless size/unit missing
-    }
-
-    const fileMatch = url.match(/pixeldrain\.(?:com|dev)\/(?:u|api\/file)\/([a-zA-Z0-9]+)/);
-    const listMatch = url.match(/pixeldrain\.(?:com|dev)\/(?:l|api\/list)\/([a-zA-Z0-9]+)/);
-    
-    if (fileMatch) {
-      const id = fileMatch[1];
-      try {
-        const res = await fetch(`https://pixeldrain.com/api/file/${id}/info`);
-        
-        let data;
-        try {
-          data = await res.json();
-        } catch (e) {}
-
-        if (!res.ok || (data && data.success === false)) {
-          return await analyzeErrorWithAI(url, res.status, data);
-        }
-
-        if (data && (typeof data.size === 'undefined' || data.size === 0)) {
-          return "API didn't return file size";
-        }
-        return null; // No error
-      } catch (e) {
-        return "Network error checking link";
-      }
-    } else if (listMatch) {
-      const id = listMatch[1];
-      try {
-        const res = await fetch(`https://pixeldrain.com/api/list/${id}`);
-        
-        let data;
-        try {
-          data = await res.json();
-        } catch (e) {}
-
-        if (!res.ok || (data && data.success === false)) {
-          return await analyzeErrorWithAI(url, res.status, data);
-        }
-
-        if (data && (!data.files || data.files.length === 0)) {
-          return "API didn't return file list";
-        }
-        return null; // No error
-      } catch (e) {
-        return "Network error checking link";
-      }
-    }
-    
-    return null;
-  };
-
   const scanLinks = async () => {
-    setScanning(true);
-    setScanStatus('scanning');
-    setErrorLinks([]);
-    setScannedCount(0);
+    if (scanning) return;
     
     let allLinksToScan: { info: ErrorLinkInfo, url: string }[] = [];
 
@@ -274,51 +178,9 @@ export default function ErrorLinks() {
       }
     });
 
-    setTotalLinks(allLinksToScan.length);
+    if (allLinksToScan.length === 0) return;
     
-    if (allLinksToScan.length === 0) {
-      setScanning(false);
-      setScanStatus('completed');
-      return;
-    }
-    
-    // Process in batches to avoid overwhelming the browser/API
-    const batchSize = 5;
-    const foundErrors: ErrorLinkInfo[] = [];
-    
-    try {
-      for (let i = 0; i < allLinksToScan.length; i += batchSize) {
-        const batch = allLinksToScan.slice(i, i + batchSize);
-        const results = await Promise.all(
-          batch.map(async (item) => {
-            let error = await checkPixeldrainLink(item.url);
-            
-            // Also flag if size or unit is missing
-            if (!error && (!item.info.link.size || !item.info.link.unit)) {
-              error = "Missing size or unit";
-            }
-            
-            return { item, error };
-          })
-        );
-        
-        results.forEach(({ item, error }) => {
-          if (error) {
-            item.info.errorDetail = error;
-            foundErrors.push(item.info);
-          }
-        });
-        
-        setScannedCount(Math.min(i + batchSize, allLinksToScan.length));
-        setErrorLinks([...foundErrors]); // Update UI progressively
-      }
-      setScanStatus('completed');
-    } catch (error) {
-      console.error("Error scanning links:", error);
-      setScanStatus('error');
-    } finally {
-      setScanning(false);
-    }
+    scannerService.startScan(allLinksToScan);
   };
 
   const handleEditClick = (info: ErrorLinkInfo) => {
@@ -464,17 +326,17 @@ export default function ErrorLinks() {
             <AlertTriangle className="w-8 h-8 text-yellow-500" />
             Error Links
           </h1>
-          <p className="text-zinc-400 mt-1">Scan and fix broken Pixeldrain links across all content.</p>
+          <p className="text-zinc-400 mt-1">AI-Powered Deep Scan using multiple algorithms to find broken links.</p>
         </div>
         <div className="flex items-center gap-4">
           {scanStatus === 'completed' && (
             <span className="text-emerald-500 text-sm font-medium flex items-center gap-1">
-              <CheckCircle2 className="w-4 h-4" /> Scan complete
+              <CheckCircle2 className="w-4 h-4" /> Deep Scan complete
             </span>
           )}
           {scanStatus === 'error' && (
             <span className="text-red-500 text-sm font-medium flex items-center gap-1">
-              <AlertTriangle className="w-4 h-4" /> Cannot scan
+              <AlertTriangle className="w-4 h-4" /> Deep Scan failed
             </span>
           )}
           <button
@@ -485,12 +347,12 @@ export default function ErrorLinks() {
             {scanning ? (
               <>
                 <RefreshCw className="w-5 h-5 animate-spin" />
-                Scanning ({scannedCount}/{totalLinks})
+                Deep Scanning ({scannedCount}/{totalLinks})
               </>
             ) : (
               <>
                 <RefreshCw className="w-5 h-5" />
-                {scanStatus === 'idle' ? 'Scan Links' : 'Scan Again'}
+                {scanStatus === 'idle' ? 'Start AI Deep Scan' : 'Restart Deep Scan'}
               </>
             )}
           </button>
@@ -593,7 +455,14 @@ export default function ErrorLinks() {
                           {info.link.url} <ExternalLink className="w-3 h-3" />
                         </a>
                       </td>
-                      <td className="px-6 py-4 text-red-400 font-medium">{info.errorDetail}</td>
+                      <td className="px-6 py-4">
+                        <div className="text-red-400 font-medium">{info.errorDetail}</div>
+                        {info.fetchedSize && (
+                          <div className="text-[10px] text-zinc-500 mt-1 flex items-center gap-1">
+                            <RefreshCw className="w-3 h-3" /> Server reports: {info.fetchedSize} {info.fetchedUnit}
+                          </div>
+                        )}
+                      </td>
                       <td className="px-6 py-4 text-right">
                         <button
                           onClick={() => handleEditClick(info)}
@@ -678,17 +547,36 @@ export default function ErrorLinks() {
                     onChange={(e) => setEditSize(e.target.value)}
                     className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-3 focus:outline-none focus:border-emerald-500"
                   />
+                  {editingLink.fetchedSize && (
+                    <button
+                      onClick={() => {
+                        setEditSize(editingLink.fetchedSize!);
+                        setEditUnit(editingLink.fetchedUnit!);
+                      }}
+                      className="text-[10px] text-emerald-500 hover:text-emerald-400 mt-1 font-medium flex items-center gap-1"
+                    >
+                      <RefreshCw className="w-3 h-3" /> Apply server size ({editingLink.fetchedSize} {editingLink.fetchedUnit})
+                    </button>
+                  )}
                 </div>
                 <div className="w-32">
                   <label className="block text-sm font-medium text-zinc-400 mb-1">Unit</label>
-                  <select
-                    value={editUnit}
-                    onChange={(e) => setEditUnit(e.target.value as 'MB' | 'GB')}
-                    className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-3 focus:outline-none focus:border-emerald-500"
-                  >
-                    <option value="MB">MB</option>
-                    <option value="GB">GB</option>
-                  </select>
+                  <div className="flex bg-zinc-950 border border-zinc-800 rounded-xl p-1 shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => setEditUnit('MB')}
+                      className={`flex-1 py-2 rounded-lg text-sm font-bold transition-all ${editUnit === 'MB' ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/20' : 'text-zinc-500 hover:text-zinc-300'}`}
+                    >
+                      MB
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setEditUnit('GB')}
+                      className={`flex-1 py-2 rounded-lg text-sm font-bold transition-all ${editUnit === 'GB' ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/20' : 'text-zinc-500 hover:text-zinc-300'}`}
+                    >
+                      GB
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>

@@ -17,6 +17,7 @@ export interface UserProfile {
   sessionsCount?: number;
   timeSpent?: number; // in minutes
   lastNotificationCheck?: string; // ISO string
+  permissions?: string[]; // Specific management access
 }
 
 export interface AppNotification {

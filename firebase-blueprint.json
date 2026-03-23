@@ -10,6 +10,7 @@
         "displayName": { "type": "string" },
         "photoURL": { "type": "string" },
         "role": { "type": "string", "enum": ["admin", "user", "temporary"] },
+        "permissions": { "type": "array", "items": { "type": "string" }, "description": "Specific administrative permissions." },
         "status": { "type": "string", "enum": ["pending", "active", "expired"] },
         "phone": { "type": "string" },
         "expiryDate": { "type": "string", "format": "date-time" },
@@ -103,9 +104,57 @@
         "createdBy": { "type": "string" }
       },
       "required": ["id", "title", "body", "contentId", "createdAt", "createdBy"]
+    },
+    "FCMToken": {
+      "title": "FCMToken",
+      "description": "A Firebase Cloud Messaging token for a user.",
+      "type": "object",
+      "properties": {
+        "token": { "type": "string" },
+        "userId": { "type": "string" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["token", "userId", "updatedAt"]
+    },
+    "Scan": {
+      "title": "Scan",
+      "description": "A link scanning session.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "status": { "type": "string", "enum": ["idle", "scanning", "completed", "error"] },
+        "scannedCount": { "type": "number" },
+        "totalLinks": { "type": "number" },
+        "errorLinks": { "type": "array", "items": { "type": "object" } },
+        "lastUpdated": { "type": "string", "format": "date-time" },
+        "startedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "status", "scannedCount", "totalLinks", "lastUpdated", "startedAt"]
+    },
+    "MovieRequest": {
+      "title": "MovieRequest",
+      "description": "A request for a movie or series from a user.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "type": { "type": "string", "enum": ["movie", "series"] },
+        "userId": { "type": "string" },
+        "userEmail": { "type": "string" },
+        "userName": { "type": "string" },
+        "status": { "type": "string", "enum": ["pending", "completed", "rejected"] },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "requestedBy": { "type": "array", "items": { "type": "string" }, "description": "List of user IDs who requested this." },
+        "requestCount": { "type": "number", "description": "Number of users who requested this." }
+      },
+      "required": ["id", "title", "userId", "status", "createdAt", "requestedBy", "requestCount"]
     }
   },
   "firestore": {
+    "/movie_requests/{requestId}": {
+      "schema": { "$ref": "#/entities/MovieRequest" },
+      "description": "Stores movie requests."
+    },
     "/notifications/{notificationId}": {
       "schema": { "$ref": "#/entities/Notification" },
       "description": "Stores notifications."
@@ -133,6 +182,14 @@
     "/qualities/{qualityId}": {
       "schema": { "$ref": "#/entities/Quality" },
       "description": "Stores movie and series qualities."
+    },
+    "/fcm_tokens/{tokenId}": {
+      "schema": { "$ref": "#/entities/FCMToken" },
+      "description": "Stores FCM tokens for push notifications."
+    },
+    "/scans/{scanId}": {
+      "schema": { "$ref": "#/entities/Scan" },
+      "description": "Stores link scanning sessions."
     }
   }
 }

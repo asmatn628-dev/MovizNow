@@ -24,7 +24,7 @@ export function useSystemNotifications(profile: UserProfile | null) {
     // Register service worker for reliable notifications (especially on mobile)
     if ('serviceWorker' in navigator) {
       // Versioning the SW registration to force an update if needed
-      navigator.serviceWorker.register('/notification-sw.js?v=3').catch(err => console.error('SW registration failed:', err));
+      navigator.serviceWorker.register('/firebase-messaging-sw.js?v=4').catch(err => console.error('SW registration failed:', err));
     }
 
     const q = query(
@@ -57,7 +57,7 @@ export function useSystemNotifications(profile: UserProfile | null) {
           try {
             if ('serviceWorker' in navigator) {
               navigator.serviceWorker.getRegistrations().then(registrations => {
-                const myReg = registrations.find(reg => reg.active && reg.active.scriptURL.includes('notification-sw.js'));
+                const myReg = registrations.find(reg => reg.active && reg.active.scriptURL.includes('firebase-messaging-sw.js'));
                 
                 if (myReg) {
                   myReg.showNotification(notification.title, {

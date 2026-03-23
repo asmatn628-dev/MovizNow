@@ -279,6 +279,9 @@ export default function Home() {
             <Link to="/favorites" className="text-zinc-400 hover:text-white transition-colors" title="Favorites">
               <Heart className="w-5 h-5" />
             </Link>
+            <Link to="/requests" className="text-zinc-400 hover:text-white transition-colors" title="Movie Requests">
+              <MessageCircle className="w-5 h-5" />
+            </Link>
             {profile && <NotificationMenu profile={profile} />}
             {(profile?.role === 'admin' || profile?.role === 'data_editor') && (
               <Link to="/admin" className="text-sm font-medium text-emerald-500 hover:text-emerald-400">

@@ -133,14 +133,15 @@ export default function MovieDetails() {
             data.title = show.name;
             data.description = show.summary?.replace(/<[^>]*>?/gm, '') || '';
             if (show.image?.original) data.posterUrl = show.image.original;
-            if (show.premiered) {
-              data.year = parseInt(show.premiered.substring(0, 4));
-              data.releaseDate = show.premiered;
-            }
-            data.duration = show.runtime ? `${show.runtime} min` : '';
-            data.rating = show.rating?.average ? `${show.rating.average}/10` : '';
-            
-            try {
+          if (show.premiered) {
+            data.year = parseInt(show.premiered.substring(0, 4));
+            data.releaseDate = show.premiered;
+          }
+          data.duration = show.runtime ? `${show.runtime} min` : '';
+          data.rating = show.rating?.average ? `${show.rating.average}/10` : '';
+          if (show.genres) data.genres = show.genres.join(', ');
+          
+          try {
               const castRes = await fetch(`https://api.tvmaze.com/shows/${show.id}/cast`);
               if (castRes.ok) {
                 const castData = await castRes.json();
@@ -155,19 +156,11 @@ export default function MovieDetails() {
         if (Object.keys(data).length === 0) {
           // Fallback to suggestion API
           try {
-            let suggestRes = await fetch(`https://v3.sg.media-imdb.com/suggestion/t/${ttId}.json`).catch(() => null);
+            let suggestRes = await fetch(`/api/imdb/suggestion/${ttId}`).catch(() => null);
             let suggestData = null;
             
             if (suggestRes && suggestRes.ok) {
               suggestData = await suggestRes.json();
-            } else {
-              // Try via proxy
-              const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(`https://v3.sg.media-imdb.com/suggestion/t/${ttId}.json`)}`;
-              const proxyRes = await fetch(proxyUrl);
-              if (proxyRes.ok) {
-                const proxyData = await proxyRes.json();
-                suggestData = proxyData;
-              }
             }
 
             if (suggestData) {
@@ -183,24 +176,63 @@ export default function MovieDetails() {
             // IMDb suggestion fetch failed, silently fallback
           }
           
-          // Try to get more details via proxy
-          try {
-            const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(`https://www.imdb.com/title/${ttId}/`)}`;
-            const pageRes = await fetch(proxyUrl);
-            if (pageRes.ok) {
-              const html = await pageRes.text();
-              const parser = new DOMParser();
-              const doc = parser.parseFromString(html, 'text/html');
-              
-              const descEl = doc.querySelector('[data-testid="plot-xl"]') || doc.querySelector('[data-testid="plot-l"]');
-              if (descEl) data.description = descEl.textContent || '';
-              
-              const ratingEl = doc.querySelector('[data-testid="hero-rating-bar__aggregate-rating__score"] span');
-              if (ratingEl) data.rating = `${ratingEl.textContent}/10`;
-            }
-          } catch (error) {
-            // Proxy fetch failed, silently fallback
+        // Try to get more details via proxy
+        try {
+          const proxyUrl = `/api/imdb/title/${ttId}`;
+          let pageRes = await fetch(proxyUrl);
+          let html = '';
+          
+          if (pageRes.ok) {
+            html = await pageRes.text();
           }
+          
+          if (html) {
+            const parser = new DOMParser();
+            const doc = parser.parseFromString(html, 'text/html');
+            
+            const descEl = doc.querySelector('[data-testid="plot-xl"]') || 
+                           doc.querySelector('[data-testid="plot-l"]') ||
+                           doc.querySelector('[data-testid="plot-xs"]') ||
+                           doc.querySelector('.ipc-html-content-inner-div');
+            
+            if (descEl && (!data.description || data.description.length < 50)) {
+              data.description = descEl.textContent?.trim() || data.description;
+            }
+            
+            const ratingEl = doc.querySelector('[data-testid="hero-rating-bar__aggregate-rating__score"] span');
+            if (ratingEl && !data.rating) data.rating = `${ratingEl.textContent}/10`;
+
+            const genresEls = doc.querySelectorAll('[data-testid="genres"] a, .ipc-chip-list__scroller a');
+            if (genresEls.length > 0 && !data.genres) {
+              const genresArr: string[] = [];
+              genresEls.forEach(el => {
+                if (el.textContent) genresArr.push(el.textContent.trim());
+              });
+              data.genres = [...new Set(genresArr)].join(', ');
+            }
+
+            const metadataItems = doc.querySelectorAll('[data-testid="hero-title-block__metadata"] li');
+            if (metadataItems.length > 0) {
+              metadataItems.forEach(item => {
+                const text = item.textContent || '';
+                if (text.includes('h') && text.includes('m')) {
+                  if (!data.duration) data.duration = text.trim();
+                } else if (text.match(/^\d{4}$/)) {
+                  if (!data.year) data.year = parseInt(text);
+                }
+              });
+            }
+
+            const releaseDateEl = doc.querySelector('[data-testid="title-details-releasedate"] a');
+            if (releaseDateEl && !data.releaseDate) {
+              data.releaseDate = releaseDateEl.textContent?.trim().split(' (')[0] || '';
+            }
+          } else {
+            console.error("IMDb proxy fetch failed", pageRes.status, pageRes.statusText);
+          }
+        } catch (error) {
+          console.error("IMDb proxy fetch error", error);
+        }
         }
         
         if (Object.keys(data).length > 0) {
@@ -722,7 +754,8 @@ export default function MovieDetails() {
                   <div className="flex flex-wrap gap-4 text-sm font-medium text-yellow-500/80">
                     {imdbData.releaseDate && <span>Release: {imdbData.releaseDate}</span>}
                     {imdbData.duration && <span>Duration: {imdbData.duration}</span>}
-                    {imdbData.rating && <span>IMDb Rating: ⭐ {imdbData.rating}</span>}
+                    {imdbData.rating && <span className="flex items-center gap-1">IMDb Rating: ⭐ <span className="text-yellow-500 font-bold">{imdbData.rating}</span></span>}
+                    {imdbData.genres && <span className="flex items-center gap-1">Genres: <span className="text-emerald-500">{imdbData.genres}</span></span>}
                   </div>
                   
                   {(imdbData.description || content.description) && (

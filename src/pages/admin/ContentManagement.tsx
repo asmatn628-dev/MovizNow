@@ -48,6 +48,7 @@ export default function ContentManagement() {
   const [filterLanguage, setFilterLanguage] = useState<string>('all');
   const [filterQuality, setFilterQuality] = useState<string>('all');
   const [filterYear, setFilterYear] = useState<string>('all');
+  const [filterStatus, setFilterStatus] = useState<'all' | 'published' | 'draft'>('all');
   const [filterDateAdded, setFilterDateAdded] = useState<'newest' | 'oldest'>('newest');
   const [selectedContent, setSelectedContent] = useState<string[]>([]);
 
@@ -64,7 +65,10 @@ export default function ContentManagement() {
     cast: string;
     posterUrl: string;
     type: 'movie' | 'series';
-    genres?: string[];
+    genres?: string;
+    rating?: string;
+    releaseDate?: string;
+    runtime?: string;
   } | null>(null);
   const [fetchingImdb, setFetchingImdb] = useState(false);
   const [isAutoFillModalOpen, setIsAutoFillModalOpen] = useState(false);
@@ -397,7 +401,11 @@ export default function ContentManagement() {
         description: '',
         cast: '',
         posterUrl: '',
-        type: 'movie' as 'movie' | 'series'
+        type: 'movie' as 'movie' | 'series',
+        rating: '',
+        genres: '',
+        releaseDate: '',
+        runtime: ''
       };
 
       // Try TVMaze first (great for series)
@@ -407,7 +415,13 @@ export default function ContentManagement() {
         fetchedData.title = show.name;
         fetchedData.description = show.summary?.replace(/<[^>]*>?/gm, '') || '';
         if (show.image?.original) fetchedData.posterUrl = show.image.original;
-        if (show.premiered) fetchedData.year = parseInt(show.premiered.substring(0, 4));
+        if (show.premiered) {
+          fetchedData.year = parseInt(show.premiered.substring(0, 4));
+          fetchedData.releaseDate = show.premiered;
+        }
+        if (show.runtime) fetchedData.runtime = `${show.runtime} min`;
+        if (show.genres) fetchedData.genres = show.genres.join(', ');
+        if (show.rating?.average) fetchedData.rating = `${show.rating.average}/10`;
         fetchedData.type = 'series';
         
         // Fetch cast
@@ -416,8 +430,12 @@ export default function ContentManagement() {
           if (castRes.ok) {
             const castData = await castRes.json();
             fetchedData.cast = castData.slice(0, 5).map((c: any) => c.person.name).join(', ');
+          } else {
+            console.error("TVMaze cast fetch failed", castRes.status, castRes.statusText);
           }
-        } catch (e) {}
+        } catch (e) {
+          console.error("TVMaze cast fetch error", e);
+        }
         
         // Fetch episodes
         try {
@@ -444,13 +462,19 @@ export default function ContentManagement() {
             } else {
               processImdbSeasons(epData);
             }
+          } else {
+            console.error("TVMaze episodes fetch failed", epRes.status, epRes.statusText);
           }
-        } catch (e) {}
+        } catch (e) {
+          console.error("TVMaze episodes fetch error", e);
+        }
+      } else {
+        console.error("TVMaze lookup failed", tvmazeRes.status, tvmazeRes.statusText);
       }
       
       // Fallback for movies or if TVMaze fails
       try {
-        const suggestRes = await fetch(`https://v3.sg.media-imdb.com/suggestion/x/${ttId}.json`);
+        const suggestRes = await fetch(`/api/imdb/suggestion/${ttId}`);
         if (suggestRes.ok) {
           const suggestData = await suggestRes.json();
           const item = suggestData.d?.[0];
@@ -461,33 +485,74 @@ export default function ContentManagement() {
             if (item.i?.imageUrl) fetchedData.posterUrl = item.i.imageUrl;
             fetchedData.type = item.q === 'TV series' ? 'series' : 'movie';
           }
+        } else {
+          console.error("IMDb suggestion fetch failed", suggestRes.status, suggestRes.statusText);
         }
-      } catch (e) {}
+      } catch (e) {
+        console.error("IMDb suggestion fetch error", e);
+      }
       
       try {
-        const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(`https://www.imdb.com/title/${ttId}/`)}`;
-        const pageRes = await fetch(proxyUrl);
+        const proxyUrl = `/api/imdb/title/${ttId}`;
+        let pageRes = await fetch(proxyUrl);
+        let html = '';
+        
         if (pageRes.ok) {
-          const html = await pageRes.text();
+          html = await pageRes.text();
+        }
+        
+        if (html) {
           const parser = new DOMParser();
           const doc = parser.parseFromString(html, 'text/html');
           
           let newDesc = fetchedData.description;
-          const descEl = doc.querySelector('[data-testid="plot-xl"]') || doc.querySelector('[data-testid="plot-l"]');
-          if (descEl && !fetchedData.description) {
-            newDesc = descEl.textContent || '';
+          const descEl = doc.querySelector('[data-testid="plot-xl"]') || 
+                         doc.querySelector('[data-testid="plot-l"]') ||
+                         doc.querySelector('[data-testid="plot-xs"]') ||
+                         doc.querySelector('.ipc-html-content-inner-div');
+          
+          if (descEl && (!fetchedData.description || fetchedData.description.length < 50)) {
+            newDesc = descEl.textContent?.trim() || fetchedData.description;
           }
           
           const ratingEl = doc.querySelector('[data-testid="hero-rating-bar__aggregate-rating__score"] span');
-          if (ratingEl) {
-            const rating = ratingEl.textContent;
-            if (rating && !newDesc.includes(`IMDb Rating:`)) {
-              newDesc = `IMDb Rating: ${rating}/10\n\n${newDesc}`;
-            }
+          if (ratingEl && !fetchedData.rating) {
+            fetchedData.rating = `${ratingEl.textContent}/10`;
           }
+
+          const genresEls = doc.querySelectorAll('[data-testid="genres"] a, .ipc-chip-list__scroller a');
+          if (genresEls.length > 0 && !fetchedData.genres) {
+            const genresArr: string[] = [];
+            genresEls.forEach(el => {
+              if (el.textContent) genresArr.push(el.textContent.trim());
+            });
+            fetchedData.genres = [...new Set(genresArr)].join(', ');
+          }
+
+          const metadataItems = doc.querySelectorAll('[data-testid="hero-title-block__metadata"] li');
+          if (metadataItems.length > 0) {
+            metadataItems.forEach(item => {
+              const text = item.textContent || '';
+              if (text.includes('h') && text.includes('m')) {
+                if (!fetchedData.runtime) fetchedData.runtime = text.trim();
+              } else if (text.match(/^\d{4}$/)) {
+                if (!fetchedData.year) fetchedData.year = parseInt(text);
+              }
+            });
+          }
+
+          const releaseDateEl = doc.querySelector('[data-testid="title-details-releasedate"] a');
+          if (releaseDateEl && !fetchedData.releaseDate) {
+            fetchedData.releaseDate = releaseDateEl.textContent?.trim().split(' (')[0] || '';
+          }
+
           fetchedData.description = newDesc;
+        } else {
+          console.error("IMDb proxy fetch failed", pageRes.status, pageRes.statusText);
         }
-      } catch (e) {}
+      } catch (e) {
+        console.error("IMDb proxy fetch error", e);
+      }
 
       setImdbCardData(fetchedData);
       
@@ -1072,67 +1137,83 @@ export default function ContentManagement() {
                     <div 
                       ref={provided.innerRef}
                       {...provided.draggableProps}
-                      className={`flex flex-col gap-3 bg-zinc-900 p-4 rounded-xl border ${snapshot.isDragging ? 'border-emerald-500 shadow-lg shadow-emerald-500/20 z-50' : 'border-zinc-800'} transition-all`}
+                      className={`flex flex-col gap-2 bg-zinc-900 p-3 rounded-xl border ${snapshot.isDragging ? 'border-emerald-500 shadow-lg shadow-emerald-500/20 z-50' : 'border-zinc-800'} transition-all`}
                     >
-                      <div className="flex gap-3 items-center">
-                        <input
-                          type="text"
-                          placeholder="Name (e.g. 1080p, WEB-DL)"
-                          value={link.name}
-                          onChange={(e) => {
-                            onChange(prev => {
-                              const newLinks = [...prev];
-                              newLinks[idx] = { ...newLinks[idx], name: e.target.value };
-                              return newLinks;
-                            });
-                          }}
-                          className="flex-1 bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-3.5 text-base focus:outline-none focus:border-emerald-500"
-                        />
-                        <button
-                          type="button"
-                          onClick={() => {
-                            onChange(prev => prev.filter((_, i) => i !== idx));
-                          }}
-                          className="p-2.5 text-red-500 hover:bg-red-500/10 rounded-xl transition-colors shrink-0"
-                        >
-                          <Trash2 className="w-5 h-5" />
-                        </button>
-                      </div>
-                      <div className="flex gap-3 items-center">
-                        <div className="flex gap-2 items-center shrink-0">
+                        {/* 1st line: Name field */}
+                        <div className="flex gap-2 items-center">
                           <input
-                            type="number"
-                            placeholder="Size"
-                            value={link.size}
+                            type="text"
+                            placeholder="Name (e.g. 1080p, WEB-DL)"
+                            value={link.name}
                             onChange={(e) => {
                               onChange(prev => {
                                 const newLinks = [...prev];
-                                newLinks[idx] = { ...newLinks[idx], size: e.target.value };
+                                newLinks[idx] = { ...newLinks[idx], name: e.target.value };
                                 return newLinks;
                               });
                             }}
-                            className="w-28 bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-3.5 text-base text-center focus:outline-none focus:border-emerald-500"
+                            className="flex-1 bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-emerald-500"
                           />
-                          <select
-                            value={link.unit || 'MB'}
-                            onChange={(e) => {
-                              onChange(prev => {
-                                const newLinks = [...prev];
-                                newLinks[idx] = { ...newLinks[idx], unit: e.target.value as 'MB' | 'GB' };
-                                return newLinks;
-                              });
+                        </div>
+                        {/* 2nd line: Size, Unit, Delete, Drag and drop */}
+                        <div className="flex gap-2 items-center">
+                          <div className="flex gap-2 items-center shrink-0">
+                            <input
+                              type="number"
+                              placeholder="Size"
+                              value={link.size}
+                              onChange={(e) => {
+                                onChange(prev => {
+                                  const newLinks = [...prev];
+                                  newLinks[idx] = { ...newLinks[idx], size: e.target.value };
+                                  return newLinks;
+                                });
+                              }}
+                              className="w-20 bg-zinc-950 border border-zinc-800 rounded-lg px-2 py-2 text-sm text-center focus:outline-none focus:border-emerald-500"
+                            />
+                            <div className="flex bg-zinc-950 border border-zinc-800 rounded-lg p-0.5 shrink-0">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  onChange(prev => {
+                                    const newLinks = [...prev];
+                                    newLinks[idx] = { ...newLinks[idx], unit: 'MB' };
+                                    return newLinks;
+                                  });
+                                }}
+                                className={`px-2 py-1 rounded-md text-xs font-bold transition-all ${link.unit === 'MB' ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/20' : 'text-zinc-500 hover:text-zinc-300'}`}
+                              >
+                                MB
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  onChange(prev => {
+                                    const newLinks = [...prev];
+                                    newLinks[idx] = { ...newLinks[idx], unit: 'GB' };
+                                    return newLinks;
+                                  });
+                                }}
+                                className={`px-2 py-1 rounded-md text-xs font-bold transition-all ${link.unit === 'GB' ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/20' : 'text-zinc-500 hover:text-zinc-300'}`}
+                              >
+                                GB
+                              </button>
+                            </div>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              onChange(prev => prev.filter((_, i) => i !== idx));
                             }}
-                            className="bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-3.5 text-base focus:outline-none focus:border-emerald-500"
+                            className="p-2 text-red-500 hover:bg-red-500/10 rounded-lg transition-colors shrink-0 ml-auto"
                           >
-                            <option value="MB">MB</option>
-                            <option value="GB">GB</option>
-                          </select>
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                          <div {...provided.dragHandleProps} className="text-zinc-600 hover:text-zinc-400 cursor-grab active:cursor-grabbing p-2 hover:bg-zinc-800 rounded-lg transition-colors">
+                            <GripVertical className="w-4 h-4" />
+                          </div>
                         </div>
-                        <div {...provided.dragHandleProps} className="text-zinc-600 hover:text-zinc-400 cursor-grab active:cursor-grabbing p-2 hover:bg-zinc-800 rounded-lg transition-colors ml-auto">
-                          <GripVertical className="w-5 h-5" />
-                        </div>
-                      </div>
-                      <div className="flex gap-3 items-center">
+                      <div className="flex gap-2 items-center">
                         <input
                           type="text"
                           placeholder="URL"
@@ -1145,7 +1226,7 @@ export default function ContentManagement() {
                             });
                           }}
                           onBlur={(e) => handleUrlBlur(e.target.value, idx)}
-                          className="flex-1 bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-3.5 text-base focus:outline-none focus:border-emerald-500"
+                          className="flex-1 bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-emerald-500"
                         />
                       </div>
                     </div>
@@ -1158,9 +1239,9 @@ export default function ContentManagement() {
                 onClick={() => {
                   onChange(prev => [...prev, { id: Math.random().toString(36).substr(2, 9), name: '', url: '', size: '', unit: 'MB' }]);
                 }}
-                className="w-full py-4 border-2 border-dashed border-zinc-800 rounded-xl text-zinc-500 hover:text-emerald-500 hover:border-emerald-500/50 hover:bg-emerald-500/5 transition-all flex items-center justify-center gap-2 font-medium"
+                className="w-full py-2 border-2 border-dashed border-zinc-800 rounded-lg text-zinc-500 hover:text-emerald-500 hover:border-emerald-500/50 hover:bg-emerald-500/5 transition-all flex items-center justify-center gap-2 text-sm font-medium"
               >
-                <Plus className="w-5 h-5" /> Add New Link
+                <Plus className="w-4 h-4" /> Add New Link
               </button>
             </div>
           )}
@@ -1191,6 +1272,9 @@ export default function ContentManagement() {
     if (filterYear !== 'all') {
       result = result.filter(c => c.year === parseInt(filterYear));
     }
+    if (filterStatus !== 'all') {
+      result = result.filter(c => (c.status || 'published') === filterStatus);
+    }
     if (searchTerm) {
       const lower = searchTerm.toLowerCase();
       result = result.filter(c => c.title.toLowerCase().includes(lower));
@@ -1203,7 +1287,7 @@ export default function ContentManagement() {
     });
     
     return result;
-  }, [contentList, searchTerm, filterType, filterGenre, filterLanguage, filterQuality, filterYear, filterDateAdded]);
+  }, [contentList, searchTerm, filterType, filterGenre, filterLanguage, filterQuality, filterYear, filterStatus, filterDateAdded]);
 
   const filteredGenres = useMemo(() => {
     if (!genreSearchTerm) return genres;
@@ -1335,6 +1419,11 @@ export default function ContentManagement() {
             <option value="all">All Years</option>
             {uniqueYears.map(y => <option key={y} value={y.toString()}>{y}</option>)}
           </select>
+          <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value as any)} className="bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm focus:border-emerald-500">
+            <option value="all">All Status</option>
+            <option value="published">Published</option>
+            <option value="draft">Draft</option>
+          </select>
           <select value={filterDateAdded} onChange={(e) => setFilterDateAdded(e.target.value as any)} className="bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm focus:border-emerald-500">
             <option value="newest">Newest Added</option>
             <option value="oldest">Oldest Added</option>
@@ -1450,79 +1539,88 @@ export default function ContentManagement() {
             <div className="flex-1 overflow-y-auto p-6">
               <form id="content-form" onSubmit={handleSave} className="space-y-6">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div>
-                    <label className="block text-sm font-medium text-zinc-400 mb-2">Type</label>
-                    <div className="flex gap-4">
-                      <label className={`flex-1 flex items-center justify-center gap-2 p-3 rounded-xl border cursor-pointer transition-colors ${type === 'movie' ? 'bg-emerald-500/10 border-emerald-500 text-emerald-500' : 'bg-zinc-950 border-zinc-800 text-zinc-400'}`}>
-                        <input type="radio" name="type" value="movie" checked={type === 'movie'} onChange={() => setType('movie')} className="hidden" />
-                        <Film className="w-5 h-5" /> Movie
-                      </label>
-                      <label className={`flex-1 flex items-center justify-center gap-2 p-3 rounded-xl border cursor-pointer transition-colors ${type === 'series' ? 'bg-emerald-500/10 border-emerald-500 text-emerald-500' : 'bg-zinc-950 border-zinc-800 text-zinc-400'}`}>
-                        <input type="radio" name="type" value="series" checked={type === 'series'} onChange={() => setType('series')} className="hidden" />
-                        <Tv className="w-5 h-5" /> Series
-                      </label>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="flex gap-4">
+                    <div className="flex-1">
+                      <label className="block text-xs font-medium text-zinc-500 mb-1">Type</label>
+                      <div className="flex gap-2">
+                        <label className={`flex-1 flex items-center justify-center gap-1 p-2 rounded-lg border cursor-pointer transition-colors text-xs ${type === 'movie' ? 'bg-emerald-500/10 border-emerald-500 text-emerald-500' : 'bg-zinc-950 border-zinc-800 text-zinc-400'}`}>
+                          <input type="radio" name="type" value="movie" checked={type === 'movie'} onChange={() => setType('movie')} className="hidden" />
+                          <Film className="w-4 h-4" /> Movie
+                        </label>
+                        <label className={`flex-1 flex items-center justify-center gap-1 p-2 rounded-lg border cursor-pointer transition-colors text-xs ${type === 'series' ? 'bg-emerald-500/10 border-emerald-500 text-emerald-500' : 'bg-zinc-950 border-zinc-800 text-zinc-400'}`}>
+                          <input type="radio" name="type" value="series" checked={type === 'series'} onChange={() => setType('series')} className="hidden" />
+                          <Tv className="w-4 h-4" /> Series
+                        </label>
+                      </div>
                     </div>
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-zinc-400 mb-2">Status</label>
-                    <div className="flex gap-4">
-                      <label className={`flex-1 flex items-center justify-center gap-2 p-3 rounded-xl border cursor-pointer transition-colors ${status === 'published' ? 'bg-emerald-500/10 border-emerald-500 text-emerald-500' : 'bg-zinc-950 border-zinc-800 text-zinc-400'}`}>
-                        <input type="radio" name="status" value="published" checked={status === 'published'} onChange={() => setStatus('published')} className="hidden" />
-                        <Eye className="w-5 h-5" /> Published
-                      </label>
-                      <label className={`flex-1 flex items-center justify-center gap-2 p-3 rounded-xl border cursor-pointer transition-colors ${status === 'draft' ? 'bg-yellow-500/10 border-yellow-500 text-yellow-500' : 'bg-zinc-950 border-zinc-800 text-zinc-400'}`}>
-                        <input type="radio" name="status" value="draft" checked={status === 'draft'} onChange={() => setStatus('draft')} className="hidden" />
-                        <EyeOff className="w-5 h-5" /> Draft
-                      </label>
+                    <div className="flex-1">
+                      <label className="block text-xs font-medium text-zinc-500 mb-1">Status</label>
+                      <div className="flex gap-2">
+                        <label className={`flex-1 flex items-center justify-center gap-1 p-2 rounded-lg border cursor-pointer transition-colors text-xs ${status === 'published' ? 'bg-emerald-500/10 border-emerald-500 text-emerald-500' : 'bg-zinc-950 border-zinc-800 text-zinc-400'}`}>
+                          <input type="radio" name="status" value="published" checked={status === 'published'} onChange={() => setStatus('published')} className="hidden" />
+                          <Eye className="w-4 h-4" /> Pub
+                        </label>
+                        <label className={`flex-1 flex items-center justify-center gap-1 p-2 rounded-lg border cursor-pointer transition-colors text-xs ${status === 'draft' ? 'bg-yellow-500/10 border-yellow-500 text-yellow-500' : 'bg-zinc-950 border-zinc-800 text-zinc-400'}`}>
+                          <input type="radio" name="status" value="draft" checked={status === 'draft'} onChange={() => setStatus('draft')} className="hidden" />
+                          <EyeOff className="w-4 h-4" /> Draft
+                        </label>
+                      </div>
+                    </div>
                     </div>
                   </div>
                   
-                  <div>
-                    <label className="block text-sm font-medium text-zinc-400 mb-2">Title</label>
-                    <input type="text" value={title} onChange={(e) => setTitle(e.target.value)} className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-3 focus:outline-none focus:border-emerald-500" />
+                  <div className="md:col-span-2 grid grid-cols-1 md:grid-cols-4 gap-4">
+                    <div className="md:col-span-3">
+                      <label className="block text-xs font-medium text-zinc-500 mb-1">Title</label>
+                      <input type="text" value={title} onChange={(e) => setTitle(e.target.value)} className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-emerald-500" />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-zinc-500 mb-1">Release Year</label>
+                      <input type="number" value={year || ''} onChange={(e) => setYear(parseInt(e.target.value) || new Date().getFullYear())} className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-emerald-500" />
+                    </div>
                   </div>
 
                   <div className="md:col-span-2">
-                    <label className="block text-sm font-medium text-zinc-400 mb-2">Description</label>
-                    <textarea rows={3} value={description} onChange={(e) => setDescription(e.target.value)} className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-3 focus:outline-none focus:border-emerald-500" />
+                    <label className="block text-xs font-medium text-zinc-500 mb-1">Description</label>
+                    <textarea rows={3} value={description} onChange={(e) => setDescription(e.target.value)} className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-emerald-500" />
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-zinc-400 mb-2">Poster (URL or Upload)</label>
+                    <label className="block text-xs font-medium text-zinc-500 mb-1">Poster (URL or Upload)</label>
                     <div className="flex gap-2">
-                      <input type="text" placeholder="https://..." value={posterUrl} onChange={(e) => setPosterUrl(e.target.value)} className="flex-1 bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-3 focus:outline-none focus:border-emerald-500" />
-                      <label className="flex items-center justify-center bg-zinc-800 hover:bg-zinc-700 text-white px-4 rounded-xl cursor-pointer transition-colors">
-                        <Upload className="w-5 h-5" />
+                      <input type="text" placeholder="https://..." value={posterUrl} onChange={(e) => setPosterUrl(e.target.value)} className="flex-1 bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-emerald-500" />
+                      <label className="flex items-center justify-center bg-zinc-800 hover:bg-zinc-700 text-white px-3 rounded-lg cursor-pointer transition-colors">
+                        <Upload className="w-4 h-4" />
                         <input type="file" accept="image/*" onChange={handleImageUpload} className="hidden" />
                       </label>
                     </div>
                     {posterUrl && (
-                      <div className="mt-2 text-xs text-emerald-500 truncate">
+                      <div className="mt-1 text-[10px] text-emerald-500 truncate">
                         {posterUrl.startsWith('data:image') ? 'Image uploaded successfully' : 'Using image URL'}
                       </div>
                     )}
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-zinc-400 mb-2">Trailer URL (YouTube)</label>
-                    <input type="url" value={trailerUrl} onChange={(e) => setTrailerUrl(e.target.value)} className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-3 focus:outline-none focus:border-emerald-500" />
+                    <label className="block text-xs font-medium text-zinc-500 mb-1">Trailer URL (YouTube)</label>
+                    <input type="url" value={trailerUrl} onChange={(e) => setTrailerUrl(e.target.value)} className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-emerald-500" />
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-zinc-400 mb-2">Sample URL (Optional)</label>
-                    <input type="url" value={sampleUrl} onChange={(e) => setSampleUrl(e.target.value)} className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-3 focus:outline-none focus:border-emerald-500" placeholder="Sample video link" />
+                    <label className="block text-xs font-medium text-zinc-500 mb-1">Sample URL (Optional)</label>
+                    <input type="url" value={sampleUrl} onChange={(e) => setSampleUrl(e.target.value)} className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-emerald-500" placeholder="Sample video link" />
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-zinc-400 mb-2">IMDb Link (Optional)</label>
+                    <label className="block text-xs font-medium text-zinc-500 mb-1">IMDb Link (Optional)</label>
                     <div className="flex gap-2">
                       <div className="relative flex-1">
                         <input 
                           type="url" 
                           value={imdbLink} 
                           onChange={(e) => setImdbLink(e.target.value)} 
-                          className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-3 focus:outline-none focus:border-emerald-500" 
+                          className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-emerald-500" 
                           placeholder="https://www.imdb.com/title/..." 
                         />
                       </div>
@@ -1530,10 +1628,10 @@ export default function ContentManagement() {
                         type="button"
                         onClick={() => fetchImdbData(imdbLink)}
                         disabled={fetchingImdb || !imdbLink.includes('imdb.com/title/tt')}
-                        className="bg-emerald-500 hover:bg-emerald-600 disabled:bg-emerald-500/50 text-white px-4 py-3 rounded-xl font-medium transition-colors flex items-center justify-center min-w-[100px]"
+                        className="bg-emerald-500 hover:bg-emerald-600 disabled:bg-emerald-500/50 text-white px-3 py-2 rounded-lg text-xs font-medium transition-colors flex items-center justify-center min-w-[80px]"
                       >
                         {fetchingImdb ? (
-                          <div className="animate-spin rounded-full h-5 w-5 border-t-2 border-b-2 border-white"></div>
+                          <div className="animate-spin rounded-full h-4 w-4 border-t-2 border-b-2 border-white"></div>
                         ) : (
                           'Fetch'
                         )}
@@ -1558,6 +1656,24 @@ export default function ContentManagement() {
                           >
                             <X className="w-5 h-5" />
                           </button>
+                        </div>
+
+                        <div className="flex flex-wrap gap-2 mb-3">
+                          {imdbCardData.rating && (
+                            <span className="bg-yellow-500/20 text-yellow-500 text-[10px] px-2 py-0.5 rounded border border-yellow-500/30 font-bold">
+                              ⭐ {imdbCardData.rating}
+                            </span>
+                          )}
+                          {imdbCardData.runtime && (
+                            <span className="bg-zinc-800 text-zinc-400 text-[10px] px-2 py-0.5 rounded border border-zinc-700">
+                              🕒 {imdbCardData.runtime}
+                            </span>
+                          )}
+                          {imdbCardData.genres && (
+                            <span className="bg-emerald-500/10 text-emerald-500 text-[10px] px-2 py-0.5 rounded border border-emerald-500/20">
+                              {imdbCardData.genres}
+                            </span>
+                          )}
                         </div>
                         
                         <div className="space-y-3 mb-4">
@@ -1611,6 +1727,17 @@ export default function ContentManagement() {
                           <button
                             type="button"
                             onClick={() => {
+                              setDescription(imdbCardData.description);
+                              setCast(imdbCardData.cast);
+                              setImdbCardData(null);
+                            }}
+                            className="bg-zinc-800 hover:bg-zinc-700 text-white border border-zinc-700 px-4 py-2 rounded-lg text-xs font-bold transition-colors"
+                          >
+                            Apply Desc & Cast
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
                               setTitle(imdbCardData.title);
                               setYear(imdbCardData.year);
                               setPosterUrl(imdbCardData.posterUrl);
@@ -1628,26 +1755,33 @@ export default function ContentManagement() {
                     </div>
                   )}
 
-                  <div>
-                    <label className="block text-sm font-medium text-zinc-400 mb-2">Release Year</label>
-                    <input type="number" value={year || ''} onChange={(e) => setYear(parseInt(e.target.value) || new Date().getFullYear())} className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-3 focus:outline-none focus:border-emerald-500" />
+                  <div className="md:col-span-2">
+                    <label className="block text-xs font-medium text-zinc-500 mb-1">Print Quality</label>
+                    <div className="flex flex-wrap gap-2">
+                      {qualities.map(q => (
+                        <button
+                          key={q.id}
+                          type="button"
+                          onClick={() => setSelectedQuality(q.id)}
+                          className={`px-3 py-1 rounded-full text-xs font-medium transition-colors border ${
+                            selectedQuality === q.id
+                              ? 'bg-emerald-500/20 border-emerald-500 text-emerald-500'
+                              : 'bg-zinc-900 border-zinc-700 text-zinc-400 hover:bg-zinc-800 hover:text-white'
+                          }`}
+                        >
+                          {q.name}
+                        </button>
+                      ))}
+                    </div>
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-zinc-400 mb-2">Print Quality</label>
-                    <select value={selectedQuality} onChange={(e) => setSelectedQuality(e.target.value)} className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-3 focus:outline-none focus:border-emerald-500">
-                      <option value="">Select Quality</option>
-                      {qualities.map(q => <option key={q.id} value={q.id}>{q.name}</option>)}
-                    </select>
+                    <label className="block text-xs font-medium text-zinc-500 mb-1">Cast (comma separated)</label>
+                    <input type="text" value={cast} onChange={(e) => setCast(e.target.value)} className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-emerald-500" />
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-zinc-400 mb-2">Cast (comma separated)</label>
-                    <input type="text" value={cast} onChange={(e) => setCast(e.target.value)} className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-3 focus:outline-none focus:border-emerald-500" />
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-zinc-400 mb-2">Genres</label>
+                    <label className="block text-xs font-medium text-zinc-500 mb-1">Genres</label>
                     <div className="flex flex-wrap gap-2">
                       {genres.map(g => {
                         const isSelected = selectedGenres.includes(g.id);
@@ -1662,7 +1796,7 @@ export default function ContentManagement() {
                                 setSelectedGenres([...selectedGenres, g.id]);
                               }
                             }}
-                            className={`px-4 py-2 rounded-full text-sm font-medium transition-colors border ${
+                            className={`px-3 py-1 rounded-full text-xs font-medium transition-colors border ${
                               isSelected 
                                 ? 'bg-emerald-500/20 border-emerald-500 text-emerald-500' 
                                 : 'bg-zinc-900 border-zinc-700 text-zinc-400 hover:bg-zinc-800 hover:text-white'
@@ -1676,7 +1810,7 @@ export default function ContentManagement() {
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-zinc-400 mb-2">Languages</label>
+                    <label className="block text-xs font-medium text-zinc-500 mb-1">Languages</label>
                     <div className="flex flex-wrap gap-2">
                       {languages.map(l => {
                         const isSelected = selectedLanguages.includes(l.id);
@@ -1691,7 +1825,7 @@ export default function ContentManagement() {
                                 setSelectedLanguages([...selectedLanguages, l.id]);
                               }
                             }}
-                            className={`px-4 py-2 rounded-full text-sm font-medium transition-colors border ${
+                            className={`px-3 py-1 rounded-full text-xs font-medium transition-colors border ${
                               isSelected 
                                 ? 'bg-emerald-500/20 border-emerald-500 text-emerald-500' 
                                 : 'bg-zinc-900 border-zinc-700 text-zinc-400 hover:bg-zinc-800 hover:text-white'

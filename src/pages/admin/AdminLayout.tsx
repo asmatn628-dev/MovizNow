@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Outlet, Link, useLocation, useNavigate, Navigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
-import { Film, Users, Tags, Languages, Clock, LogOut, Menu, X, MonitorPlay, BarChart3, DollarSign, AlertTriangle, Bell } from 'lucide-react';
+import { Film, Users, Tags, Languages, Clock, LogOut, Menu, X, MonitorPlay, BarChart3, DollarSign, AlertTriangle, Bell, MessageCircle } from 'lucide-react';
 import { clsx } from 'clsx';
 import ConfirmModal from '../../components/ConfirmModal';
 
@@ -24,6 +24,7 @@ export default function AdminLayout() {
     { path: '/admin/income', label: 'Income / Earn', icon: DollarSign },
     { path: '/admin/error-links', label: 'Error Links', icon: AlertTriangle },
     { path: '/admin/notifications', label: 'Notifications', icon: Bell },
+    { path: '/admin/requests', label: 'Movie Requests', icon: MessageCircle },
   ];
 
   const navItems = profile?.role === 'data_editor' 

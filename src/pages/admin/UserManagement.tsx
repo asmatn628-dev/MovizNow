@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { db } from '../../firebase';
-import { collection, doc, updateDoc, onSnapshot, query, where, getDocs, writeBatch } from 'firebase/firestore';
+import { collection, doc, updateDoc, onSnapshot, query, where, getDocs, writeBatch, deleteDoc } from 'firebase/firestore';
 import { UserProfile, Role, Status, AnalyticsEvent } from '../../types';
-import { Edit2, MessageCircle, X, Check, Search, ArrowUp, ArrowDown, Clock, MousePointerClick, Film, Trash2 } from 'lucide-react';
+import { Edit2, MessageCircle, X, Check, Search, ArrowUp, ArrowDown, Clock, MousePointerClick, Film, Trash2, Tv, Plus } from 'lucide-react';
 import { format } from 'date-fns';
+import clsx from 'clsx';
 import AlertModal from '../../components/AlertModal';
 import ConfirmModal from '../../components/ConfirmModal';
 import { handleFirestoreError, OperationType } from '../../utils/firestoreErrorHandler';
@@ -27,9 +28,15 @@ export default function UserManagement() {
   const [selectedUser, setSelectedUser] = useState<UserProfile | null>(null);
   const [isEditingOverlay, setIsEditingOverlay] = useState(false);
   const [userAnalytics, setUserAnalytics] = useState<{ moviesClicked: number, linksClicked: number, viewedMovies: string[], clickedLinks: string[] }>({ moviesClicked: 0, linksClicked: 0, viewedMovies: [], clickedLinks: [] });
+  const [userRequests, setUserRequests] = useState<any[]>([]);
   const [assignedContentTitles, setAssignedContentTitles] = useState<string[]>([]);
+  const [allContent, setAllContent] = useState<any[]>([]);
+  const [contentSearch, setContentSearch] = useState('');
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [isContentPickerOpen, setIsContentPickerOpen] = useState(false);
+  const [assignedIds, setAssignedIds] = useState<Set<string>>(new Set());
+  const [contentSearchTerm, setContentSearchTerm] = useState('');
 
   useEffect(() => {
     const unsub = onSnapshot(collection(db, 'users'), (snapshot) => {
@@ -58,8 +65,24 @@ export default function UserManagement() {
     return () => unsub();
   }, []);
 
+  useEffect(() => {
+    const unsub = onSnapshot(collection(db, 'content'), (snapshot) => {
+      setAllContent(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+    });
+    return () => unsub();
+  }, []);
+
   const fetchUserAnalytics = async (user: UserProfile) => {
     try {
+      // Fetch Movie Requests
+      const requestsQ = query(
+        collection(db, 'movie_requests'),
+        where('userId', '==', user.uid)
+      );
+      const requestsSnapshot = await getDocs(requestsQ);
+      const requestsData = requestsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      setUserRequests(requestsData);
+
       const q = query(
         collection(db, 'analytics'), 
         where('userId', '==', user.uid)
@@ -127,6 +150,7 @@ export default function UserManagement() {
     if (editingId === user.uid) return;
     
     setSelectedUser(user);
+    setAssignedIds(new Set(user.assignedContent || []));
     fetchUserAnalytics(user);
   };
 
@@ -140,6 +164,7 @@ export default function UserManagement() {
       expiryDate: user.expiryDate ? user.expiryDate.split('T')[0] : '',
       role: user.role,
       status: user.status,
+      permissions: user.permissions || [],
     });
     setIsEditingOverlay(true);
   };
@@ -153,6 +178,7 @@ export default function UserManagement() {
         phone: editForm.phone,
         role: editForm.role,
         status: editForm.status,
+        permissions: editForm.permissions || [],
       };
       
       if (editForm.expiryDate) {
@@ -203,6 +229,132 @@ export default function UserManagement() {
     const phone = user.phone.replace(/\D/g, ''); // Remove non-digits
     
     window.open(`https://wa.me/${phone}?text=${encodedMessage}`, '_blank');
+  };
+
+  const handleAddContent = async (contentId: string) => {
+    if (!selectedUser) return;
+    try {
+      const currentAssigned = selectedUser.assignedContent || [];
+      if (currentAssigned.includes(contentId)) return;
+      
+      const nextAssigned = [...currentAssigned, contentId];
+      await updateDoc(doc(db, 'users', selectedUser.uid), {
+        assignedContent: nextAssigned
+      });
+      
+      // Update local state for immediate feedback
+      setSelectedUser({ ...selectedUser, assignedContent: nextAssigned });
+      setContentSearch('');
+    } catch (error) {
+      console.error("Error adding content:", error);
+    }
+  };
+
+  const handleRemoveContent = async (contentId: string) => {
+    if (!selectedUser) return;
+    try {
+      const nextAssigned = (selectedUser.assignedContent || []).filter(id => id !== contentId);
+      await updateDoc(doc(db, 'users', selectedUser.uid), {
+        assignedContent: nextAssigned
+      });
+      
+      // Update local state
+      setSelectedUser({ ...selectedUser, assignedContent: nextAssigned });
+    } catch (error) {
+      console.error("Error removing content:", error);
+    }
+  };
+
+  const handleSaveAccess = async () => {
+    if (!selectedUser) return;
+    try {
+      const nextAssigned = Array.from(assignedIds);
+      await updateDoc(doc(db, 'users', selectedUser.uid), {
+        assignedContent: nextAssigned
+      });
+      
+      // Update local state
+      setSelectedUser({ ...selectedUser, assignedContent: nextAssigned });
+      setIsContentPickerOpen(false);
+      
+      // Update titles
+      const titles: string[] = [];
+      allContent.forEach(item => {
+        if (nextAssigned.includes(item.id)) {
+          titles.push(item.title);
+        }
+      });
+      setAssignedContentTitles(titles);
+    } catch (error) {
+      console.error('Error updating access:', error);
+      setAlertConfig({ isOpen: true, title: 'Error', message: 'Failed to update access' });
+    }
+  };
+
+  const toggleContent = (contentId: string, seasons?: any[]) => {
+    const newSet = new Set(assignedIds);
+    if (newSet.has(contentId)) {
+      newSet.delete(contentId);
+      if (seasons) {
+        seasons.forEach(s => newSet.delete(`${contentId}:${s.id}`));
+      }
+    } else {
+      newSet.add(contentId);
+      if (seasons) {
+        seasons.forEach(s => newSet.delete(`${contentId}:${s.id}`));
+      }
+    }
+    setAssignedIds(newSet);
+  };
+
+  const toggleSeason = (contentId: string, seasonId: string, allSeasons: any[]) => {
+    const newSet = new Set(assignedIds);
+    const seasonKey = `${contentId}:${seasonId}`;
+    
+    if (newSet.has(contentId)) {
+      newSet.delete(contentId);
+      allSeasons.forEach(s => {
+        if (s.id !== seasonId) {
+          newSet.add(`${contentId}:${s.id}`);
+        }
+      });
+    } else if (newSet.has(seasonKey)) {
+      newSet.delete(seasonKey);
+    } else {
+      newSet.add(seasonKey);
+      let allSelected = true;
+      for (const s of allSeasons) {
+        if (s.id !== seasonId && !newSet.has(`${contentId}:${s.id}`)) {
+          allSelected = false;
+          break;
+        }
+      }
+      if (allSelected) {
+        allSeasons.forEach(s => newSet.delete(`${contentId}:${s.id}`));
+        newSet.add(contentId);
+      }
+    }
+    setAssignedIds(newSet);
+  };
+
+  const handleUpdateRequestStatus = async (requestId: string, status: string) => {
+    try {
+      await updateDoc(doc(db, 'movie_requests', requestId), { status });
+      // Refresh user requests
+      setUserRequests(prev => prev.map(r => r.id === requestId ? { ...r, status } : r));
+    } catch (error) {
+      console.error("Error updating request status:", error);
+    }
+  };
+
+  const handleDeleteRequest = async (requestId: string) => {
+    if (!window.confirm("Are you sure you want to delete this request?")) return;
+    try {
+      await deleteDoc(doc(db, 'movie_requests', requestId));
+      setUserRequests(prev => prev.filter(r => r.id !== requestId));
+    } catch (error) {
+      console.error("Error deleting request:", error);
+    }
   };
 
   const toggleSort = (field: SortField) => {
@@ -577,6 +729,28 @@ export default function UserManagement() {
                       className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-2 focus:outline-none focus:border-emerald-500"
                     />
                   </div>
+                  <div>
+                    <label className="block text-sm font-medium text-zinc-400 mb-2">Management Access</label>
+                    <div className="grid grid-cols-2 gap-2">
+                      {['content', 'users', 'analytics', 'notifications', 'income'].map((perm) => (
+                        <label key={perm} className="flex items-center gap-2 bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 cursor-pointer hover:border-zinc-700 transition-colors">
+                          <input
+                            type="checkbox"
+                            checked={editForm.permissions?.includes(perm)}
+                            onChange={(e) => {
+                              const current = editForm.permissions || [];
+                              const next = e.target.checked 
+                                ? [...current, perm]
+                                : current.filter(p => p !== perm);
+                              setEditForm({ ...editForm, permissions: next });
+                            }}
+                            className="w-4 h-4 rounded border-zinc-700 bg-zinc-900 text-emerald-500 focus:ring-emerald-500 focus:ring-offset-zinc-950"
+                          />
+                          <span className="text-xs font-medium text-zinc-300 capitalize">{perm}</span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
                 </div>
               ) : (
                 <div className="p-4 md:p-6 space-y-6">
@@ -595,72 +769,191 @@ export default function UserManagement() {
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="bg-zinc-950 p-4 rounded-xl border border-zinc-800">
-                      <div className="text-zinc-500 text-xs uppercase font-bold mb-1">Role</div>
-                      <div className="capitalize font-medium text-emerald-400">{selectedUser.role.replace('_', ' ')}</div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="bg-zinc-950 p-3 rounded-xl border border-zinc-800">
+                      <div className="text-zinc-500 text-[10px] uppercase font-bold mb-0.5">Role</div>
+                      <div className="capitalize font-bold text-emerald-400 text-sm">{selectedUser.role.replace('_', ' ')}</div>
                     </div>
-                    <div className="bg-zinc-950 p-4 rounded-xl border border-zinc-800">
-                      <div className="text-zinc-500 text-xs uppercase font-bold mb-1">Status</div>
-                      <div className="capitalize font-medium text-white">{selectedUser.status}</div>
+                    <div className="bg-zinc-950 p-3 rounded-xl border border-zinc-800">
+                      <div className="text-zinc-500 text-[10px] uppercase font-bold mb-0.5">Status</div>
+                      <div className="capitalize font-bold text-white text-sm">{selectedUser.status}</div>
                     </div>
-                    <div className="bg-zinc-950 p-4 rounded-xl border border-zinc-800 col-span-2">
-                      <div className="text-zinc-500 text-xs uppercase font-bold mb-1">Accessible Movies</div>
-                      <div className="capitalize font-medium text-white">
+                    <div className="bg-zinc-950 p-3 rounded-xl border border-zinc-800 col-span-2">
+                      <div className="text-zinc-500 text-[10px] uppercase font-bold mb-0.5">Accessible Movies</div>
+                      <div className="capitalize font-bold text-white text-sm">
                         {selectedUser.role === 'admin' || selectedUser.role === 'data_editor' ? 'All' :
                          selectedUser.role === 'user' || selectedUser.role === 'trial' ? (selectedUser.status === 'active' ? 'All' : 'None') :
                          (selectedUser.assignedContent?.length || 0)}
                       </div>
                       {selectedUser.role === 'selected_content' && assignedContentTitles.length > 0 && (
-                        <div className="mt-2 text-sm text-zinc-400">
+                        <div className="mt-1 text-xs text-zinc-400">
                           {assignedContentTitles.join(', ')}
                         </div>
                       )}
                     </div>
-                    <div className="bg-zinc-950 p-4 rounded-xl border border-zinc-800">
-                      <div className="text-zinc-500 text-xs uppercase font-bold mb-1">Joined</div>
-                      <div className="font-medium text-white">{format(new Date(selectedUser.createdAt), 'MMM dd, yyyy')}</div>
+                    <div className="bg-zinc-950 p-3 rounded-xl border border-zinc-800">
+                      <div className="text-zinc-500 text-[10px] uppercase font-bold mb-0.5">Joined</div>
+                      <div className="font-bold text-white text-sm">{format(new Date(selectedUser.createdAt), 'MMM dd, yyyy')}</div>
                     </div>
-                    <div className="bg-zinc-950 p-4 rounded-xl border border-zinc-800">
-                      <div className="text-zinc-500 text-xs uppercase font-bold mb-1">Expiry Date</div>
-                      <div className="font-medium text-white">{selectedUser.expiryDate ? format(new Date(selectedUser.expiryDate), 'MMM dd, yyyy') : 'N/A'}</div>
+                    <div className="bg-zinc-950 p-3 rounded-xl border border-zinc-800">
+                      <div className="text-zinc-500 text-[10px] uppercase font-bold mb-0.5">Expiry Date</div>
+                      <div className="font-bold text-white text-sm">{selectedUser.expiryDate ? format(new Date(selectedUser.expiryDate), 'MMM dd, yyyy') : 'N/A'}</div>
+                    </div>
+                    {selectedUser.permissions && selectedUser.permissions.length > 0 && (
+                      <div className="bg-zinc-950 p-3 rounded-xl border border-zinc-800 col-span-2">
+                        <div className="text-zinc-500 text-[10px] uppercase font-bold mb-1">Management Access</div>
+                        <div className="flex flex-wrap gap-1.5">
+                          {selectedUser.permissions.map(perm => (
+                            <span key={perm} className="px-2 py-0.5 bg-emerald-500/10 text-emerald-500 text-[10px] font-bold uppercase rounded-md border border-emerald-500/20">
+                              {perm}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {(selectedUser.role === 'selected_content' || selectedUser.role === 'temporary') && (
+                    <div className="border-t border-zinc-800 pt-6">
+                      <div className="flex items-center justify-between mb-4">
+                        <h4 className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Assigned Content</h4>
+                        <button 
+                          onClick={() => setIsContentPickerOpen(true)}
+                          className="text-xs font-bold text-emerald-500 hover:text-emerald-400 transition-colors flex items-center gap-1"
+                        >
+                          <Plus className="w-3 h-3" />
+                          Manage
+                        </button>
+                      </div>
+                      
+                      <div className="flex flex-wrap gap-2">
+                        {selectedUser.assignedContent?.map(id => {
+                          const content = allContent.find(c => c.id === id);
+                          return (
+                            <div key={id} className="flex items-center gap-2 bg-zinc-800 px-2 py-1 rounded-lg border border-zinc-700">
+                              <span className="text-[10px] text-zinc-300">{content?.title || id}</span>
+                              <button 
+                                onClick={async () => {
+                                  const nextAssigned = (selectedUser.assignedContent || []).filter(cid => cid !== id);
+                                  await updateDoc(doc(db, 'users', selectedUser.uid), {
+                                    assignedContent: nextAssigned
+                                  });
+                                  setSelectedUser({ ...selectedUser, assignedContent: nextAssigned });
+                                  setAssignedIds(new Set(nextAssigned));
+                                  // Update titles
+                                  setAssignedContentTitles(prev => prev.filter(t => t !== content?.title));
+                                }} 
+                                className="text-zinc-500 hover:text-red-500 transition-colors"
+                              >
+                                <X className="w-3 h-3" />
+                              </button>
+                            </div>
+                          );
+                        })}
+                        {(!selectedUser.assignedContent || selectedUser.assignedContent.length === 0) && (
+                          <p className="text-[10px] text-zinc-500 italic">No content assigned yet.</p>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="border-t border-zinc-800 pt-6">
+                    <h4 className="text-xs font-bold text-zinc-500 uppercase tracking-wider mb-4">Movie Requests</h4>
+                    <div className="space-y-2">
+                      {userRequests.length === 0 ? (
+                        <p className="text-xs text-zinc-500 italic">No requests submitted yet.</p>
+                      ) : (
+                        userRequests.map(req => (
+                          <div key={req.id} className="bg-zinc-950 p-3 rounded-xl border border-zinc-800 flex items-center justify-between">
+                            <div className="flex items-center gap-3">
+                              <div className={clsx(
+                                "w-8 h-8 rounded-lg flex items-center justify-center shrink-0",
+                                req.type === 'movie' ? "bg-blue-500/10 text-blue-500" : "bg-purple-500/10 text-purple-500"
+                              )}>
+                                {req.type === 'movie' ? <Film className="w-4 h-4" /> : <Tv className="w-4 h-4" />}
+                              </div>
+                              <div>
+                                <p className="text-xs font-bold text-zinc-200">{req.title}</p>
+                                <p className="text-[10px] text-zinc-500 uppercase font-bold">{req.type}</p>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <span className={clsx(
+                                "text-[10px] font-bold px-2 py-0.5 rounded-full border",
+                                req.status === 'pending' && "bg-yellow-500/10 text-yellow-500 border-yellow-500/20",
+                                req.status === 'completed' && "bg-emerald-500/10 text-emerald-500 border-emerald-500/20",
+                                req.status === 'rejected' && "bg-red-500/10 text-red-500 border-red-500/20"
+                              )}>
+                                {req.status}
+                              </span>
+                              <div className="flex items-center gap-1">
+                                {req.status === 'pending' && (
+                                  <>
+                                    <button 
+                                      onClick={() => handleUpdateRequestStatus(req.id, 'completed')}
+                                      className="p-1.5 text-emerald-500 hover:bg-emerald-500/10 rounded-lg transition-colors"
+                                      title="Complete"
+                                    >
+                                      <Check className="w-4 h-4" />
+                                    </button>
+                                    <button 
+                                      onClick={() => handleUpdateRequestStatus(req.id, 'rejected')}
+                                      className="p-1.5 text-red-500 hover:bg-red-500/10 rounded-lg transition-colors"
+                                      title="Reject"
+                                    >
+                                      <X className="w-4 h-4" />
+                                    </button>
+                                  </>
+                                )}
+                                <button 
+                                  onClick={() => handleDeleteRequest(req.id)}
+                                  className="p-1.5 text-zinc-500 hover:text-red-500 hover:bg-red-500/10 rounded-lg transition-colors"
+                                  title="Delete"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        ))
+                      )}
                     </div>
                   </div>
 
                   <div className="border-t border-zinc-800 pt-6">
-                    <h4 className="text-sm font-bold text-zinc-400 uppercase tracking-wider mb-4">Activity Overview</h4>
-                    <div className="space-y-3">
+                    <h4 className="text-xs font-bold text-zinc-500 uppercase tracking-wider mb-4">Activity Overview</h4>
+                    <div className="space-y-2">
                       <div className="flex items-center justify-between bg-zinc-950 p-3 rounded-xl border border-zinc-800">
                         <div className="flex items-center gap-3 text-zinc-300">
-                          <Clock className="w-5 h-5 text-emerald-500" />
-                          <span>Time in App</span>
+                          <Clock className="w-4 h-4 text-emerald-500" />
+                          <span className="text-xs font-medium">Time in App</span>
                         </div>
-                        <span className="font-bold text-white">{selectedUser.timeSpent || 0} mins</span>
+                        <span className="font-bold text-white text-xs">{selectedUser.timeSpent || 0} mins</span>
                       </div>
                       <div className="bg-zinc-950 p-3 rounded-xl border border-zinc-800">
-                        <div className="flex items-center justify-between mb-2">
+                        <div className="flex items-center justify-between mb-1">
                           <div className="flex items-center gap-3 text-zinc-300">
-                            <Film className="w-5 h-5 text-emerald-500" />
-                            <span>Movies Clicked</span>
+                            <Film className="w-4 h-4 text-emerald-500" />
+                            <span className="text-xs font-medium">Movies Clicked</span>
                           </div>
-                          <span className="font-bold text-white">{userAnalytics.moviesClicked}</span>
+                          <span className="font-bold text-white text-xs">{userAnalytics.moviesClicked}</span>
                         </div>
                         {userAnalytics.viewedMovies.length > 0 && (
-                          <div className="text-xs text-zinc-400 mt-2 pl-8">
+                          <div className="text-[10px] text-zinc-500 mt-1 pl-7 line-clamp-2">
                             {userAnalytics.viewedMovies.join(', ')}
                           </div>
                         )}
                       </div>
                       <div className="bg-zinc-950 p-3 rounded-xl border border-zinc-800">
-                        <div className="flex items-center justify-between mb-2">
+                        <div className="flex items-center justify-between mb-1">
                           <div className="flex items-center gap-3 text-zinc-300">
-                            <MousePointerClick className="w-5 h-5 text-emerald-500" />
-                            <span>Links Clicked</span>
+                            <MousePointerClick className="w-4 h-4 text-emerald-500" />
+                            <span className="text-xs font-medium">Links Clicked</span>
                           </div>
-                          <span className="font-bold text-white">{userAnalytics.linksClicked}</span>
+                          <span className="font-bold text-white text-xs">{userAnalytics.linksClicked}</span>
                         </div>
                         {userAnalytics.clickedLinks.length > 0 && (
-                          <div className="text-xs text-zinc-400 mt-2 pl-8">
+                          <div className="text-[10px] text-zinc-500 mt-1 pl-7 line-clamp-2">
                             {userAnalytics.clickedLinks.join(', ')}
                           </div>
                         )}
@@ -711,6 +1004,124 @@ export default function UserManagement() {
                   </button>
                 </>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Content Picker Modal */}
+      {isContentPickerOpen && selectedUser && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 z-[60]">
+          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-2xl max-h-[80vh] flex flex-col">
+            <div className="p-6 border-b border-zinc-800 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div>
+                <h2 className="text-xl font-bold">Manage Access</h2>
+                <p className="text-zinc-400 text-sm">Select content for {selectedUser.displayName || selectedUser.email}</p>
+              </div>
+              <div className="flex items-center gap-4">
+                <div className="relative w-full sm:w-48">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
+                  <input
+                    type="text"
+                    placeholder="Search content..."
+                    value={contentSearchTerm}
+                    onChange={(e) => setContentSearchTerm(e.target.value)}
+                    className="w-full bg-zinc-950 border border-zinc-800 rounded-lg pl-9 pr-3 py-1.5 text-sm focus:outline-none focus:border-emerald-500"
+                  />
+                </div>
+                <button onClick={() => setIsContentPickerOpen(false)} className="text-zinc-400 hover:text-white p-2">
+                  <X className="w-6 h-6" />
+                </button>
+              </div>
+            </div>
+            
+            <div className="flex-1 overflow-y-auto p-6">
+              <div className="space-y-2">
+                {allContent
+                  .filter(c => c.title.toLowerCase().includes(contentSearchTerm.toLowerCase()))
+                  .map((content) => {
+                    const isSeries = content.type === 'series';
+                    const seasons = isSeries && content.seasons ? (typeof content.seasons === 'string' ? JSON.parse(content.seasons) : content.seasons) : [];
+                    const isFullyAssigned = assignedIds.has(content.id);
+                    const isPartiallyAssigned = !isFullyAssigned && seasons.some((s: any) => assignedIds.has(`${content.id}:${s.id}`));
+
+                    return (
+                      <div key={content.id} className="bg-zinc-950 border border-zinc-800 rounded-xl overflow-hidden">
+                        <label
+                          className={`flex items-center gap-4 p-4 cursor-pointer transition-colors ${
+                            isFullyAssigned
+                              ? 'bg-emerald-500/10'
+                              : isPartiallyAssigned ? 'bg-emerald-500/5' : 'hover:bg-zinc-900'
+                          }`}
+                        >
+                          <input 
+                            type="checkbox" 
+                            className="hidden" 
+                            checked={isFullyAssigned}
+                            onChange={() => toggleContent(content.id, seasons)}
+                          />
+                          <div className={`w-6 h-6 rounded flex items-center justify-center border ${
+                            isFullyAssigned ? 'bg-emerald-500 border-emerald-500' : isPartiallyAssigned ? 'border-emerald-500 bg-emerald-500/20' : 'border-zinc-600'
+                          }`}>
+                            {isFullyAssigned && <Check className="w-4 h-4 text-white" />}
+                            {!isFullyAssigned && isPartiallyAssigned && <div className="w-3 h-3 bg-emerald-500 rounded-sm" />}
+                          </div>
+                          <div className="flex-1 flex items-center justify-between">
+                            <div className="flex items-center gap-3">
+                              <img src={content.posterUrl} className="w-8 h-12 object-cover rounded" referrerPolicy="no-referrer" />
+                              <div>
+                                <h4 className="font-medium">{content.title}</h4>
+                                <p className="text-xs text-zinc-500 capitalize">{content.type} • {content.year}</p>
+                              </div>
+                            </div>
+                            {content.status === 'draft' && (
+                              <span className="bg-yellow-500/20 text-yellow-500 text-xs px-2 py-1 rounded font-medium">Draft</span>
+                            )}
+                          </div>
+                        </label>
+                        
+                        {isSeries && seasons.length > 0 && (
+                          <div className="border-t border-zinc-800/50 bg-zinc-900/30 p-2 pl-14 space-y-1">
+                            {seasons.map((season: any) => {
+                              const isSeasonAssigned = isFullyAssigned || assignedIds.has(`${content.id}:${season.id}`);
+                              return (
+                                <label key={season.id} className="flex items-center gap-3 p-2 rounded-lg cursor-pointer hover:bg-zinc-800/50">
+                                  <input
+                                    type="checkbox"
+                                    className="hidden"
+                                    checked={isSeasonAssigned}
+                                    onChange={() => toggleSeason(content.id, season.id, seasons)}
+                                  />
+                                  <div className={`w-5 h-5 rounded flex items-center justify-center border ${
+                                    isSeasonAssigned ? 'bg-emerald-500 border-emerald-500' : 'border-zinc-600'
+                                  }`}>
+                                    {isSeasonAssigned && <Check className="w-3 h-3 text-white" />}
+                                  </div>
+                                  <span className="text-sm text-zinc-300">Season {season.seasonNumber}</span>
+                                </label>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+              </div>
+            </div>
+
+            <div className="p-6 border-t border-zinc-800 flex justify-end gap-4">
+              <button
+                onClick={() => setIsContentPickerOpen(false)}
+                className="px-6 py-2 rounded-xl font-medium text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSaveAccess}
+                className="bg-emerald-500 hover:bg-emerald-600 text-white px-6 py-2 rounded-xl font-medium transition-colors"
+              >
+                Save Changes
+              </button>
             </div>
           </div>
         </div>

@@ -11,6 +11,7 @@ const Home = lazy(() => import('./pages/user/Home'));
 const MovieDetails = lazy(() => import('./pages/user/MovieDetails'));
 const WatchLater = lazy(() => import('./pages/user/WatchLater'));
 const Favorites = lazy(() => import('./pages/user/Favorites'));
+const MovieRequests = lazy(() => import('./pages/user/MovieRequests'));
 
 // Admin Pages
 const AdminLayout = lazy(() => import('./pages/admin/AdminLayout'));
@@ -25,6 +26,7 @@ const SelectedContentUsers = lazy(() => import('./pages/admin/SelectedContentUse
 const IncomeManagement = lazy(() => import('./pages/admin/IncomeManagement'));
 const ErrorLinks = lazy(() => import('./pages/admin/ErrorLinks'));
 const Notifications = lazy(() => import('./pages/admin/Notifications'));
+const MovieRequestsManagement = lazy(() => import('./pages/admin/MovieRequestsManagement'));
 
 const LoadingFallback = () => (
   <div className="min-h-screen bg-zinc-950 flex items-center justify-center">
@@ -46,6 +48,7 @@ export default function App() {
             <Route path="/movie/:id" element={<ProtectedRoute><MovieDetails /></ProtectedRoute>} />
             <Route path="/watch-later" element={<ProtectedRoute><WatchLater /></ProtectedRoute>} />
             <Route path="/favorites" element={<ProtectedRoute><Favorites /></ProtectedRoute>} />
+            <Route path="/requests" element={<ProtectedRoute><MovieRequests /></ProtectedRoute>} />
             
             {/* Admin Routes */}
             <Route path="/admin" element={<ProtectedRoute requireAdmin><AdminLayout /></ProtectedRoute>}>
@@ -61,6 +64,7 @@ export default function App() {
               <Route path="income" element={<IncomeManagement />} />
               <Route path="error-links" element={<ErrorLinks />} />
               <Route path="notifications" element={<Notifications />} />
+              <Route path="requests" element={<MovieRequestsManagement />} />
             </Route>
           </Routes>
         </Suspense>
