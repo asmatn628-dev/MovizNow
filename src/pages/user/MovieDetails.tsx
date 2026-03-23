@@ -1,4 +1,4 @@
-import { GoogleGenAI, Type } from "@google/genai";
+import { aiService } from '../../services/aiService';
 import { useState, useEffect, useRef } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { db } from '../../firebase';
@@ -31,39 +31,6 @@ export default function MovieDetails() {
   const [fetchingImdb, setFetchingImdb] = useState(false);
   const hasLoggedView = useRef(false);
   const navigate = useNavigate();
-
-  const fetchAiData = async (title: string, year: string, type: string, currentImdbId: string | null) => {
-    try {
-      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY! });
-      const response = await ai.models.generateContent({
-        model: "gemini-3-flash-preview",
-        contents: `Provide accurate details for the ${type} "${title}" released in ${year}. 
-        Current IMDb ID: ${currentImdbId || 'Unknown'}.
-        If IMDb ID is unknown, please try to find the correct 'tt' ID.
-        Include IMDb rating, release date, runtime (if movie), cast (top 5), and a short synopsis.
-        Also, suggest a high-quality official poster image URL if possible.`,
-        config: {
-          responseMimeType: "application/json",
-          responseSchema: {
-            type: Type.OBJECT,
-            properties: {
-              imdbId: { type: Type.STRING, description: "IMDb tt ID like tt1234567" },
-              rating: { type: Type.STRING, description: "IMDb rating like 8.5/10" },
-              releaseDate: { type: Type.STRING, description: "Release date like 2023-10-27" },
-              duration: { type: Type.STRING, description: "Runtime like 120 min" },
-              cast: { type: Type.STRING, description: "Top cast members separated by comma" },
-              description: { type: Type.STRING, description: "Short synopsis" },
-              posterUrl: { type: Type.STRING, description: "High quality poster URL" }
-            }
-          }
-        }
-      });
-      return JSON.parse(response.text);
-    } catch (error) {
-      console.error("AI fetch error:", error);
-      return null;
-    }
-  };
 
   // Initialize IMDb data from content and cache
   useEffect(() => {
@@ -190,8 +157,10 @@ export default function MovieDetails() {
         setFetchingImdb(true);
         let data: any = { ttId, timestamp: Date.now(), fetchedFields: [] };
 
-        // 1. Parallel API Fetching
-        const fetchPromises = [];
+        // 1. Parallel API & AI Fetching
+        // We start AI fetch immediately if we're missing critical data
+        const aiPromise = aiService.fetchMovieData(content.title, String(content.year || ''), content.type, ttId);
+        const fetchPromises: Promise<any>[] = [aiPromise];
 
         if (ttId) {
           // TVMaze
@@ -200,7 +169,7 @@ export default function MovieDetails() {
               .then(res => res.ok ? res.json() : null)
               .then(show => {
                 if (show) {
-                  if (show.image?.original && !content.posterUrl) {
+                  if (show.image?.original && !content.posterUrl && !data.posterUrl) {
                     data.posterUrl = show.image.original;
                     if (!data.fetchedFields.includes('posterUrl')) data.fetchedFields.push('posterUrl');
                   }
@@ -291,35 +260,31 @@ export default function MovieDetails() {
           );
         }
 
-        // Wait for all standard API calls
-        await Promise.all(fetchPromises);
+        // Wait for all fetches to complete
+        const results = await Promise.all(fetchPromises);
+        const aiResult = results[0]; // The first promise was AI
 
-        // 2. AI Master Fallback
-        const missingFields = [];
-        if (!ttId) missingFields.push('imdbId');
-        if (!data.rating) missingFields.push('rating');
-        if (!data.releaseDate && !content.releaseDate) missingFields.push('releaseDate');
-        if (!data.duration && !content.runtime && content.type !== 'series') missingFields.push('duration');
-        if (!data.cast && (!content.cast || content.cast.length === 0)) missingFields.push('cast');
-        if (!data.description && !content.description) missingFields.push('description');
-        if (!data.posterUrl && !content.posterUrl) missingFields.push('posterUrl');
-
-        if (missingFields.length > 0) {
-          const aiResult = await fetchAiData(content.title, String(content.year || ''), content.type, ttId);
-          if (aiResult) {
-            if (aiResult.imdbId && !ttId) {
-              ttId = aiResult.imdbId;
-              data.ttId = ttId;
-              data.fetchedFields.push('imdbId');
-            }
-            missingFields.forEach(field => {
-              if (aiResult[field] && !data[field]) {
-                data[field] = aiResult[field];
-                if (!data.fetchedFields.includes(field)) data.fetchedFields.push(field);
-              }
-            });
-            data.isAiGenerated = true;
+        // 2. Merge AI results for missing fields
+        if (aiResult) {
+          if (aiResult.imdbId && !ttId) {
+            ttId = aiResult.imdbId;
+            data.ttId = ttId;
+            if (!data.fetchedFields.includes('imdbId')) data.fetchedFields.push('imdbId');
           }
+          
+          const fieldsToFill = ['rating', 'releaseDate', 'duration', 'cast', 'description', 'posterUrl'];
+          fieldsToFill.forEach(field => {
+            // Only use AI data if we don't have it from standard APIs and it's missing in content
+            const isMissingInContent = field === 'duration' ? !content.runtime : 
+                                      field === 'cast' ? (!content.cast || content.cast.length === 0) :
+                                      !(content as any)[field];
+            
+            if (aiResult[field] && !data[field] && isMissingInContent) {
+              data[field] = aiResult[field];
+              if (!data.fetchedFields.includes(field)) data.fetchedFields.push(field);
+              data.isAiGenerated = true;
+            }
+          });
         }
 
         if (data.fetchedFields.length > 0) {
