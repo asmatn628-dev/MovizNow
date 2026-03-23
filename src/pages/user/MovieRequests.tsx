@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { db } from '../../firebase';
 import { collection, onSnapshot, addDoc, query, orderBy, limit, where, getDocs, updateDoc, doc, arrayUnion, increment } from 'firebase/firestore';
 import { useAuth } from '../../contexts/AuthContext';
-import { Film, Plus, Search, Clock, CheckCircle2, XCircle, MessageCircle, ArrowLeft, Tv, AlertCircle } from 'lucide-react';
+import { Film, Plus, Search, Clock, CheckCircle2, XCircle, MessageCircle, ArrowLeft, Tv, AlertCircle, Eye } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { clsx } from 'clsx';
 import { handleFirestoreError, OperationType } from '../../utils/firestoreErrorHandler';
@@ -19,6 +19,7 @@ interface MovieRequest {
   createdAt: string;
   requestedBy: string[];
   requestCount: number;
+  linkedContentId?: string;
 }
 
 export default function MovieRequests() {
@@ -235,6 +236,15 @@ export default function MovieRequests() {
                 </div>
 
                 <div className="flex items-center gap-3">
+                  {request.status === 'completed' && request.linkedContentId && (
+                    <Link
+                      to={`/watch/${request.linkedContentId}`}
+                      className="px-4 py-2 rounded-xl text-sm font-bold transition-all flex items-center gap-2 bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500 hover:text-white"
+                    >
+                      <Eye className="w-4 h-4" />
+                      View
+                    </Link>
+                  )}
                   {request.status === 'pending' && (
                     <button
                       onClick={() => handleUpvote(request.id)}
