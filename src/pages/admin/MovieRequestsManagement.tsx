@@ -278,7 +278,7 @@ export default function MovieRequestsManagement() {
                       <div className="flex items-center justify-end gap-2 transition-opacity">
                         {request.status === 'completed' && (request as any).linkedContentId && (
                           <a
-                            href={`/watch/${(request as any).linkedContentId}`}
+                            href={`/movie/${(request as any).linkedContentId}`}
                             target="_blank"
                             rel="noopener noreferrer"
                             className="p-2 text-blue-500 hover:bg-blue-500/10 rounded-lg transition-colors"
