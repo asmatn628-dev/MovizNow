@@ -1,9 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { X, Check, Loader2, AlertCircle } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { aiService, AiModelId } from '../services/aiService';
-import { Type } from '@google/genai';
-import { Sparkles, Brain, Search as SearchIcon, Zap, Bot, Database, Globe } from 'lucide-react';
+import { GoogleGenAI, Type } from '@google/genai';
 
 interface AIFetchModalProps {
   isOpen: boolean;
@@ -19,7 +17,6 @@ export default function AIFetchModal({ isOpen, onClose, initialTitle, initialYea
   const [error, setError] = useState<string | null>(null);
   const [fetchedData, setFetchedData] = useState<any>(null);
   const [rawStreamText, setRawStreamText] = useState<string>('');
-  const [selectedModel, setSelectedModel] = useState<AiModelId>('gemini-3.1-pro');
   
   // Selection state
   const [selectedFields, setSelectedFields] = useState<Record<string, boolean>>({
@@ -52,6 +49,10 @@ export default function AIFetchModal({ isOpen, onClose, initialTitle, initialYea
     setLoading(true);
     setError(null);
     try {
+      const apiKey = process.env.GEMINI_API_KEY;
+      if (!apiKey) throw new Error("Gemini API key is not configured.");
+      const ai = new GoogleGenAI({ apiKey });
+      
       const genreNames = availableGenres.map(g => g.name).join(', ');
       
       const prompt = `Fetch accurate metadata for the movie or TV show titled "${initialTitle}" ${initialYear ? `(${initialYear})` : ''}. 
@@ -66,67 +67,81 @@ export default function AIFetchModal({ isOpen, onClose, initialTitle, initialYea
       // Run AI fetch and YouTube trailer fetch in parallel
       const ytPromise = fetch(`/api/youtube/search?q=${encodeURIComponent(initialTitle + " " + (initialYear || "") + " trailer")}`).catch(() => null);
       
-      const responseStream = await aiService.fetchMovieDataStream(prompt, {
-        type: Type.OBJECT,
-        properties: {
-          title: { type: Type.STRING },
-          year: { type: Type.INTEGER },
-          type: { type: Type.STRING, description: "Either 'movie' or 'series'" },
-          description: { type: Type.STRING },
-          cast: { type: Type.STRING, description: "Comma separated list of main actors" },
-          genres: { type: Type.ARRAY, items: { type: Type.STRING } },
-          releaseDate: { type: Type.STRING, description: "YYYY-MM-DD" },
-          runtime: { type: Type.STRING, description: "Must be in hh:mm format" },
-          imdbLink: { type: Type.STRING },
-          rating: { type: Type.STRING, description: "IMDb rating like 8.5/10" },
-          posterUrl: { type: Type.STRING },
-          trailerUrl: { type: Type.STRING, description: "YouTube trailer URL if found" },
-          seasons: {
-            type: Type.ARRAY,
-            items: {
-              type: Type.OBJECT,
-              properties: {
-                seasonNumber: { type: Type.INTEGER },
-                seasonYear: { type: Type.INTEGER, description: "Release year of this season" },
-                episodes: {
-                  type: Type.ARRAY,
-                  items: {
-                    type: Type.OBJECT,
-                    properties: {
-                      episodeNumber: { type: Type.INTEGER },
-                      title: { type: Type.STRING },
-                      description: { type: Type.STRING },
-                      duration: { type: Type.STRING }
-                    },
-                    required: ["episodeNumber", "title", "duration"]
-                  }
+      const responseStream = await ai.models.generateContentStream({
+        model: 'gemini-3-flash-preview',
+        contents: prompt,
+        config: {
+          tools: [{ googleSearch: {} }],
+          responseMimeType: 'application/json',
+          responseSchema: {
+            type: Type.OBJECT,
+            properties: {
+              title: { type: Type.STRING },
+              year: { type: Type.INTEGER },
+              type: { type: Type.STRING, description: "Either 'movie' or 'series'" },
+              description: { type: Type.STRING },
+              cast: { type: Type.STRING, description: "Comma separated list of main actors" },
+              genres: { type: Type.ARRAY, items: { type: Type.STRING } },
+              releaseDate: { type: Type.STRING, description: "YYYY-MM-DD" },
+              runtime: { type: Type.STRING, description: "Must be in hh:mm format" },
+              imdbLink: { type: Type.STRING },
+              rating: { type: Type.STRING, description: "IMDb rating like 8.5/10" },
+              posterUrl: { type: Type.STRING },
+              trailerUrl: { type: Type.STRING, description: "YouTube trailer URL if found" },
+              seasons: {
+                type: Type.ARRAY,
+                items: {
+                  type: Type.OBJECT,
+                  properties: {
+                    seasonNumber: { type: Type.INTEGER },
+                    seasonYear: { type: Type.INTEGER, description: "Release year of this season" },
+                    episodes: {
+                      type: Type.ARRAY,
+                      items: {
+                        type: Type.OBJECT,
+                        properties: {
+                          episodeNumber: { type: Type.INTEGER },
+                          title: { type: Type.STRING },
+                          description: { type: Type.STRING },
+                          duration: { type: Type.STRING }
+                        },
+                        required: ["episodeNumber", "title", "duration"]
+                      }
+                    }
+                  },
+                  required: ["seasonNumber", "episodes", "seasonYear"]
                 }
-              },
-              required: ["seasonNumber", "episodes", "seasonYear"]
-            }
+              }
+            },
+            required: ["title", "type", "description"]
           }
-        },
-        required: ["title", "type", "description"]
-      }, selectedModel);
+        }
+      });
 
       let fullText = '';
       for await (const chunk of responseStream) {
         fullText += chunk.text;
         setRawStreamText(fullText);
         
+        // Try to find the last complete JSON object in the stream for faster updates
         try {
+          // Find the last closing brace and try to parse up to it
           const lastBrace = fullText.lastIndexOf('}');
           if (lastBrace !== -1) {
             const partialJson = fullText.substring(0, lastBrace + 1);
             const partialData = JSON.parse(partialJson);
             setFetchedData(partialData);
           }
-        } catch (e) {}
+        } catch (e) {
+          // Ignore parsing errors while streaming
+        }
       }
 
       const ytRes = await ytPromise;
+
       if (fullText) {
         const data = JSON.parse(fullText);
+        
         if (ytRes && ytRes.ok) {
           const ytData = await ytRes.json();
           if (ytData.url) {
@@ -134,7 +149,10 @@ export default function AIFetchModal({ isOpen, onClose, initialTitle, initialYea
             data.trailerTitle = ytData.title;
           }
         }
+        
         setFetchedData(data);
+        
+        // Initialize season selections
         if (data.seasons && Array.isArray(data.seasons)) {
           const initialSeasons: Record<number, boolean> = {};
           data.seasons.forEach((s: any) => {
@@ -142,6 +160,8 @@ export default function AIFetchModal({ isOpen, onClose, initialTitle, initialYea
           });
           setSelectedSeasons(initialSeasons);
         }
+      } else {
+        throw new Error("No data returned from AI");
       }
     } catch (err: any) {
       console.error("AI Fetch Error:", err);
@@ -211,10 +231,7 @@ export default function AIFetchModal({ isOpen, onClose, initialTitle, initialYea
         >
           <div className="flex items-center justify-between p-6 border-b border-zinc-800 shrink-0">
             <div>
-              <div className="flex items-center gap-2">
-                <Sparkles className="w-5 h-5 text-purple-400" />
-                <h2 className="text-xl font-bold text-white">AI Master Fetch</h2>
-              </div>
+              <h2 className="text-xl font-bold text-white">AI Master Fetch</h2>
               <p className="text-sm text-zinc-400 mt-1">
                 Searching for "{initialTitle}" {initialYear ? `(${initialYear})` : ''}
               </p>
@@ -225,31 +242,6 @@ export default function AIFetchModal({ isOpen, onClose, initialTitle, initialYea
             >
               <X className="w-5 h-5" />
             </button>
-          </div>
-
-          {/* Model Selector */}
-          <div className="px-6 py-4 border-b border-zinc-800 bg-zinc-900/50 shrink-0">
-            <label className="block text-xs font-medium text-zinc-500 uppercase tracking-wider mb-3">Select AI Engine</label>
-            <div className="flex flex-wrap gap-2">
-              {[
-                { id: 'gemini-3.1-pro', name: 'Gemini 3.1 Pro', icon: Sparkles, color: 'text-purple-400' },
-                { id: 'gemini-3.1-flash-lite', name: 'Gemini 3.1 Lite', icon: Zap, color: 'text-blue-400' },
-                { id: 'gemini-3-flash', name: 'Gemini 3 Flash', icon: Zap, color: 'text-emerald-400' },
-              ].map((model) => (
-                <button
-                  key={model.id}
-                  onClick={() => setSelectedModel(model.id as AiModelId)}
-                  className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border transition-all ${
-                    selectedModel === model.id 
-                      ? 'bg-white/10 border-white/20 ring-1 ring-white/10' 
-                      : 'bg-black/20 border-white/5 hover:border-white/10 text-zinc-400'
-                  }`}
-                >
-                  <model.icon className={`w-3.5 h-3.5 ${model.color}`} />
-                  <span className="text-xs font-medium truncate">{model.name}</span>
-                </button>
-              ))}
-            </div>
           </div>
 
           <div className="p-6 overflow-y-auto flex-1 custom-scrollbar">

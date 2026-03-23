@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useSearchParams, Link } from 'react-router-dom';
 import { db } from '../../firebase';
-import { aiService } from '../../services/aiService';
+import { GoogleGenAI } from "@google/genai";
 import { collection, addDoc, deleteDoc, doc, updateDoc, onSnapshot, writeBatch } from 'firebase/firestore';
 import { Content, Genre, Language, Quality, QualityLinks, Season, Episode, LinkDef } from '../../types';
 import { Plus, Edit2, Trash2, Share2, Film, Tv, X, Save, Upload, Search, Eye, EyeOff, ArrowUp, ArrowDown, Copy, ClipboardPaste, GripVertical, Bell, RefreshCw, ChevronDown, ChevronUp } from 'lucide-react';
@@ -409,14 +409,21 @@ export default function ContentManagement() {
     if (!title) return;
     setFetchingPoster(true);
     try {
+      const apiKey = process.env.GEMINI_API_KEY;
+      if (!apiKey) throw new Error("Gemini API key is not configured.");
+      const ai = new GoogleGenAI({ apiKey });
+      
       const prompt = `Find a high-resolution, official HD poster URL for the ${type === 'movie' ? 'movie' : 'TV series'} titled "${title}" ${year ? `(${year})` : ''}. 
       Return ONLY a valid, direct image URL (e.g., from IMDb, TMDB, or a major movie database). 
       Do not include any other text, just the URL. 
       Ensure it is a high-quality vertical poster.`;
 
-      const result = await aiService.chat(prompt, "You are a movie database expert. Return ONLY the URL.");
+      const result = await ai.models.generateContent({
+        model: 'gemini-3-flash-preview',
+        contents: prompt,
+      });
 
-      const url = result.trim();
+      const url = result.text.trim();
       if (url && url.startsWith('http')) {
         setPosterUrl(url);
       } else {

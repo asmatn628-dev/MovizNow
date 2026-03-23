@@ -1,6 +1,6 @@
-import { aiService } from './aiService';
 import { db } from '../firebase';
 import { doc, setDoc, updateDoc, getDoc, serverTimestamp } from 'firebase/firestore';
+import { GoogleGenAI } from "@google/genai";
 
 export interface ErrorLinkInfo {
   contentId: string;
@@ -61,7 +61,11 @@ class ScannerService {
     };
 
     try {
+      const apiKey = process.env.GEMINI_API_KEY;
+      if (!apiKey) return getFallbackError(status, data);
+
       await new Promise(resolve => setTimeout(resolve, 500));
+      const ai = new GoogleGenAI({ apiKey });
       const prompt = `
         Analyze this Pixeldrain API response and determine the exact reason why the link is unavailable or problematic.
         URL: ${url}
@@ -80,9 +84,12 @@ class ScannerService {
         Just return the error message text, nothing else.
       `;
 
-      const result = await aiService.chat(prompt, "You are a technical support expert. Return ONLY the error message.");
+      const result = await ai.models.generateContent({
+        model: "gemini-3-flash-preview",
+        contents: prompt,
+      });
 
-      return result.trim() || getFallbackError(status, data);
+      return result.text.trim() || getFallbackError(status, data);
     } catch (e: any) {
       if (e?.message?.includes('429') || e?.message?.includes('quota')) {
         return getFallbackError(status, data);
