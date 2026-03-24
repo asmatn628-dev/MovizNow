@@ -9,7 +9,6 @@ import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea
 import ConfirmModal from '../../components/ConfirmModal';
 import AlertModal from '../../components/AlertModal';
 import AIFetchModal from '../../components/AIFetchModal';
-import IMDbFetchModal from '../../components/IMDbFetchModal';
 import { formatContentTitle, formatReleaseDate } from '../../utils/contentUtils';
 import { handleFirestoreError, OperationType } from '../../utils/firestoreErrorHandler';
 
@@ -67,7 +66,6 @@ export default function ContentManagement() {
   const [isLanguageDropdownOpen, setIsLanguageDropdownOpen] = useState(false);
   const [searchParams, setSearchParams] = useSearchParams();
   const [isAIFetchModalOpen, setIsAIFetchModalOpen] = useState(false);
-  const [isIMDbFetchModalOpen, setIsIMDbFetchModalOpen] = useState(false);
   const [fetchingPoster, setFetchingPoster] = useState(false);
   const [isAutoFillModalOpen, setIsAutoFillModalOpen] = useState(false);
   const [autoFillText, setAutoFillText] = useState('');
@@ -409,7 +407,7 @@ export default function ContentManagement() {
       Ensure it is a high-quality vertical poster.`;
 
       const result = await ai.models.generateContent({
-        model: 'gemini-3-flash-preview',
+        model: 'gemini-3.1-flash-lite-preview',
         contents: prompt,
       });
 
@@ -1578,8 +1576,9 @@ export default function ContentManagement() {
                       <label className="block text-xs font-medium text-zinc-500 mb-1">Release Year</label>
                       <div className="flex gap-2">
                         <input type="number" value={year || ''} onChange={(e) => setYear(parseInt(e.target.value) || new Date().getFullYear())} className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-emerald-500" />
-                        <button type="button" onClick={handleMasterAutoFetch} disabled={!title} className="bg-emerald-500 hover:bg-emerald-600 disabled:bg-emerald-500/50 text-white px-3 py-2 rounded-lg text-xs font-medium transition-colors flex items-center justify-center whitespace-nowrap" title="Auto Fetch All with AI">
+                        <button type="button" onClick={handleMasterAutoFetch} disabled={!title} className="bg-emerald-500 hover:bg-emerald-600 disabled:bg-emerald-500/50 text-white px-3 py-2 rounded-lg text-xs font-medium transition-colors flex items-center justify-center gap-2 whitespace-nowrap" title="Auto Fetch All with AI">
                           <RefreshCw className="w-4 h-4" />
+                          Master Auto Fetch
                         </button>
                       </div>
                     </div>
@@ -1678,14 +1677,6 @@ export default function ContentManagement() {
                           placeholder="https://www.imdb.com/title/..." 
                         />
                       </div>
-                      <button
-                        type="button"
-                        onClick={() => setIsIMDbFetchModalOpen(true)}
-                        disabled={!imdbLink.includes('imdb.com/title/tt')}
-                        className="bg-emerald-500 hover:bg-emerald-600 disabled:bg-emerald-500/50 text-white px-3 py-2 rounded-lg text-xs font-medium transition-colors flex items-center justify-center min-w-[80px]"
-                      >
-                        Fetch
-                      </button>
                     </div>
                   </div>
 
@@ -2302,13 +2293,6 @@ export default function ContentManagement() {
         </div>
       )}
 
-      <IMDbFetchModal
-        isOpen={isIMDbFetchModalOpen}
-        onClose={() => setIsIMDbFetchModalOpen(false)}
-        imdbLink={imdbLink}
-        availableGenres={genres}
-        onApply={applyAIFetchedData}
-      />
     </div>
   );
 }

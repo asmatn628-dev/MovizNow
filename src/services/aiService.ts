@@ -41,7 +41,7 @@ export class AiService {
     year: string, 
     type: 'movie' | 'series', 
     currentImdbId?: string | null,
-    modelId: AiModelId = 'gemini-3-flash'
+    modelId: AiModelId = 'gemini-3.1-flash-lite'
   ): Promise<MovieAiData | null> {
     const prompt = `Search for the official IMDb details for the ${type} "${title}" (${year}). 
     Current IMDb ID provided: ${currentImdbId || 'None'}.
@@ -102,7 +102,7 @@ export class AiService {
   /**
    * Fetches comprehensive movie/series data with streaming support.
    */
-  public async fetchMovieDataStream(prompt: string, schema: any, modelId: AiModelId = 'gemini-3-flash') {
+  public async fetchMovieDataStream(prompt: string, schema: any, modelId: AiModelId = 'gemini-3.1-flash-lite') {
     const modelMap: Record<AiModelId, string> = {
       'gemini-3.1-pro': 'gemini-3.1-pro-preview',
       'gemini-3.1-flash-lite': 'gemini-3.1-flash-lite-preview',

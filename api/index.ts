@@ -103,8 +103,8 @@ async function startServer() {
   // Helper to fetch movie details and generate OG tags
   const getOgTags = async (req: express.Request) => {
     const urlPath = req.originalUrl;
-    const host = req.get('host') || '';
-    const protocol = req.protocol || 'https';
+    const host = req.get('x-forwarded-host') || req.get('host') || '';
+    const protocol = req.get('x-forwarded-proto') || req.protocol || 'https';
     const baseUrl = `${protocol}://${host}`;
     
     let title = "MovizNow";
@@ -156,6 +156,10 @@ async function startServer() {
             
             if (data.fields.posterUrl?.stringValue) {
               image = data.fields.posterUrl.stringValue;
+              // Ensure image is absolute
+              if (image.startsWith('/')) {
+                image = `${baseUrl}${image}`;
+              }
             }
           }
         }
