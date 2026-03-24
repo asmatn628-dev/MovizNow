@@ -226,5 +226,9 @@ async function startServer() {
   return app;
 }
 
-const app = await startServer();
-export default app;
+// For Vercel serverless functions, we need to export the app
+const appPromise = startServer();
+export default async (req: express.Request, res: express.Response) => {
+  const app = await appPromise;
+  return app(req, res);
+};
