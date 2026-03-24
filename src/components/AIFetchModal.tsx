@@ -11,11 +11,12 @@ interface AIFetchModalProps {
   onClose: () => void;
   initialTitle: string;
   initialYear: number | '';
+  initialImdbLink?: string;
   availableGenres: { id: string, name: string }[];
   onApply: (data: any) => void;
 }
 
-export default function AIFetchModal({ isOpen, onClose, initialTitle, initialYear, availableGenres, onApply }: AIFetchModalProps) {
+export default function AIFetchModal({ isOpen, onClose, initialTitle, initialYear, initialImdbLink, availableGenres, onApply }: AIFetchModalProps) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [fetchedData, setFetchedData] = useState<any>(null);
@@ -43,11 +44,11 @@ export default function AIFetchModal({ isOpen, onClose, initialTitle, initialYea
       setFetchedData(null);
       setRawStreamText('');
       setError(null);
-      if (initialTitle) {
+      if (initialTitle || initialImdbLink) {
         fetchDataWithAI();
       }
     }
-  }, [isOpen, initialTitle, initialYear]);
+  }, [isOpen, initialTitle, initialYear, initialImdbLink]);
 
   const fetchDataWithAI = async () => {
     setLoading(true);
@@ -55,14 +56,15 @@ export default function AIFetchModal({ isOpen, onClose, initialTitle, initialYea
     try {
       const genreNames = availableGenres.map(g => g.name).join(', ');
       
-      const prompt = `Fetch accurate metadata for the movie or TV show titled "${initialTitle}" ${initialYear ? `(${initialYear})` : ''}. 
+      const prompt = `Fetch accurate metadata for the movie or TV show titled "${initialTitle || 'Unknown'}" ${initialYear ? `(${initialYear})` : ''}. 
+      ${initialImdbLink ? `IMDb Link: ${initialImdbLink}` : ''}
       CRITICAL: You MUST use Google Search to find the EXACT IMDb ID (ttXXXXXXX) and the most accurate high-resolution poster URL.
       Include the poster URL (a valid, high-resolution image link from a reliable source like IMDb, TMDB, or a major movie database. Do not use low-resolution thumbnails or temporary links. Prefer static image URLs). 
       EXACT IMDb link (e.g., https://www.imdb.com/title/tt1234567/), release date (YYYY-MM-DD), runtime in "hh:mm" format (e.g., "02:00" for 120 mins), cast (comma separated), and a plot description.
       Fetch the IMDb rating (e.g., "8.5/10").
       For genres, ONLY select from this exact list: [${genreNames}]. If a genre like "History" is requested but "Historical" is in the list, use "Historical". Match the meaning to the exact list provided.
       If it is a TV series, you MUST include a list of ALL seasons and ALL of their episodes. For EACH season, provide the release year. For EACH episode, provide the episode number, title, description, and the EXACT duration/runtime (e.g., "45m" or "00:45"). Do not skip any episodes.
-      Ensure the data is highly accurate and corresponds exactly to the title provided. Double check the IMDb ID and poster URL accuracy.`;
+      Ensure the data is highly accurate and corresponds exactly to the title/IMDb link provided. Double check the IMDb ID and poster URL accuracy.`;
 
       // Run AI fetch and YouTube trailer fetch in parallel
       const ytPromise = fetch(`/api/youtube/search?q=${encodeURIComponent(initialTitle + " " + (initialYear || "") + " trailer")}`).catch(() => null);
@@ -146,7 +148,14 @@ export default function AIFetchModal({ isOpen, onClose, initialTitle, initialYea
       }
     } catch (err: any) {
       console.error("AI Fetch Error:", err);
-      setError(err.message || "Failed to fetch data using AI.");
+      let message = err.message || "Failed to fetch data using AI.";
+      try {
+        const parsed = JSON.parse(message);
+        if (parsed.error && parsed.error.message) {
+          message = parsed.error.message;
+        }
+      } catch (e) {}
+      setError(message);
     } finally {
       setLoading(false);
     }
@@ -222,7 +231,7 @@ export default function AIFetchModal({ isOpen, onClose, initialTitle, initialYea
             </div>
             <div className="flex items-center gap-4">
               <div className="flex items-center gap-2 bg-zinc-950 border border-zinc-800 rounded-xl p-1">
-                {(['gemini-3-flash', 'gemini-3.1-flash-lite', 'gemini-3.1-pro'] as AiModelId[]).map((m) => (
+                {(['gemini-3-flash', 'gemini-3.1-flash-lite'] as AiModelId[]).map((m) => (
                   <button
                     key={m}
                     onClick={() => setSelectedModel(m)}

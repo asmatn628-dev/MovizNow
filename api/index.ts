@@ -13,6 +13,54 @@ async function startServer() {
 
   app.use(express.json());
 
+  // IMDb Fetch Proxy
+  app.get("/api/imdb-fetch", async (req, res) => {
+    try {
+      const { url } = req.query;
+      if (!url || typeof url !== 'string') return res.status(400).json({ error: "IMDb URL required" });
+      
+      const match = url.match(/tt\d+/);
+      if (!match) return res.status(400).json({ error: "Invalid IMDb URL" });
+      const ttId = match[0];
+
+      // Try TVMaze lookup
+      console.log(`Fetching TVMaze for IMDb ID: ${ttId}`);
+      const response = await fetch(`https://api.tvmaze.com/lookup/shows?imdb=${ttId}`);
+      
+      if (!response.ok) {
+        if (response.status === 404) {
+          console.error(`TVMaze lookup not found for ${ttId}`);
+          return res.status(404).json({ error: "Content not found on TVMaze. Please try AI fetch." });
+        }
+        const errorText = await response.text();
+        console.error(`TVMaze lookup failed for ${ttId}: ${response.status} - ${errorText}`);
+        return res.status(response.status).json({ error: `Failed to fetch from TVMaze: ${response.statusText}` });
+      }
+      
+      const showData = await response.json();
+      
+      // Fetch episodes
+      console.log(`Fetching episodes for TVMaze ID: ${showData.id}`);
+      const episodesResponse = await fetch(`https://api.tvmaze.com/shows/${showData.id}/episodes`);
+      
+      if (!episodesResponse.ok) {
+        const errorText = await episodesResponse.text();
+        console.error(`TVMaze episodes failed for ${showData.id}: ${episodesResponse.status} - ${errorText}`);
+        return res.status(episodesResponse.status).json({ error: `Failed to fetch episodes from TVMaze: ${episodesResponse.statusText}` });
+      }
+      
+      const episodes = await episodesResponse.json();
+
+      res.json({
+        ...showData,
+        episodes
+      });
+    } catch (error) {
+      console.error("IMDb Fetch Proxy Error:", error);
+      res.status(500).json({ error: "Internal Server Error" });
+    }
+  });
+
   // IMDb Suggestion Proxy
   app.get("/api/imdb/suggestion/:ttId", async (req, res) => {
     try {

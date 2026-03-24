@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { X, Send, Loader2, Bot, User, Sparkles } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { GoogleGenAI } from '@google/genai';
+import { aiService } from '../services/aiService';
 import Markdown from 'react-markdown';
 
 interface Message {
@@ -46,31 +46,16 @@ export default function GeminiAssistantModal({ isOpen, onClose, context }: Gemin
     setLoading(true);
 
     try {
-      const apiKey = process.env.GEMINI_API_KEY;
-      if (!apiKey) throw new Error("Gemini API key is not configured.");
+      const systemInstruction = `You are a helpful movie assistant. ${context ? `The user is currently viewing: ${context}.` : ''} Provide accurate information about movies, series, cast, and ratings. Be concise and professional.`;
       
-      const ai = new GoogleGenAI({ apiKey });
-      
-      const chat = ai.chats.create({
-        model: "gemini-3.1-flash-lite-preview",
-        config: {
-          systemInstruction: `You are a helpful movie assistant. ${context ? `The user is currently viewing: ${context}.` : ''} Provide accurate information about movies, series, cast, and ratings. Be concise and professional.`,
-        },
-      });
+      // Include history in the message to provide context
+      const historyText = messages.map(m => `${m.role === 'user' ? 'User' : 'Assistant'}: ${m.text}`).join('\n');
+      const prompt = `${historyText}\nUser: ${userMessage}\nAssistant:`;
 
-      // Include history
-      const history = messages.map(m => ({
-        role: m.role,
-        parts: [{ text: m.text }]
-      }));
+      const responseText = await aiService.chat(prompt, systemInstruction);
 
-      const response = await ai.models.generateContent({
-        model: "gemini-3.1-flash-lite-preview",
-        contents: [...history, { role: 'user', parts: [{ text: userMessage }] }],
-      });
-
-      if (response.text) {
-        setMessages(prev => [...prev, { role: 'model', text: response.text! }]);
+      if (responseText) {
+        setMessages(prev => [...prev, { role: 'model', text: responseText }]);
       }
     } catch (error: any) {
       console.error("Gemini Error:", error);

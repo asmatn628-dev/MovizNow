@@ -1,13 +1,14 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useSearchParams, Link } from 'react-router-dom';
 import { db } from '../../firebase';
-import { GoogleGenAI } from "@google/genai";
+import { aiService } from '../../services/aiService';
 import { collection, addDoc, deleteDoc, doc, updateDoc, onSnapshot, writeBatch } from 'firebase/firestore';
 import { Content, Genre, Language, Quality, QualityLinks, Season, Episode, LinkDef } from '../../types';
 import { Plus, Edit2, Trash2, Share2, Film, Tv, X, Save, Upload, Search, Eye, EyeOff, ArrowUp, ArrowDown, Copy, ClipboardPaste, GripVertical, Bell, RefreshCw, ChevronDown, ChevronUp } from 'lucide-react';
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
 import ConfirmModal from '../../components/ConfirmModal';
 import AlertModal from '../../components/AlertModal';
+import IMDbMasterFetchModal from '../../components/IMDbMasterFetchModal';
 import AIFetchModal from '../../components/AIFetchModal';
 import { formatContentTitle, formatReleaseDate } from '../../utils/contentUtils';
 import { handleFirestoreError, OperationType } from '../../utils/firestoreErrorHandler';
@@ -66,6 +67,7 @@ export default function ContentManagement() {
   const [isLanguageDropdownOpen, setIsLanguageDropdownOpen] = useState(false);
   const [searchParams, setSearchParams] = useSearchParams();
   const [isAIFetchModalOpen, setIsAIFetchModalOpen] = useState(false);
+  const [isImdbMasterFetchModalOpen, setIsImdbMasterFetchModalOpen] = useState(false);
   const [fetchingPoster, setFetchingPoster] = useState(false);
   const [isAutoFillModalOpen, setIsAutoFillModalOpen] = useState(false);
   const [autoFillText, setAutoFillText] = useState('');
@@ -388,30 +390,69 @@ export default function ContentManagement() {
     });
   };
 
-  const handleMasterAutoFetch = () => {
-    if (!title) return;
-    setIsAIFetchModalOpen(true);
+  const handleMasterAutoFetch = async () => {
+    if (!title && !imdbLink) {
+      setAlertConfig({ isOpen: true, title: 'Missing Information', message: 'Please enter a title or an IMDb link before fetching.' });
+      return;
+    }
+
+    if (imdbLink) {
+      try {
+        setLoading(true);
+        const response = await fetch(`/api/imdb-fetch?url=${encodeURIComponent(imdbLink)}`);
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || "Failed to fetch data from IMDb/TVMaze.");
+        
+        // Map TVMaze data to our content structure
+        const mappedData = {
+          title: data.name,
+          description: data.summary?.replace(/<[^>]*>/g, ''),
+          genres: data.genres,
+          posterUrl: data.image?.original,
+          imdbLink: imdbLink,
+          // Map episodes if available
+          seasons: data.episodes ? data.episodes.reduce((acc: any[], ep: any) => {
+            const seasonNum = ep.season;
+            let season = acc.find(s => s.seasonNumber === seasonNum);
+            if (!season) {
+              season = { seasonNumber: seasonNum, episodes: [] };
+              acc.push(season);
+            }
+            season.episodes.push({
+              episodeNumber: ep.number,
+              title: ep.name,
+              description: ep.summary?.replace(/<[^>]*>/g, ''),
+              duration: ep.runtime ? `${ep.runtime}m` : ''
+            });
+            return acc;
+          }, []) : []
+        };
+        
+        applyAIFetchedData(mappedData);
+        setAlertConfig({ isOpen: true, title: 'Success', message: 'Data fetched successfully!' });
+      } catch (error) {
+        console.error("Direct Fetch Error:", error);
+        setAlertConfig({ isOpen: true, title: 'Error', message: 'Failed to fetch data directly. Please try AI fetch.' });
+      } finally {
+        setLoading(false);
+      }
+    } else {
+      setIsAIFetchModalOpen(true);
+    }
   };
 
   const fetchPosterWithAI = async () => {
     if (!title) return;
     setFetchingPoster(true);
     try {
-      const apiKey = process.env.GEMINI_API_KEY;
-      if (!apiKey) throw new Error("Gemini API key is not configured.");
-      const ai = new GoogleGenAI({ apiKey });
-      
       const prompt = `Find a high-resolution, official HD poster URL for the ${type === 'movie' ? 'movie' : 'TV series'} titled "${title}" ${year ? `(${year})` : ''}. 
       Return ONLY a valid, direct image URL (e.g., from IMDb, TMDB, or a major movie database). 
       Do not include any other text, just the URL. 
       Ensure it is a high-quality vertical poster.`;
 
-      const result = await ai.models.generateContent({
-        model: 'gemini-3.1-flash-lite-preview',
-        contents: prompt,
-      });
-
-      const url = result.text.trim();
+      const posterUrl = await aiService.chat(prompt, "You are a helpful assistant that provides only image URLs.");
+      
+      const url = posterUrl?.trim();
       if (url && url.startsWith('http')) {
         setPosterUrl(url);
       } else {
@@ -1677,6 +1718,20 @@ export default function ContentManagement() {
                           placeholder="https://www.imdb.com/title/..." 
                         />
                       </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (!imdbLink) {
+                            setAlertConfig({ isOpen: true, title: 'Missing IMDb Link', message: 'Please enter an IMDb link before fetching.' });
+                            return;
+                          }
+                          setIsImdbMasterFetchModalOpen(true);
+                        }}
+                        className="px-3 py-2 bg-emerald-500/10 text-emerald-500 rounded-lg text-xs font-medium hover:bg-emerald-500/20 transition-colors flex items-center gap-1.5"
+                      >
+                        <Search className="w-3 h-3" />
+                        IMDb Master Fetch
+                      </button>
                     </div>
                   </div>
 
@@ -2039,11 +2094,18 @@ export default function ContentManagement() {
         </div>
       )}
 
+      <IMDbMasterFetchModal
+        isOpen={isImdbMasterFetchModalOpen}
+        onClose={() => setIsImdbMasterFetchModalOpen(false)}
+        imdbLink={imdbLink}
+        onApply={applyAIFetchedData}
+      />
       <AIFetchModal
         isOpen={isAIFetchModalOpen}
         onClose={() => setIsAIFetchModalOpen(false)}
         initialTitle={title}
         initialYear={year || ''}
+        initialImdbLink={imdbLink}
         availableGenres={genres}
         onApply={applyAIFetchedData}
       />

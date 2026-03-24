@@ -1,4 +1,5 @@
-import { GoogleGenAI, Type } from "@google/genai";
+import { Type } from "@google/genai";
+import { aiService } from './aiService';
 
 export interface MovieMetadata {
   title: string;
@@ -14,14 +15,6 @@ export interface MovieMetadata {
 }
 
 export async function fetchMovieMetadata(title: string, year?: number, imdbLink?: string): Promise<MovieMetadata | null> {
-  const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) {
-    console.error("Gemini API key is missing");
-    return null;
-  }
-
-  const ai = new GoogleGenAI({ apiKey });
-  
   const prompt = `Fetch accurate metadata for the movie or TV show: "${title}" ${year ? `(${year})` : ''}. 
   ${imdbLink ? `IMDb Link: ${imdbLink}` : ''}
   
@@ -39,8 +32,8 @@ export async function fetchMovieMetadata(title: string, year?: number, imdbLink?
   Use Google Search to ensure the data is up-to-date and accurate.`;
 
   try {
-    const response = await ai.models.generateContent({
-      model: "gemini-3-flash-preview",
+    const response = await aiService.ai.models.generateContent({
+      model: "gemini-3.1-flash-lite-preview",
       contents: prompt,
       config: {
         tools: [{ googleSearch: {} }],
@@ -65,7 +58,7 @@ export async function fetchMovieMetadata(title: string, year?: number, imdbLink?
     });
 
     if (response.text) {
-      return JSON.parse(response.text) as MovieMetadata;
+      return JSON.parse(response.text || '{}') as MovieMetadata;
     }
     return null;
   } catch (error) {

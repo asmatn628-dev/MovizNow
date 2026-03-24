@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useParams, Link, useNavigate, useLocation } from 'react-router-dom';
+import { Helmet } from 'react-helmet-async';
 import { db } from '../../firebase';
 import { doc, onSnapshot, updateDoc, arrayUnion, arrayRemove, collection, deleteDoc } from 'firebase/firestore';
 import { Content, Genre, Language, QualityLinks, Season, Quality } from '../../types';
@@ -39,6 +40,11 @@ export default function MovieDetails() {
   const hasLoggedView = useRef(false);
   const navigate = useNavigate();
   const location = useLocation();
+
+  const title = content ? `${formatContentTitle(content)} (${content.year}) - MovizNow` : 'MovizNow';
+  const description = content?.description || 'Watch the latest movies and series on MovizNow.';
+  const imageUrl = content?.posterUrl || 'https://Moviz-Now.vercel.app/logo.svg';
+  const pageUrl = window.location.href;
 
   // Initialize IMDb data from content and cache
   useEffect(() => {
@@ -623,6 +629,17 @@ export default function MovieDetails() {
 
   return (
     <div className="min-h-screen bg-zinc-950 text-white pb-20">
+      <Helmet>
+        <title>{title}</title>
+        <meta name="description" content={description} />
+        <meta property="og:title" content={title} />
+        <meta property="og:description" content={description} />
+        <meta property="og:image" content={imageUrl} />
+        <meta property="og:url" content={pageUrl} />
+        <meta name="twitter:title" content={title} />
+        <meta name="twitter:description" content={description} />
+        <meta name="twitter:image" content={imageUrl} />
+      </Helmet>
       {/* Hero Section */}
       <div className="relative h-[60vh] md:h-[70vh] w-full">
         <div className="absolute inset-0">

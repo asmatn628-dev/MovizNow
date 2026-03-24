@@ -20,10 +20,14 @@ export type AiModelId =
 
 export class AiService {
   private static instance: AiService;
-  private ai: GoogleGenAI;
+  public ai: GoogleGenAI;
 
   private constructor() {
-    this.ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY! });
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey) {
+      console.error("GEMINI_API_KEY is not configured in environment variables.");
+    }
+    this.ai = new GoogleGenAI({ apiKey: apiKey || '' });
   }
 
   public static getInstance(): AiService {
@@ -41,7 +45,7 @@ export class AiService {
     year: string, 
     type: 'movie' | 'series', 
     currentImdbId?: string | null,
-    modelId: AiModelId = 'gemini-3-flash'
+    modelId: AiModelId = 'gemini-3.1-flash-lite'
   ): Promise<MovieAiData | null> {
     const prompt = `Search for the official IMDb details for the ${type} "${title}" (${year}). 
     Current IMDb ID provided: ${currentImdbId || 'None'}.
@@ -88,7 +92,7 @@ export class AiService {
           }
         }
       });
-      return JSON.parse(response.text);
+      return JSON.parse(response.text || '{}');
     } catch (error) {
       console.error(`AI Service Error (${modelId}):`, error);
       // Fallback to Flash if Pro fails
@@ -102,27 +106,22 @@ export class AiService {
   /**
    * Fetches comprehensive movie/series data with streaming support.
    */
-  public async fetchMovieDataStream(prompt: string, schema: any, modelId: AiModelId = 'gemini-3-flash', thinkingLevel?: ThinkingLevel) {
+  public async fetchMovieDataStream(prompt: string, schema: any, modelId: AiModelId = 'gemini-3.1-flash-lite') {
     const modelMap: Record<AiModelId, string> = {
       'gemini-3.1-pro': 'gemini-3.1-pro-preview',
       'gemini-3.1-flash-lite': 'gemini-3.1-flash-lite-preview',
       'gemini-3-flash': 'gemini-3-flash-preview'
     };
 
-    const config: any = {
-      tools: [{ googleSearch: {} }],
-      responseMimeType: 'application/json',
-      responseSchema: schema,
-    };
-
-    if (thinkingLevel) {
-      config.thinkingConfig = { thinkingLevel };
-    }
-
     return this.ai.models.generateContentStream({
       model: modelMap[modelId],
       contents: prompt,
-      config
+      config: {
+        tools: [{ googleSearch: {} }],
+        responseMimeType: 'application/json',
+        responseSchema: schema,
+        thinkingConfig: { thinkingLevel: ThinkingLevel.HIGH }
+      }
     });
   }
 
