@@ -41,7 +41,7 @@ export class AiService {
     year: string, 
     type: 'movie' | 'series', 
     currentImdbId?: string | null,
-    modelId: AiModelId = 'gemini-3.1-flash-lite'
+    modelId: AiModelId = 'gemini-3-flash'
   ): Promise<MovieAiData | null> {
     const prompt = `Search for the official IMDb details for the ${type} "${title}" (${year}). 
     Current IMDb ID provided: ${currentImdbId || 'None'}.
@@ -102,22 +102,27 @@ export class AiService {
   /**
    * Fetches comprehensive movie/series data with streaming support.
    */
-  public async fetchMovieDataStream(prompt: string, schema: any, modelId: AiModelId = 'gemini-3.1-flash-lite') {
+  public async fetchMovieDataStream(prompt: string, schema: any, modelId: AiModelId = 'gemini-3-flash', thinkingLevel?: ThinkingLevel) {
     const modelMap: Record<AiModelId, string> = {
       'gemini-3.1-pro': 'gemini-3.1-pro-preview',
       'gemini-3.1-flash-lite': 'gemini-3.1-flash-lite-preview',
       'gemini-3-flash': 'gemini-3-flash-preview'
     };
 
+    const config: any = {
+      tools: [{ googleSearch: {} }],
+      responseMimeType: 'application/json',
+      responseSchema: schema,
+    };
+
+    if (thinkingLevel) {
+      config.thinkingConfig = { thinkingLevel };
+    }
+
     return this.ai.models.generateContentStream({
       model: modelMap[modelId],
       contents: prompt,
-      config: {
-        tools: [{ googleSearch: {} }],
-        responseMimeType: 'application/json',
-        responseSchema: schema,
-        thinkingConfig: { thinkingLevel: ThinkingLevel.HIGH }
-      }
+      config
     });
   }
 

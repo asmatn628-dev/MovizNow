@@ -146,14 +146,7 @@ export default function AIFetchModal({ isOpen, onClose, initialTitle, initialYea
       }
     } catch (err: any) {
       console.error("AI Fetch Error:", err);
-      let message = err.message || "Failed to fetch data using AI.";
-      try {
-        const parsed = JSON.parse(message);
-        if (parsed.error && parsed.error.message) {
-          message = parsed.error.message;
-        }
-      } catch (e) {}
-      setError(message);
+      setError(err.message || "Failed to fetch data using AI.");
     } finally {
       setLoading(false);
     }
@@ -229,7 +222,7 @@ export default function AIFetchModal({ isOpen, onClose, initialTitle, initialYea
             </div>
             <div className="flex items-center gap-4">
               <div className="flex items-center gap-2 bg-zinc-950 border border-zinc-800 rounded-xl p-1">
-                {(['gemini-3-flash', 'gemini-3.1-flash-lite'] as AiModelId[]).map((m) => (
+                {(['gemini-3-flash', 'gemini-3.1-flash-lite', 'gemini-3.1-pro'] as AiModelId[]).map((m) => (
                   <button
                     key={m}
                     onClick={() => setSelectedModel(m)}
