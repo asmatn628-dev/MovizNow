@@ -596,44 +596,6 @@ export default function MovieDetails() {
                `🗣️ *Language:* ${contentLangs || 'N/A'}\n` +
                `🎭 *Genre:* ${contentGenres || 'N/A'}\n` +
                `🖨️ *Print Quality:* ${contentQuality}\n`;
-    
-    if (content.runtime) text += `⏱️ Runtime: ${content.runtime}\n`;
-    if (content.releaseDate) text += `📅 Release: ${formatReleaseDate(content.releaseDate)}\n`;
-
-    if (content.type === 'movie' && content.movieLinks) {
-      const links: QualityLinks = JSON.parse(content.movieLinks);
-      if (links.length > 0) {
-        text += `\n📥 *Download Links:*\n`;
-        links.forEach(l => {
-          if (l.url) {
-            text += `▪️ ${l.name} (${l.size}${l.unit})\n${l.url}\n`;
-          }
-        });
-      }
-    } else if (content.type === 'series' && content.seasons) {
-      try {
-        const parsedSeasons: Season[] = JSON.parse(content.seasons);
-        parsedSeasons.forEach(season => {
-          text += `\n📺 *Season ${season.seasonNumber}${season.year ? ` (${season.year})` : ''}*\n`;
-          
-          if (season.zipLinks && season.zipLinks.length > 0) {
-            text += `📦 *Full Season ZIP:*\n`;
-            season.zipLinks.forEach(l => {
-              if (l.url) text += `  ▪️ ${l.name} (${l.size}${l.unit})\n  ${l.url}\n`;
-            });
-          }
-          
-          if (season.mkvLinks && season.mkvLinks.length > 0) {
-            text += `\n🎞️ *Full Season MKV:*\n`;
-            season.mkvLinks.forEach(l => {
-              if (l.url) text += `  ▪️ ${l.name} (${l.size}${l.unit})\n  ${l.url}\n`;
-            });
-          }
-        });
-      } catch (e) {
-        console.error("Error parsing seasons for share:", e);
-      }
-    }
 
     text += (profile?.phone ? `\n📱 *WhatsApp:* ${profile.phone}\n\n` : '\n') +
             `Watch it here:`;

@@ -539,8 +539,8 @@ export default function Home() {
 
         {/* Grid */}
         {loading ? (
-          <div className="flex justify-center items-center py-20">
-            <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-emerald-500"></div>
+          <div className="flex justify-center items-center py-12">
+            <div className="w-6 h-6 border-2 border-emerald-500/30 border-t-emerald-500 rounded-full animate-spin"></div>
           </div>
         ) : filteredAndSortedContent.length === 0 ? (
           <div className="text-center py-20 text-zinc-500">

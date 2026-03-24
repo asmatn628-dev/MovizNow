@@ -12,11 +12,7 @@ export function ProtectedRoute({ children, requireAdmin = false }: ProtectedRout
   const location = useLocation();
 
   if (authLoading) {
-    return (
-      <div className="min-h-screen bg-zinc-950 flex items-center justify-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-emerald-500"></div>
-      </div>
-    );
+    return <div className="min-h-screen bg-zinc-950" />;
   }
 
   if (!user) {
@@ -27,11 +23,7 @@ export function ProtectedRoute({ children, requireAdmin = false }: ProtectedRout
   // If admin is required, we must wait for the profile to check roles
   if (requireAdmin) {
     if (loading || !profile) {
-      return (
-        <div className="min-h-screen bg-zinc-950 flex items-center justify-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-emerald-500"></div>
-        </div>
-      );
+      return <div className="min-h-screen bg-zinc-950" />;
     }
     if (profile.role !== 'admin' && profile.role !== 'data_editor') {
       console.log('ProtectedRoute: Admin required but user is not admin/editor, redirecting to home');

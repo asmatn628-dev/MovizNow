@@ -110,7 +110,7 @@ async function startServer() {
     
     let title = "MovizNow";
     let description = "Your premium movie and series streaming platform";
-    let image = `${baseUrl}/logo.svg`; // Use absolute URL for OG image
+    let image = `${baseUrl}/pwa-512x512.png`; // Use absolute URL for OG image
     
     const movieMatch = urlPath.match(/^\/movie\/([^/?]+)/);
     if (movieMatch) {
@@ -222,6 +222,9 @@ async function startServer() {
   app.listen(PORT, "0.0.0.0", () => {
     console.log(`Server running on http://localhost:${PORT}`);
   });
+
+  return app;
 }
 
-startServer();
+const app = await startServer();
+export default app;

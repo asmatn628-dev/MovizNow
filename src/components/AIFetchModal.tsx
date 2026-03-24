@@ -20,7 +20,7 @@ export default function AIFetchModal({ isOpen, onClose, initialTitle, initialYea
   const [error, setError] = useState<string | null>(null);
   const [fetchedData, setFetchedData] = useState<any>(null);
   const [rawStreamText, setRawStreamText] = useState<string>('');
-  const [selectedModel, setSelectedModel] = useState<AiModelId>('gemini-3.1-pro');
+  const [selectedModel, setSelectedModel] = useState<AiModelId>('gemini-3-flash');
   
   // Selection state
   const [selectedFields, setSelectedFields] = useState<Record<string, boolean>>({
@@ -220,12 +220,29 @@ export default function AIFetchModal({ isOpen, onClose, initialTitle, initialYea
                 Searching for "{initialTitle}" {initialYear ? `(${initialYear})` : ''}
               </p>
             </div>
-            <button
-              onClick={onClose}
-              className="p-2 text-zinc-400 hover:text-white hover:bg-zinc-800 rounded-xl transition-colors"
-            >
-              <X className="w-5 h-5" />
-            </button>
+            <div className="flex items-center gap-4">
+              <div className="flex items-center gap-2 bg-zinc-950 border border-zinc-800 rounded-xl p-1">
+                {(['gemini-3-flash', 'gemini-3.1-flash-lite', 'gemini-3.1-pro'] as AiModelId[]).map((m) => (
+                  <button
+                    key={m}
+                    onClick={() => setSelectedModel(m)}
+                    className={`px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-all ${
+                      selectedModel === m 
+                        ? 'bg-emerald-500 text-black shadow-lg shadow-emerald-500/20' 
+                        : 'text-zinc-500 hover:text-zinc-300'
+                    }`}
+                  >
+                    {m.replace('gemini-', '')}
+                  </button>
+                ))}
+              </div>
+              <button
+                onClick={onClose}
+                className="p-2 text-zinc-400 hover:text-white hover:bg-zinc-800 rounded-xl transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
           </div>
 
           <div className="p-6 overflow-y-auto flex-1 custom-scrollbar">

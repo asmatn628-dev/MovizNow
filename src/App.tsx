@@ -29,9 +29,7 @@ const Notifications = lazy(() => import('./pages/admin/Notifications'));
 const MovieRequestsManagement = lazy(() => import('./pages/admin/MovieRequestsManagement'));
 
 const LoadingFallback = () => (
-  <div className="min-h-screen bg-zinc-950 flex items-center justify-center">
-    <Loader2 className="w-8 h-8 text-emerald-500 animate-spin" />
-  </div>
+  <div className="min-h-screen bg-zinc-950" />
 );
 
 export default function App() {

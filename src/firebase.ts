@@ -65,18 +65,18 @@ if (messaging) {
   });
 }
 
-// Test connection to Firestore
-async function testConnection() {
-  try {
-    await getDocFromServer(doc(db, 'test', 'connection'));
-    console.log("Firestore connection successful.");
-  } catch (error) {
-    if(error instanceof Error && (error.message.includes('the client is offline') || error.message.includes('unavailable'))) {
-      console.error("Please check your Firebase configuration. It looks like the project was remixed and needs to be set up again, or the database ID is incorrect.");
-    } else {
-      console.error("Firestore connection error:", error);
-    }
-  }
-}
-testConnection();
+// Test connection to Firestore (Optional diagnostic)
+// async function testConnection() {
+//   try {
+//     await getDocFromServer(doc(db, 'test', 'connection'));
+//     console.log("Firestore connection successful.");
+//   } catch (error) {
+//     if(error instanceof Error && (error.message.includes('the client is offline') || error.message.includes('unavailable'))) {
+//       console.error("Please check your Firebase configuration. It looks like the project was remixed and needs to be set up again, or the database ID is incorrect.");
+//     } else {
+//       console.error("Firestore connection error:", error);
+//     }
+//   }
+// }
+// testConnection();
 
