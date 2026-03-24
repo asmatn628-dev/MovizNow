@@ -1,12 +1,23 @@
 import express from "express";
-import { createServer as createViteServer } from "vite";
 import path from "path";
 import { fileURLToPath } from "url";
 import fs from "fs";
-import firebaseConfig from "../firebase-applet-config.json" assert { type: "json" };
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+
+// Load config safely
+const configPath = path.resolve(__dirname, "../firebase-applet-config.json");
+let firebaseConfig: any = { projectId: "", firestoreDatabaseId: "" };
+if (fs.existsSync(configPath)) {
+  try {
+    firebaseConfig = JSON.parse(fs.readFileSync(configPath, "utf-8"));
+  } catch (e) {
+    console.error("Error parsing firebase config:", e);
+  }
+} else {
+  console.error(`Firebase config not found at: ${configPath}`);
+}
 
 async function startServer() {
   const app = express();
@@ -180,6 +191,7 @@ async function startServer() {
 
   // Vite middleware for development
   if (process.env.NODE_ENV !== "production") {
+    const { createServer: createViteServer } = await import("vite");
     const vite = await createViteServer({
       server: { middlewareMode: true },
       appType: "custom", // Change to custom to handle HTML manually
@@ -202,26 +214,35 @@ async function startServer() {
       }
     });
   } else {
-    const distPath = path.join(process.cwd(), 'dist');
+    const distPath = path.resolve(__dirname, '../dist');
     app.use(express.static(distPath, { index: false })); // Disable default index.html serving
     
     app.get('*', async (req, res) => {
       try {
-        let template = fs.readFileSync(path.join(distPath, 'index.html'), 'utf-8');
+        const templatePath = path.join(distPath, 'index.html');
+        if (!fs.existsSync(templatePath)) {
+          console.error(`Template not found at: ${templatePath}`);
+          return res.status(404).send("Template not found. Make sure the app is built.");
+        }
+        let template = fs.readFileSync(templatePath, 'utf-8');
         
         const ogTags = await getOgTags(req);
         const html = template.replace('</head>', `${ogTags}</head>`);
         
         res.status(200).set({ 'Content-Type': 'text/html' }).send(html);
       } catch (e) {
+        console.error("Production Error:", e);
         res.status(500).end((e as Error).message);
       }
     });
   }
 
-  app.listen(PORT, "0.0.0.0", () => {
-    console.log(`Server running on http://localhost:${PORT}`);
-  });
+  // Only listen if not running as a Vercel function
+  if (!process.env.VERCEL) {
+    app.listen(PORT, "0.0.0.0", () => {
+      console.log(`Server running on http://localhost:${PORT}`);
+    });
+  }
 
   return app;
 }
