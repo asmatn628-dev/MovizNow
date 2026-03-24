@@ -2,22 +2,10 @@ import express from "express";
 import path from "path";
 import { fileURLToPath } from "url";
 import fs from "fs";
+import firebaseConfig from "../firebase-applet-config.json" assert { type: "json" };
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-
-// Load config safely
-const configPath = path.resolve(__dirname, "../firebase-applet-config.json");
-let firebaseConfig: any = { projectId: "", firestoreDatabaseId: "" };
-if (fs.existsSync(configPath)) {
-  try {
-    firebaseConfig = JSON.parse(fs.readFileSync(configPath, "utf-8"));
-  } catch (e) {
-    console.error("Error parsing firebase config:", e);
-  }
-} else {
-  console.error(`Firebase config not found at: ${configPath}`);
-}
 
 async function startServer() {
   const app = express();
