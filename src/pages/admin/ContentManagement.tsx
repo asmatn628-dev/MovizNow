@@ -9,6 +9,8 @@ import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea
 import ConfirmModal from '../../components/ConfirmModal';
 import AlertModal from '../../components/AlertModal';
 import AIFetchModal from '../../components/AIFetchModal';
+import IMDbFetchModal from '../../components/IMDbFetchModal';
+import { formatContentTitle, formatReleaseDate } from '../../utils/contentUtils';
 import { handleFirestoreError, OperationType } from '../../utils/firestoreErrorHandler';
 
 export default function ContentManagement() {
@@ -64,20 +66,8 @@ export default function ContentManagement() {
   const [isGenreDropdownOpen, setIsGenreDropdownOpen] = useState(false);
   const [isLanguageDropdownOpen, setIsLanguageDropdownOpen] = useState(false);
   const [searchParams, setSearchParams] = useSearchParams();
-  const [imdbCardData, setImdbCardData] = useState<{
-    title: string;
-    year: number;
-    description: string;
-    cast: string;
-    posterUrl: string;
-    type: 'movie' | 'series';
-    genres?: string;
-    rating?: string;
-    releaseDate?: string;
-    runtime?: string;
-  } | null>(null);
-  const [fetchingImdb, setFetchingImdb] = useState(false);
   const [isAIFetchModalOpen, setIsAIFetchModalOpen] = useState(false);
+  const [isIMDbFetchModalOpen, setIsIMDbFetchModalOpen] = useState(false);
   const [fetchingPoster, setFetchingPoster] = useState(false);
   const [isAutoFillModalOpen, setIsAutoFillModalOpen] = useState(false);
   const [autoFillText, setAutoFillText] = useState('');
@@ -531,6 +521,7 @@ export default function ContentManagement() {
                 episodeNumber: ep.episodeNumber,
                 title: ep.title || `Episode ${ep.episodeNumber}`,
                 description: ep.description || '',
+                duration: ep.duration || '',
                 links: [{ id: Math.random().toString(36).substr(2, 9), name: '720p', url: '', size: '', unit: 'MB' }],
               })).sort((a: any, b: any) => a.episodeNumber - b.episodeNumber)
             });
@@ -539,188 +530,6 @@ export default function ContentManagement() {
         
         return updatedSeasons.sort((a, b) => a.seasonNumber - b.seasonNumber);
       });
-    }
-  };
-
-  const fetchImdbData = async (link: string) => {
-    const ttMatch = link.match(/tt\d+/);
-    if (!ttMatch) return;
-    const ttId = ttMatch[0];
-    
-    try {
-      setFetchingImdb(true);
-      setImdbCardData(null);
-      
-      let fetchedData: any = {
-        title: '',
-        year: new Date().getFullYear(),
-        description: '',
-        cast: '',
-        posterUrl: '',
-        type: 'movie' as 'movie' | 'series',
-        rating: '',
-        genres: '',
-        releaseDate: '',
-        runtime: ''
-      };
-
-      // Try TVMaze first (great for series)
-      const tvmazeRes = await fetch(`https://api.tvmaze.com/lookup/shows?imdb=${ttId}`);
-      if (tvmazeRes.ok) {
-        const show = await tvmazeRes.json();
-        fetchedData.title = show.name;
-        fetchedData.description = show.summary?.replace(/<[^>]*>?/gm, '') || '';
-        if (show.image?.original) fetchedData.posterUrl = show.image.original;
-        if (show.premiered) {
-          fetchedData.year = parseInt(show.premiered.substring(0, 4));
-          fetchedData.releaseDate = show.premiered;
-        }
-        if (show.runtime) fetchedData.runtime = `${show.runtime} min`;
-        if (show.genres) fetchedData.genres = show.genres.join(', ');
-        if (show.rating?.average) fetchedData.rating = `${show.rating.average}/10`;
-        fetchedData.type = 'series';
-        
-        // Fetch cast
-        try {
-          const castRes = await fetch(`https://api.tvmaze.com/shows/${show.id}/cast`);
-          if (castRes.ok) {
-            const castData = await castRes.json();
-            fetchedData.cast = castData.slice(0, 5).map((c: any) => c.person.name).join(', ');
-          } else {
-            console.error("TVMaze cast fetch failed", castRes.status, castRes.statusText);
-          }
-        } catch (e) {
-          console.error("TVMaze cast fetch error", e);
-        }
-        
-        // Fetch episodes
-        try {
-          const epRes = await fetch(`https://api.tvmaze.com/shows/${show.id}/episodes`);
-          if (epRes.ok) {
-            const epData = await epRes.json();
-            const seasonsMap = new Map<number, any[]>();
-            epData.forEach((ep: any) => {
-              if (!seasonsMap.has(ep.season)) seasonsMap.set(ep.season, []);
-              seasonsMap.get(ep.season)!.push(ep);
-            });
-            
-            const availableSeasons = Array.from(seasonsMap.keys()).sort((a, b) => a - b);
-            
-            if (availableSeasons.length > 1) {
-              setSelectedImdbSeasons(availableSeasons);
-              setImdbSeasonsPopup({
-                isOpen: true,
-                seasons: availableSeasons,
-                show: show,
-                epData: epData
-              });
-              setFetchingImdb(false);
-            } else {
-              processImdbSeasons(epData);
-            }
-          } else {
-            console.error("TVMaze episodes fetch failed", epRes.status, epRes.statusText);
-          }
-        } catch (e) {
-          console.error("TVMaze episodes fetch error", e);
-        }
-      } else {
-        console.error("TVMaze lookup failed", tvmazeRes.status, tvmazeRes.statusText);
-      }
-      
-      // Fallback for movies or if TVMaze fails
-      try {
-        const suggestRes = await fetch(`/api/imdb/suggestion/${ttId}`);
-        if (suggestRes.ok) {
-          const suggestData = await suggestRes.json();
-          const item = suggestData.d?.[0];
-          if (item) {
-            fetchedData.title = item.l || fetchedData.title;
-            fetchedData.year = item.y || fetchedData.year;
-            fetchedData.cast = item.s || fetchedData.cast;
-            if (item.i?.imageUrl) fetchedData.posterUrl = item.i.imageUrl;
-            fetchedData.type = item.q === 'TV series' ? 'series' : 'movie';
-          }
-        } else {
-          console.error("IMDb suggestion fetch failed", suggestRes.status, suggestRes.statusText);
-        }
-      } catch (e) {
-        console.error("IMDb suggestion fetch error", e);
-      }
-      
-      try {
-        const proxyUrl = `/api/imdb/title/${ttId}`;
-        let pageRes = await fetch(proxyUrl);
-        let html = '';
-        
-        if (pageRes.ok) {
-          html = await pageRes.text();
-        }
-        
-        if (html) {
-          const parser = new DOMParser();
-          const doc = parser.parseFromString(html, 'text/html');
-          
-          let newDesc = fetchedData.description;
-          const descEl = doc.querySelector('[data-testid="plot-xl"]') || 
-                         doc.querySelector('[data-testid="plot-l"]') ||
-                         doc.querySelector('[data-testid="plot-xs"]') ||
-                         doc.querySelector('.ipc-html-content-inner-div');
-          
-          if (descEl && (!fetchedData.description || fetchedData.description.length < 50)) {
-            newDesc = descEl.textContent?.trim() || fetchedData.description;
-          } else if (!newDesc || newDesc.length < 50) {
-            const metaDesc = doc.querySelector('meta[name="description"]')?.getAttribute('content');
-            if (metaDesc) {
-              newDesc = metaDesc.split('. ').slice(1).join('. ').trim() || metaDesc;
-            }
-          }
-          
-          const ratingEl = doc.querySelector('[data-testid="hero-rating-bar__aggregate-rating__score"] span');
-          if (ratingEl && !fetchedData.rating) {
-            fetchedData.rating = `${ratingEl.textContent}/10`;
-          }
-
-          const genresEls = doc.querySelectorAll('[data-testid="genres"] a, .ipc-chip-list__scroller a');
-          if (genresEls.length > 0 && !fetchedData.genres) {
-            const genresArr: string[] = [];
-            genresEls.forEach(el => {
-              if (el.textContent) genresArr.push(el.textContent.trim());
-            });
-            fetchedData.genres = [...new Set(genresArr)].join(', ');
-          }
-
-          const metadataItems = doc.querySelectorAll('[data-testid="hero-title-block__metadata"] li');
-          if (metadataItems.length > 0) {
-            metadataItems.forEach(item => {
-              const text = item.textContent || '';
-              if (text.includes('h') && text.includes('m')) {
-                if (!fetchedData.runtime) fetchedData.runtime = text.trim();
-              } else if (text.match(/^\d{4}$/)) {
-                if (!fetchedData.year) fetchedData.year = parseInt(text);
-              }
-            });
-          }
-
-          const releaseDateEl = doc.querySelector('[data-testid="title-details-releasedate"] a');
-          if (releaseDateEl && !fetchedData.releaseDate) {
-            fetchedData.releaseDate = releaseDateEl.textContent?.trim().split(' (')[0] || '';
-          }
-
-          fetchedData.description = newDesc;
-        } else {
-          console.error("IMDb proxy fetch failed", pageRes.status, pageRes.statusText);
-        }
-      } catch (e) {
-        console.error("IMDb proxy fetch error", e);
-      }
-
-      setImdbCardData(fetchedData);
-      
-    } catch (error) {
-      console.error("Error fetching IMDb data:", error);
-    } finally {
-      setFetchingImdb(false);
     }
   };
 
@@ -800,6 +609,10 @@ export default function ContentManagement() {
 
     const contentQuality = qualities.find(q => q.id === content.qualityId)?.name;
     if (contentQuality) text += `🖨️ Print Quality: ${contentQuality}\n`;
+    
+    if (content.runtime) text += `⏱️ Runtime: ${content.runtime}\n`;
+    if (content.releaseDate) text += `📅 Release: ${formatReleaseDate(content.releaseDate)}\n`;
+    
     if (content.sampleUrl) text += `📽️ Sample: ${content.sampleUrl}\n\n`;
     else text += `\n`;
 
@@ -811,18 +624,21 @@ export default function ContentManagement() {
       const mkvLinks = sortedLinks.filter(l => l.name.toLowerCase().includes('mkv'));
       const otherLinks = sortedLinks.filter(l => !l.name.toLowerCase().includes('zip') && !l.name.toLowerCase().includes('mkv'));
 
-      text += `📥 *Download Links:*\n`;
+      if (zipLinks.length > 0 || mkvLinks.length > 0 || otherLinks.length > 0) {
+        text += `📥 *Download Links:*\n`;
+      }
+
       if (zipLinks.length > 0) {
         text += `\n📦 *ZIP Files:*\n`;
-        zipLinks.forEach(l => { if (l.url) text += `▪️ ${l.name} (${l.size}${l.unit}): ${l.url}\n`; });
+        zipLinks.forEach(l => { if (l.url) text += `▪️ ${l.name} (${l.size}${l.unit})\n${l.url}\n`; });
       }
       if (mkvLinks.length > 0) {
         text += `\n🎞️ *MKV Files:*\n`;
-        mkvLinks.forEach(l => { if (l.url) text += `▪️ ${l.name} (${l.size}${l.unit}): ${l.url}\n`; });
+        mkvLinks.forEach(l => { if (l.url) text += `▪️ ${l.name} (${l.size}${l.unit})\n${l.url}\n`; });
       }
       if (otherLinks.length > 0) {
         if (zipLinks.length > 0 || mkvLinks.length > 0) text += `\n📄 *Other Files:*\n`;
-        otherLinks.forEach(l => { if (l.url) text += `▪️ ${l.name} (${l.size}${l.unit}): ${l.url}\n`; });
+        otherLinks.forEach(l => { if (l.url) text += `▪️ ${l.name} (${l.size}${l.unit})\n${l.url}\n`; });
       }
     } else if (content.type === 'series' && content.seasons) {
       const parsedSeasons: Season[] = JSON.parse(content.seasons);
@@ -839,7 +655,7 @@ export default function ContentManagement() {
           text += `📦 *Full Season ZIP:*\n`;
           zipLinks.forEach((link) => {
             if (link && link.url) {
-              text += `  ▪️ ${link.name} (${link.size}${link.unit}): ${link.url}\n`;
+              text += `  ▪️ ${link.name} (${link.size}${link.unit})\n  ${link.url}\n`;
             }
           });
         }
@@ -847,7 +663,7 @@ export default function ContentManagement() {
           text += `\n🎞️ *Full Season MKV:*\n`;
           mkvLinks.forEach((link) => {
             if (link && link.url) {
-              text += `  ▪️ ${link.name} (${link.size}${link.unit}): ${link.url}\n`;
+              text += `  ▪️ ${link.name} (${link.size}${link.unit})\n  ${link.url}\n`;
             }
           });
         }
@@ -976,6 +792,7 @@ export default function ContentManagement() {
     let newTrailer = '';
     let newSample = '';
     let newPoster = '';
+    let newReleaseDate = '';
     let newGenreIds: string[] = [];
     let newLanguageIds: string[] = [];
     let newQualityId = '';
@@ -1057,6 +874,13 @@ export default function ContentManagement() {
       if (trimmed.includes('Poster:')) {
         const match = trimmed.match(/https?:\/\/[^\s]+/);
         if (match) newPoster = match[0];
+      }
+
+      // Release Date
+      if (trimmed.includes('📅 Release:')) {
+        newReleaseDate = trimmed.split('📅 Release:')[1].trim();
+      } else if (trimmed.includes('Release Date:')) {
+        newReleaseDate = trimmed.split('Release Date:')[1].trim();
       }
 
       // Cast
@@ -1231,6 +1055,7 @@ export default function ContentManagement() {
     if (newTrailer) setTrailerUrl(newTrailer);
     if (newSample) setSampleUrl(newSample);
     if (newPoster) setPosterUrl(newPoster);
+    if (newReleaseDate) setReleaseDate(newReleaseDate);
     if (newGenreIds.length > 0) setSelectedGenres(newGenreIds);
     if (newLanguageIds.length > 0) setSelectedLanguages(newLanguageIds);
     if (newQualityId) setSelectedQuality(newQualityId);
@@ -1760,7 +1585,7 @@ export default function ContentManagement() {
                     </div>
                     <div className="md:col-span-2">
                       <label className="block text-xs font-medium text-zinc-500 mb-1">Release Date</label>
-                      <input type="text" placeholder="YYYY-MM-DD" value={releaseDate} onChange={(e) => setReleaseDate(e.target.value)} className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-emerald-500" />
+                      <input type="text" placeholder="DD-MM-YYYY" value={releaseDate} onChange={(e) => setReleaseDate(e.target.value)} className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-emerald-500" />
                     </div>
                     <div className="md:col-span-2">
                       <label className="block text-xs font-medium text-zinc-500 mb-1">Runtime</label>
@@ -1855,134 +1680,14 @@ export default function ContentManagement() {
                       </div>
                       <button
                         type="button"
-                        onClick={() => fetchImdbData(imdbLink)}
-                        disabled={fetchingImdb || !imdbLink.includes('imdb.com/title/tt')}
+                        onClick={() => setIsIMDbFetchModalOpen(true)}
+                        disabled={!imdbLink.includes('imdb.com/title/tt')}
                         className="bg-emerald-500 hover:bg-emerald-600 disabled:bg-emerald-500/50 text-white px-3 py-2 rounded-lg text-xs font-medium transition-colors flex items-center justify-center min-w-[80px]"
                       >
-                        {fetchingImdb ? (
-                          <div className="animate-spin rounded-full h-4 w-4 border-t-2 border-b-2 border-white"></div>
-                        ) : (
-                          'Fetch'
-                        )}
+                        Fetch
                       </button>
                     </div>
                   </div>
-
-                  {imdbCardData && (
-                    <div className="md:col-span-2 bg-zinc-950 border border-emerald-500/30 rounded-2xl p-4 flex flex-col sm:flex-row gap-4">
-                      <div className="w-full sm:w-32 aspect-[2/3] rounded-lg overflow-hidden flex-shrink-0">
-                        {imdbCardData.posterUrl && imdbCardData.posterUrl.trim() !== "" && (
-                          <img src={imdbCardData.posterUrl} alt={imdbCardData.title} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
-                        )}
-                      </div>
-                      <div className="flex-1 flex flex-col">
-                        <div className="flex items-center justify-between gap-2 mb-2">
-                          <h4 className="text-lg font-bold text-emerald-500">{imdbCardData.title} ({imdbCardData.year})</h4>
-                          <button 
-                            type="button"
-                            onClick={() => setImdbCardData(null)}
-                            className="text-zinc-500 hover:text-white"
-                          >
-                            <X className="w-5 h-5" />
-                          </button>
-                        </div>
-
-                        <div className="flex flex-wrap gap-2 mb-3">
-                          {imdbCardData.rating && (
-                            <span className="bg-yellow-500/20 text-yellow-500 text-[10px] px-2 py-0.5 rounded border border-yellow-500/30 font-bold">
-                              ⭐ {imdbCardData.rating}
-                            </span>
-                          )}
-                          {imdbCardData.runtime && (
-                            <span className="bg-zinc-800 text-zinc-400 text-[10px] px-2 py-0.5 rounded border border-zinc-700">
-                              🕒 {imdbCardData.runtime}
-                            </span>
-                          )}
-                          {imdbCardData.genres && (
-                            <span className="bg-emerald-500/10 text-emerald-500 text-[10px] px-2 py-0.5 rounded border border-emerald-500/20">
-                              {imdbCardData.genres}
-                            </span>
-                          )}
-                        </div>
-                        
-                        <div className="space-y-3 mb-4">
-                          {imdbCardData.description && (
-                            <div>
-                              <div className="flex items-center justify-between mb-1">
-                                <span className="text-xs font-bold text-zinc-500 uppercase">Description</span>
-                                <button 
-                                  type="button"
-                                  onClick={() => setDescription(imdbCardData.description)}
-                                  className="text-[10px] text-emerald-500 hover:underline"
-                                >
-                                  Apply Description
-                                </button>
-                              </div>
-                              <p className="text-sm text-zinc-400 line-clamp-2">{imdbCardData.description}</p>
-                            </div>
-                          )}
-                          
-                          {imdbCardData.cast && (
-                            <div>
-                              <div className="flex items-center justify-between mb-1">
-                                <span className="text-xs font-bold text-zinc-500 uppercase">Cast</span>
-                                <button 
-                                  type="button"
-                                  onClick={() => setCast(imdbCardData.cast)}
-                                  className="text-[10px] text-emerald-500 hover:underline"
-                                >
-                                  Apply Cast
-                                </button>
-                              </div>
-                              <p className="text-xs text-zinc-500 truncate">{imdbCardData.cast}</p>
-                            </div>
-                          )}
-                        </div>
-
-                        <div className="mt-auto flex flex-wrap gap-2">
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setTitle(imdbCardData.title);
-                              setYear(imdbCardData.year);
-                              setPosterUrl(imdbCardData.posterUrl);
-                              setType(imdbCardData.type);
-                              setImdbCardData(null);
-                            }}
-                            className="bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-500 border border-emerald-500/20 px-4 py-2 rounded-lg text-xs font-bold transition-colors"
-                          >
-                            Apply Basic Info
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setDescription(imdbCardData.description);
-                              setCast(imdbCardData.cast);
-                              setImdbCardData(null);
-                            }}
-                            className="bg-zinc-800 hover:bg-zinc-700 text-white border border-zinc-700 px-4 py-2 rounded-lg text-xs font-bold transition-colors"
-                          >
-                            Apply Desc & Cast
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setTitle(imdbCardData.title);
-                              setYear(imdbCardData.year);
-                              setPosterUrl(imdbCardData.posterUrl);
-                              setType(imdbCardData.type);
-                              setDescription(imdbCardData.description);
-                              setCast(imdbCardData.cast);
-                              setImdbCardData(null);
-                            }}
-                            className="bg-emerald-500 hover:bg-emerald-600 text-white px-4 py-2 rounded-lg text-xs font-bold transition-colors"
-                          >
-                            Apply All
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  )}
 
                   <div className="md:col-span-2">
                     <label className="block text-xs font-medium text-zinc-500 mb-1">Print Quality</label>
@@ -2596,6 +2301,14 @@ export default function ContentManagement() {
           </div>
         </div>
       )}
+
+      <IMDbFetchModal
+        isOpen={isIMDbFetchModalOpen}
+        onClose={() => setIsIMDbFetchModalOpen(false)}
+        imdbLink={imdbLink}
+        availableGenres={genres}
+        onApply={applyAIFetchedData}
+      />
     </div>
   );
 }

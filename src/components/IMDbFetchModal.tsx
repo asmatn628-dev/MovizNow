@@ -1,26 +1,20 @@
 import React, { useState, useEffect } from 'react';
 import { X, Check, Loader2, AlertCircle } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { aiService, AiModelId } from '../services/aiService';
-import { Type } from '@google/genai';
-import { Sparkles, Brain, Search as SearchIcon, Zap, Bot, Database, Globe } from 'lucide-react';
 import { formatReleaseDate } from '../utils/contentUtils';
 
-interface AIFetchModalProps {
+interface IMDbFetchModalProps {
   isOpen: boolean;
   onClose: () => void;
-  initialTitle: string;
-  initialYear: number | '';
+  imdbLink: string;
   availableGenres: { id: string, name: string }[];
   onApply: (data: any) => void;
 }
 
-export default function AIFetchModal({ isOpen, onClose, initialTitle, initialYear, availableGenres, onApply }: AIFetchModalProps) {
+export default function IMDbFetchModal({ isOpen, onClose, imdbLink, availableGenres, onApply }: IMDbFetchModalProps) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [fetchedData, setFetchedData] = useState<any>(null);
-  const [rawStreamText, setRawStreamText] = useState<string>('');
-  const [selectedModel, setSelectedModel] = useState<AiModelId>('gemini-3.1-pro');
   
   // Selection state
   const [selectedFields, setSelectedFields] = useState<Record<string, boolean>>({
@@ -41,112 +35,237 @@ export default function AIFetchModal({ isOpen, onClose, initialTitle, initialYea
   useEffect(() => {
     if (isOpen) {
       setFetchedData(null);
-      setRawStreamText('');
       setError(null);
-      if (initialTitle) {
-        fetchDataWithAI();
+      if (imdbLink) {
+        fetchDataWithIMDb();
       }
     }
-  }, [isOpen, initialTitle, initialYear]);
+  }, [isOpen, imdbLink]);
 
-  const fetchDataWithAI = async () => {
+  const fetchDataWithIMDb = async () => {
     setLoading(true);
     setError(null);
     try {
-      const genreNames = availableGenres.map(g => g.name).join(', ');
-      
-      const prompt = `Fetch accurate metadata for the movie or TV show titled "${initialTitle}" ${initialYear ? `(${initialYear})` : ''}. 
-      CRITICAL: You MUST use Google Search to find the EXACT IMDb ID (ttXXXXXXX) and the most accurate high-resolution poster URL.
-      Include the poster URL (a valid, high-resolution image link from a reliable source like IMDb, TMDB, or a major movie database. Do not use low-resolution thumbnails or temporary links. Prefer static image URLs). 
-      EXACT IMDb link (e.g., https://www.imdb.com/title/tt1234567/), release date (YYYY-MM-DD), runtime in "hh:mm" format (e.g., "02:00" for 120 mins), cast (comma separated), and a plot description.
-      Fetch the IMDb rating (e.g., "8.5/10").
-      For genres, ONLY select from this exact list: [${genreNames}]. If a genre like "History" is requested but "Historical" is in the list, use "Historical". Match the meaning to the exact list provided.
-      If it is a TV series, you MUST include a list of ALL seasons and ALL of their episodes. For EACH season, provide the release year. For EACH episode, provide the episode number, title, description, and the EXACT duration/runtime (e.g., "45m" or "00:45"). Do not skip any episodes.
-      Ensure the data is highly accurate and corresponds exactly to the title provided. Double check the IMDb ID and poster URL accuracy.`;
+      const ttMatch = imdbLink.match(/tt\d+/);
+      const ttId = ttMatch ? ttMatch[0] : null;
 
-      // Run AI fetch and YouTube trailer fetch in parallel
-      const ytPromise = fetch(`/api/youtube/search?q=${encodeURIComponent(initialTitle + " " + (initialYear || "") + " trailer")}`).catch(() => null);
-      
-      const responseStream = await aiService.fetchMovieDataStream(prompt, {
-        type: Type.OBJECT,
-        properties: {
-          title: { type: Type.STRING },
-          year: { type: Type.INTEGER },
-          type: { type: Type.STRING, description: "Either 'movie' or 'series'" },
-          description: { type: Type.STRING },
-          cast: { type: Type.STRING, description: "Comma separated list of main actors" },
-          genres: { type: Type.ARRAY, items: { type: Type.STRING } },
-          releaseDate: { type: Type.STRING, description: "DD-MM-YYYY" },
-          runtime: { type: Type.STRING, description: "Must be in hh:mm format" },
-          imdbLink: { type: Type.STRING },
-          rating: { type: Type.STRING, description: "IMDb rating like 8.5/10" },
-          posterUrl: { type: Type.STRING },
-          trailerUrl: { type: Type.STRING, description: "YouTube trailer URL if found" },
-          seasons: {
-            type: Type.ARRAY,
-            items: {
-              type: Type.OBJECT,
-              properties: {
-                seasonNumber: { type: Type.INTEGER },
-                seasonYear: { type: Type.INTEGER, description: "Release year of this season" },
-                episodes: {
-                  type: Type.ARRAY,
-                  items: {
-                    type: Type.OBJECT,
-                    properties: {
-                      episodeNumber: { type: Type.INTEGER },
-                      title: { type: Type.STRING },
-                      description: { type: Type.STRING },
-                      duration: { type: Type.STRING }
-                    },
-                    required: ["episodeNumber", "title", "duration"]
-                  }
+      if (!ttId) {
+        throw new Error("Invalid IMDb link. Could not extract ID.");
+      }
+
+      let data: any = {
+        imdbLink,
+        title: '',
+        year: '',
+        type: 'movie',
+        description: '',
+        cast: '',
+        genres: [],
+        releaseDate: '',
+        runtime: '',
+        rating: '',
+        posterUrl: '',
+        trailerUrl: '',
+        seasons: []
+      };
+
+      // Try TVMaze
+      try {
+        const tvmazeRes = await fetch(`https://api.tvmaze.com/lookup/shows?imdb=${ttId}`);
+        if (tvmazeRes.ok) {
+          const show = await tvmazeRes.json();
+          data.title = show.name || '';
+          data.year = show.premiered ? parseInt(show.premiered.substring(0, 4)) : '';
+          data.type = 'series';
+          data.description = show.summary ? show.summary.replace(/<[^>]*>?/gm, '') : '';
+          data.genres = show.genres || [];
+          data.releaseDate = show.premiered || '';
+          data.runtime = show.averageRuntime ? `00:${show.averageRuntime}` : '';
+          if (show.image?.original) data.posterUrl = show.image.original;
+          if (show.rating?.average) data.rating = `${show.rating.average}/10`;
+
+          // Fetch episodes
+          if (show.id) {
+            const episodesRes = await fetch(`https://api.tvmaze.com/shows/${show.id}/episodes`);
+            if (episodesRes.ok) {
+              const episodesData = await episodesRes.json();
+              const seasonsMap: Record<number, any> = {};
+              
+              episodesData.forEach((ep: any) => {
+                if (!seasonsMap[ep.season]) {
+                  seasonsMap[ep.season] = {
+                    seasonNumber: ep.season,
+                    seasonYear: ep.airdate ? parseInt(ep.airdate.substring(0, 4)) : data.year,
+                    episodes: []
+                  };
                 }
-              },
-              required: ["seasonNumber", "episodes", "seasonYear"]
+                seasonsMap[ep.season].episodes.push({
+                  episodeNumber: ep.number,
+                  title: ep.name,
+                  description: ep.summary ? ep.summary.replace(/<[^>]*>?/gm, '') : '',
+                  duration: ep.runtime ? `${ep.runtime}m` : ''
+                });
+              });
+              
+              data.seasons = Object.values(seasonsMap);
             }
           }
-        },
-        required: ["title", "type", "description"]
-      }, selectedModel);
+        }
+      } catch (error) {
+        console.error("TVMaze fetch error", error);
+      }
 
-      let fullText = '';
-      for await (const chunk of responseStream) {
-        fullText += chunk.text;
-        setRawStreamText(fullText);
-        
+      // Try to get data via proxy (IMDb page scrape)
+      try {
+        const proxyUrl = `/api/imdb/title/${ttId}`;
+        let pageRes = await fetch(proxyUrl);
+        if (pageRes.ok) {
+          const html = await pageRes.text();
+          const parser = new DOMParser();
+          const doc = parser.parseFromString(html, 'text/html');
+          
+          // Try to get ld+json data
+          const ldJsonEl = doc.querySelector('script[type="application/ld+json"]');
+          if (ldJsonEl && ldJsonEl.textContent) {
+            try {
+              const ldData = JSON.parse(ldJsonEl.textContent);
+              if (!data.title) data.title = ldData.name;
+              if (!data.description) data.description = ldData.description;
+              if (!data.posterUrl && ldData.image) {
+                data.posterUrl = typeof ldData.image === 'string' ? ldData.image : ldData.image.url;
+              }
+              if (!data.rating && ldData.aggregateRating?.ratingValue) {
+                data.rating = `${ldData.aggregateRating.ratingValue}/10`;
+              }
+              if (!data.releaseDate && ldData.datePublished) {
+                data.releaseDate = ldData.datePublished;
+                if (!data.year) data.year = parseInt(ldData.datePublished.substring(0, 4));
+              }
+              if (!data.genres || data.genres.length === 0) {
+                if (Array.isArray(ldData.genre)) {
+                  data.genres = ldData.genre;
+                } else if (typeof ldData.genre === 'string') {
+                  data.genres = [ldData.genre];
+                }
+              }
+              if (!data.cast && ldData.actor) {
+                const actors = Array.isArray(ldData.actor) ? ldData.actor : [ldData.actor];
+                data.cast = actors.map((a: any) => a.name).join(', ');
+              }
+              if (!data.type) {
+                data.type = ldData['@type'] === 'TVSeries' ? 'series' : 'movie';
+              }
+            } catch (e) {
+              console.error("Error parsing ld+json", e);
+            }
+          }
+
+          // Fallback DOM scraping if ld+json missed something
+          if (!data.rating) {
+            const ratingEl = doc.querySelector('[data-testid="hero-rating-bar__aggregate-rating__score"] span') || 
+                           doc.querySelector('.AggregateRatingButton__RatingScore-sc-1ll29m0-1') ||
+                           doc.querySelector('.ratingValue strong span');
+            if (ratingEl && ratingEl.textContent?.trim()) {
+              data.rating = `${ratingEl.textContent.trim()}/10`;
+            }
+          }
+          if (!data.title) {
+            const titleEl = doc.querySelector('h1[data-testid="hero__pageTitle"] span') ||
+                           doc.querySelector('.TitleBlock__Title-sc-1nlhx7j-0') ||
+                           doc.querySelector('.title_wrapper h1');
+            if (titleEl && titleEl.textContent) {
+              data.title = titleEl.textContent.trim();
+            }
+          }
+          if (!data.posterUrl) {
+            const imgEl = doc.querySelector('.ipc-poster__poster-image img') ||
+                         doc.querySelector('.poster img') ||
+                         doc.querySelector('meta[property="og:image"]');
+            if (imgEl) {
+              if (imgEl.tagName === 'META') {
+                data.posterUrl = imgEl.getAttribute('content');
+              } else {
+                const src = imgEl.getAttribute('src');
+                const srcset = imgEl.getAttribute('srcset');
+                if (srcset) {
+                  const parts = srcset.split(',');
+                  const largest = parts[parts.length - 1].trim().split(' ')[0];
+                  data.posterUrl = largest;
+                } else if (src) {
+                  data.posterUrl = src;
+                }
+              }
+            }
+          }
+          if (!data.description) {
+            const descEl = doc.querySelector('[data-testid="plot-l"]') ||
+                          doc.querySelector('.summary_text') ||
+                          doc.querySelector('meta[name="description"]');
+            if (descEl) {
+              if (descEl.tagName === 'META') {
+                data.description = descEl.getAttribute('content');
+              } else {
+                data.description = descEl.textContent?.trim();
+              }
+            }
+          }
+        }
+      } catch (error) {
+        console.error("Proxy fetch error", error);
+      }
+
+      // Fallback to Suggestion API if poster or title still missing
+      if (!data.posterUrl || !data.title) {
         try {
-          const lastBrace = fullText.lastIndexOf('}');
-          if (lastBrace !== -1) {
-            const partialJson = fullText.substring(0, lastBrace + 1);
-            const partialData = JSON.parse(partialJson);
-            setFetchedData(partialData);
+          const suggestRes = await fetch(`/api/imdb/suggestion/${ttId}`);
+          if (suggestRes.ok) {
+            const suggestData = await suggestRes.json();
+            if (suggestData.d && suggestData.d.length > 0) {
+              const item = suggestData.d.find((i: any) => i.id === ttId);
+              if (item) {
+                if (!data.title) data.title = item.l;
+                if (!data.year) data.year = item.y;
+                if (!data.posterUrl && item.i) {
+                  data.posterUrl = item.i.imageUrl;
+                }
+                if (!data.cast && item.s) data.cast = item.s;
+              }
+            }
           }
-        } catch (e) {}
+        } catch (e) {
+          console.error("Suggestion fallback error", e);
+        }
       }
 
-      const ytRes = await ytPromise;
-      if (fullText) {
-        const data = JSON.parse(fullText);
-        if (ytRes && ytRes.ok) {
-          const ytData = await ytRes.json();
-          if (ytData.url) {
-            data.trailerUrl = ytData.url;
-            data.trailerTitle = ytData.title;
+      // Fetch YouTube trailer if we have a title
+      if (data.title) {
+        try {
+          const ytPromise = await fetch(`/api/youtube/search?q=${encodeURIComponent(data.title + " " + (data.year || "") + " trailer")}`);
+          if (ytPromise.ok) {
+            const ytData = await ytPromise.json();
+            if (ytData.items && ytData.items.length > 0) {
+              data.trailerUrl = `https://www.youtube.com/watch?v=${ytData.items[0].id.videoId}`;
+            }
           }
-        }
-        setFetchedData(data);
-        if (data.seasons && Array.isArray(data.seasons)) {
-          const initialSeasons: Record<number, boolean> = {};
-          data.seasons.forEach((s: any) => {
-            initialSeasons[s.seasonNumber] = true;
-          });
-          setSelectedSeasons(initialSeasons);
+        } catch (error) {
+          console.error("YouTube fetch error", error);
         }
       }
+
+      setFetchedData(data);
+      
+      // Initialize selected seasons
+      if (data.seasons && data.seasons.length > 0) {
+        const initialSeasons: Record<number, boolean> = {};
+        data.seasons.forEach((s: any) => {
+          initialSeasons[s.seasonNumber] = true;
+        });
+        setSelectedSeasons(initialSeasons);
+      }
+      
     } catch (err: any) {
-      console.error("AI Fetch Error:", err);
-      setError(err.message || "Failed to fetch data using AI.");
+      console.error("IMDb fetch error:", err);
+      setError(err.message || "Failed to fetch data from IMDb algorithms.");
     } finally {
       setLoading(false);
     }
@@ -157,14 +276,12 @@ export default function AIFetchModal({ isOpen, onClose, initialTitle, initialYea
     
     const dataToApply: any = {};
     
-    // Apply basic fields
     Object.keys(selectedFields).forEach(key => {
       if (selectedFields[key] && fetchedData[key] !== undefined) {
         dataToApply[key] = fetchedData[key];
       }
     });
 
-    // Apply seasons if it's a series
     if (fetchedData.type === 'series' && fetchedData.seasons) {
       const filteredSeasons = fetchedData.seasons.filter((s: any) => selectedSeasons[s.seasonNumber]);
       if (filteredSeasons.length > 0) {
@@ -182,13 +299,6 @@ export default function AIFetchModal({ isOpen, onClose, initialTitle, initialYea
 
   const toggleSeason = (seasonNum: number) => {
     setSelectedSeasons(prev => ({ ...prev, [seasonNum]: !prev[seasonNum] }));
-  };
-
-  const getYouTubeEmbedUrl = (url?: string) => {
-    if (!url) return null;
-    const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|&v=)([^#&?]*).*/;
-    const match = url.match(regExp);
-    return (match && match[2].length === 11) ? `https://www.youtube.com/embed/${match[2]}` : null;
   };
 
   if (!isOpen) return null;
@@ -212,12 +322,9 @@ export default function AIFetchModal({ isOpen, onClose, initialTitle, initialYea
         >
           <div className="flex items-center justify-between p-6 border-b border-zinc-800 shrink-0">
             <div>
-              <div className="flex items-center gap-2">
-                <Sparkles className="w-5 h-5 text-purple-400" />
-                <h2 className="text-xl font-bold text-white">AI Master Fetch</h2>
-              </div>
+              <h2 className="text-xl font-bold text-white">IMDb Master Fetch</h2>
               <p className="text-sm text-zinc-400 mt-1">
-                Searching for "{initialTitle}" {initialYear ? `(${initialYear})` : ''}
+                Powered by IMDb Algorithms
               </p>
             </div>
             <button
@@ -231,11 +338,8 @@ export default function AIFetchModal({ isOpen, onClose, initialTitle, initialYea
           <div className="p-6 overflow-y-auto flex-1 custom-scrollbar">
             {loading ? (
               <div className="flex flex-col items-center justify-center py-12 text-zinc-400">
-                <div className="w-full max-w-2xl bg-zinc-950 border border-zinc-800 rounded-xl p-4 mb-6 max-h-60 overflow-y-auto custom-scrollbar font-mono text-xs text-emerald-500/70 whitespace-pre-wrap text-left break-all">
-                  {rawStreamText}
-                </div>
                 <Loader2 className="w-12 h-12 animate-spin text-emerald-500 mb-4" />
-                <p>Gathering accurate data using AI...</p>
+                <p>Gathering accurate data using IMDb algorithms...</p>
                 <p className="text-xs mt-2 text-zinc-500">This may take a few moments to fetch episodes and details.</p>
               </div>
             ) : error ? (
@@ -243,7 +347,7 @@ export default function AIFetchModal({ isOpen, onClose, initialTitle, initialYea
                 <AlertCircle className="w-12 h-12 mb-4" />
                 <p>{error}</p>
                 <button 
-                  onClick={fetchDataWithAI}
+                  onClick={fetchDataWithIMDb}
                   className="mt-4 bg-zinc-800 hover:bg-zinc-700 text-white px-4 py-2 rounded-lg text-sm transition-colors"
                 >
                   Try Again
@@ -260,7 +364,7 @@ export default function AIFetchModal({ isOpen, onClose, initialTitle, initialYea
                   <div className="space-y-4">
                     <h3 className="text-sm font-bold text-white uppercase tracking-wider">Basic Info</h3>
                     
-                    {['title', 'year', 'type', 'releaseDate', 'runtime', 'imdbLink'].map(field => (
+                    {['title', 'year', 'type', 'releaseDate', 'runtime'].map(field => (
                       fetchedData[field] && (
                         <label key={field} className="flex items-start gap-3 p-3 rounded-xl border border-zinc-800 bg-zinc-950/50 cursor-pointer hover:border-zinc-700 transition-colors">
                           <input 

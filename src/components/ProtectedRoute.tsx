@@ -8,10 +8,10 @@ interface ProtectedRouteProps {
 }
 
 export function ProtectedRoute({ children, requireAdmin = false }: ProtectedRouteProps) {
-  const { user, profile, loading } = useAuth();
+  const { user, profile, loading, authLoading } = useAuth();
   const location = useLocation();
 
-  if (loading) {
+  if (authLoading) {
     return (
       <div className="min-h-screen bg-zinc-950 flex items-center justify-center">
         <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-emerald-500"></div>
@@ -19,22 +19,24 @@ export function ProtectedRoute({ children, requireAdmin = false }: ProtectedRout
     );
   }
 
-  console.log('ProtectedRoute:', { 
-    path: location.pathname, 
-    user: user?.email, 
-    role: profile?.role, 
-    status: profile?.status,
-    requireAdmin 
-  });
-
-  if (!user || !profile) {
-    console.log('ProtectedRoute: No user or profile, redirecting to login');
+  if (!user) {
+    console.log('ProtectedRoute: No user, redirecting to login');
     return <Navigate to="/login" state={{ from: location }} replace />;
   }
 
-  if (requireAdmin && profile.role !== 'admin' && profile.role !== 'data_editor') {
-    console.log('ProtectedRoute: Admin required but user is not admin/editor, redirecting to home');
-    return <Navigate to="/" replace />;
+  // If admin is required, we must wait for the profile to check roles
+  if (requireAdmin) {
+    if (loading || !profile) {
+      return (
+        <div className="min-h-screen bg-zinc-950 flex items-center justify-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-emerald-500"></div>
+        </div>
+      );
+    }
+    if (profile.role !== 'admin' && profile.role !== 'data_editor') {
+      console.log('ProtectedRoute: Admin required but user is not admin/editor, redirecting to home');
+      return <Navigate to="/" replace />;
+    }
   }
 
   return <>{children}</>;

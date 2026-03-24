@@ -1,21 +1,22 @@
-import { GoogleGenAI, Type } from "@google/genai";
 import { useState, useEffect, useRef } from 'react';
-import { useParams, Link, useNavigate } from 'react-router-dom';
+import { useParams, Link, useNavigate, useLocation } from 'react-router-dom';
 import { db } from '../../firebase';
 import { doc, onSnapshot, updateDoc, arrayUnion, arrayRemove, collection, deleteDoc } from 'firebase/firestore';
 import { Content, Genre, Language, QualityLinks, Season, Quality } from '../../types';
 import { useAuth } from '../../contexts/AuthContext';
-import { Film, ArrowLeft, Play, Clock, Heart, MessageCircle, AlertCircle, Download, Share2, Chrome, Copy, Youtube, X, Edit2, Trash2, Settings, Lock, ChevronDown, ChevronUp, Star, Loader2 } from 'lucide-react';
+import { Film, ArrowLeft, Play, Clock, Heart, MessageCircle, AlertCircle, Download, Share2, Chrome, Copy, Youtube, X, Edit2, Trash2, Settings, Lock, ChevronDown, ChevronUp, Sparkles, Bot, Loader2 } from 'lucide-react';
 import { logEvent } from '../../services/analytics';
 import { handleFirestoreError, OperationType } from '../../utils/firestoreErrorHandler';
 import AlertModal from '../../components/AlertModal';
 import ConfirmModal from '../../components/ConfirmModal';
+import GeminiAssistantModal from '../../components/GeminiAssistantModal';
 import { motion, AnimatePresence } from 'motion/react';
-import { formatContentTitle } from '../../utils/contentUtils';
+import { formatContentTitle, formatReleaseDate } from '../../utils/contentUtils';
+import { fetchMovieMetadata } from '../../services/geminiMovieService';
 
 export default function MovieDetails() {
   const { id } = useParams<{ id: string }>();
-  const { profile } = useAuth();
+  const { profile, loading: profileLoading } = useAuth();
   const [content, setContent] = useState<Content | null>(null);
   const [genres, setGenres] = useState<Genre[]>([]);
   const [languages, setLanguages] = useState<Language[]>([]);
@@ -23,54 +24,21 @@ export default function MovieDetails() {
   const [loading, setLoading] = useState(true);
   const [alertConfig, setAlertConfig] = useState<{ isOpen: boolean; title: string; message: string }>({ isOpen: false, title: '', message: '' });
   const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [isWatchLaterLoading, setIsWatchLaterLoading] = useState(false);
+  const [isFavoriteLoading, setIsFavoriteLoading] = useState(false);
+  const [isShareLoading, setIsShareLoading] = useState(false);
+  const [showLoginPrompt, setShowLoginPrompt] = useState(false);
   const [linkPopup, setLinkPopup] = useState<{ isOpen: boolean; url: string; name: string; id: string; isZip?: boolean } | null>(null);
   const [isPosterExpanded, setIsPosterExpanded] = useState(false);
   const [isTrailerPopupOpen, setIsTrailerPopupOpen] = useState(false);
+  const [isGeminiModalOpen, setIsGeminiModalOpen] = useState(false);
   const [expandedEpisodes, setExpandedEpisodes] = useState<Record<string, boolean>>({});
   const [imdbData, setImdbData] = useState<any>(null);
   const [fetchingImdb, setFetchingImdb] = useState(false);
+  const [geminiStatus, setGeminiStatus] = useState<'idle' | 'fetching' | 'success' | 'error'>('idle');
   const hasLoggedView = useRef(false);
   const navigate = useNavigate();
-
-  const fetchAiData = async (title: string, year: string, type: string, currentImdbId: string | null) => {
-    try {
-      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY! });
-      const response = await ai.models.generateContent({
-        model: "gemini-3-flash-preview",
-        contents: `Search for the official IMDb details for the ${type} "${title}" (${year}). 
-        Current IMDb ID provided: ${currentImdbId || 'None'}.
-        If the provided ID is missing or seems incorrect for this title, find the correct official IMDb 'tt' ID.
-        Return the data in JSON format including:
-        - imdbId: The official IMDb ID (e.g., tt0111161)
-        - rating: The current IMDb rating (e.g., 9.3/10)
-        - releaseDate: The official release date
-        - duration: The runtime in minutes
-        - cast: Top 5 lead actors
-        - description: A concise synopsis
-        - posterUrl: A direct link to a high-quality official poster (prefer IMDb or TMDB CDN links).`,
-        config: {
-          tools: [{ googleSearch: {} }],
-          responseMimeType: "application/json",
-          responseSchema: {
-            type: Type.OBJECT,
-            properties: {
-              imdbId: { type: Type.STRING, description: "Official IMDb tt ID" },
-              rating: { type: Type.STRING, description: "IMDb rating" },
-              releaseDate: { type: Type.STRING, description: "Release date" },
-              duration: { type: Type.STRING, description: "Runtime" },
-              cast: { type: Type.STRING, description: "Top cast members" },
-              description: { type: Type.STRING, description: "Synopsis" },
-              posterUrl: { type: Type.STRING, description: "High quality poster URL" }
-            }
-          }
-        }
-      });
-      return JSON.parse(response.text);
-    } catch (error) {
-      console.error("AI fetch error:", error);
-      return null;
-    }
-  };
+  const location = useLocation();
 
   // Initialize IMDb data from content and cache
   useEffect(() => {
@@ -189,153 +157,98 @@ export default function MovieDetails() {
   }, [isPosterExpanded]);
 
   useEffect(() => {
-    if (content) {
-      const fetchData = async () => {
+    if (content?.imdbLink || content?.title) {
+      const fetchImdb = async () => {
         const ttMatch = content.imdbLink?.match(/tt\d+/);
-        let ttId = ttMatch ? ttMatch[0] : null;
+        const ttId = ttMatch ? ttMatch[0] : null;
+
+        // Check cache
+        const cacheKey = `imdb_${ttId || content.id}`;
+        const cached = localStorage.getItem(cacheKey);
+        if (cached) {
+          try {
+            const parsed = JSON.parse(cached);
+            if (parsed.isFetched && (Date.now() - parsed.timestamp < 24 * 60 * 60 * 1000)) {
+              return; // Cache is fresh
+            }
+          } catch (e) {}
+        }
 
         setFetchingImdb(true);
-        let data: any = { ttId, timestamp: Date.now(), fetchedFields: [] };
+        setGeminiStatus('fetching');
+        
+        let data: any = { ttId, timestamp: Date.now() };
+        let imdbSuccess = false;
 
-        // 1. Parallel API & AI Fetching
-        // We start AI fetch immediately if we're missing critical data
-        const aiPromise = fetchAiData(content.title, String(content.year || ''), content.type, ttId);
-        const fetchPromises: Promise<any>[] = [aiPromise];
-
+        // Try legacy methods (IMDb algorithms) first
         if (ttId) {
-          // TVMaze
-          fetchPromises.push(
-            fetch(`https://api.tvmaze.com/lookup/shows?imdb=${ttId}`)
-              .then(res => res.ok ? res.json() : null)
-              .then(show => {
-                if (show) {
-                  if (show.image?.original && !content.posterUrl && !data.posterUrl) {
-                    data.posterUrl = show.image.original;
-                    if (!data.fetchedFields.includes('posterUrl')) data.fetchedFields.push('posterUrl');
-                  }
-                  if (show.rating?.average && !data.rating) {
-                    data.rating = `${show.rating.average}/10`;
-                    if (!data.fetchedFields.includes('rating')) data.fetchedFields.push('rating');
-                  }
-                  if (show.premiered && !content.releaseDate && !data.releaseDate) {
-                    data.releaseDate = show.premiered;
-                    if (!data.fetchedFields.includes('releaseDate')) data.fetchedFields.push('releaseDate');
-                  }
-                  if (show.runtime && !content.runtime && content.type !== 'series' && !data.duration) {
-                    data.duration = `${show.runtime} min`;
-                    if (!data.fetchedFields.includes('duration')) data.fetchedFields.push('duration');
-                  }
-                  if (show.summary && !content.description && !data.description) {
-                    data.description = show.summary.replace(/<[^>]*>/g, '');
-                    if (!data.fetchedFields.includes('description')) data.fetchedFields.push('description');
-                  }
-                }
-              })
-              .catch(() => null)
-          );
-
-          // IMDb Suggestion API
-          fetchPromises.push(
-            fetch(`/api/imdb/suggestion/${ttId}`)
-              .then(res => res.ok ? res.json() : null)
-              .then(suggestData => {
-                if (suggestData) {
-                  const item = suggestData.d?.find((i: any) => i.id === ttId) || suggestData.d?.[0];
-                  if (item && item.i?.imageUrl && !content.posterUrl && !data.posterUrl) {
-                    data.posterUrl = item.i.imageUrl;
-                    if (!data.fetchedFields.includes('posterUrl')) data.fetchedFields.push('posterUrl');
-                  }
-                }
-              })
-              .catch(() => null)
-          );
-
-          // IMDb Scraper Proxy
-          fetchPromises.push(
-            fetch(`/api/imdb/title/${ttId}`)
-              .then(res => res.ok ? res.text() : null)
-              .then(html => {
-                if (html) {
-                  const parser = new DOMParser();
-                  const doc = parser.parseFromString(html, 'text/html');
-                  
-                  if (!data.rating) {
-                    const ratingEl = doc.querySelector('[data-testid="hero-rating-bar__aggregate-rating__score"] span');
-                    if (ratingEl && ratingEl.textContent?.trim()) {
-                      data.rating = `${ratingEl.textContent.trim()}/10`;
-                      if (!data.fetchedFields.includes('rating')) data.fetchedFields.push('rating');
-                    }
-                  }
-                  if (!content.releaseDate && !data.releaseDate) {
-                    const releaseEl = doc.querySelector('[data-testid="title-details-releasedate"] .ipc-metadata-list-item__list-content-item');
-                    if (releaseEl) {
-                      data.releaseDate = releaseEl.textContent?.trim();
-                      if (!data.fetchedFields.includes('releaseDate')) data.fetchedFields.push('releaseDate');
-                    }
-                  }
-                  if (!content.runtime && !data.duration && content.type !== 'series') {
-                    const runtimeEl = doc.querySelector('[data-testid="title-techspec_runtime"] .ipc-metadata-list-item__list-content-item');
-                    if (runtimeEl) {
-                      data.duration = runtimeEl.textContent?.trim();
-                      if (!data.fetchedFields.includes('duration')) data.fetchedFields.push('duration');
-                    }
-                  }
-                  if (!content.cast || content.cast.length === 0) {
-                    const castEls = doc.querySelectorAll('[data-testid="title-cast-item__actor"]');
-                    if (castEls.length > 0 && !data.cast) {
-                      data.cast = Array.from(castEls).slice(0, 10).map(el => el.textContent?.trim()).join(', ');
-                      if (!data.fetchedFields.includes('cast')) data.fetchedFields.push('cast');
-                    }
-                  }
-                  if (!content.description && !data.description) {
-                    const descEl = doc.querySelector('[data-testid="plot-l"]');
-                    if (descEl) {
-                      data.description = descEl.textContent?.trim();
-                      if (!data.fetchedFields.includes('description')) data.fetchedFields.push('description');
-                    }
-                  }
-                }
-              })
-              .catch(() => null)
-          );
-        }
-
-        // Wait for all fetches to complete
-        const results = await Promise.all(fetchPromises);
-        const aiResult = results[0]; // The first promise was AI
-
-        // 2. Merge AI results for missing fields
-        if (aiResult) {
-          if (aiResult.imdbId && !ttId) {
-            ttId = aiResult.imdbId;
-            data.ttId = ttId;
-            if (!data.fetchedFields.includes('imdbId')) data.fetchedFields.push('imdbId');
-          }
-          
-          const fieldsToFill = ['rating', 'releaseDate', 'duration', 'cast', 'description', 'posterUrl'];
-          fieldsToFill.forEach(field => {
-            // Only use AI data if we don't have it from standard APIs and it's missing in content
-            const isMissingInContent = field === 'duration' ? !content.runtime : 
-                                      field === 'cast' ? (!content.cast || content.cast.length === 0) :
-                                      !(content as any)[field];
-            
-            if (aiResult[field] && !data[field] && isMissingInContent) {
-              data[field] = aiResult[field];
-              if (!data.fetchedFields.includes(field)) data.fetchedFields.push(field);
-              data.isAiGenerated = true;
+          try {
+            const tvmazeRes = await fetch(`https://api.tvmaze.com/lookup/shows?imdb=${ttId}`);
+            if (tvmazeRes.ok) {
+              const show = await tvmazeRes.json();
+              if (show.rating?.average) data.rating = `${show.rating.average}/10`;
             }
-          });
+          } catch (error) {}
+
+          try {
+            const proxyUrl = `/api/imdb/title/${ttId}`;
+            let pageRes = await fetch(proxyUrl);
+            if (pageRes.ok) {
+              const html = await pageRes.text();
+              const parser = new DOMParser();
+              const doc = parser.parseFromString(html, 'text/html');
+              const ratingEl = doc.querySelector('[data-testid="hero-rating-bar__aggregate-rating__score"] span');
+              if (ratingEl && ratingEl.textContent?.trim()) {
+                data.rating = `${ratingEl.textContent.trim()}/10`;
+              }
+            }
+          } catch (error) {}
+          
+          if (data.rating) {
+            imdbSuccess = true;
+          }
         }
 
-        if (data.fetchedFields.length > 0) {
-          setImdbData(prev => ({ ...prev, ...data, isFetched: true }));
-          localStorage.setItem(`imdb_${ttId || content.id}`, JSON.stringify({ ...data, ttId, timestamp: Date.now(), isFetched: true }));
+        if (imdbSuccess) {
+          const dataToSave = { ...data, isFetched: true, source: 'imdb' };
+          setImdbData(prev => ({ ...prev, ...dataToSave }));
+          localStorage.setItem(cacheKey, JSON.stringify(dataToSave));
+          setGeminiStatus('idle');
+          setFetchingImdb(false);
+          return;
         }
+
+        // Fallback to Gemini if IMDb algorithms failed to get the rating
+        try {
+          const geminiData = await fetchMovieMetadata(content.title, content.year, content.imdbLink);
+          
+          if (geminiData) {
+            const dataToSave = {
+              ...geminiData,
+              ttId,
+              timestamp: Date.now(),
+              isFetched: true,
+              source: 'ai'
+            };
+            setImdbData(prev => ({ ...prev, ...dataToSave }));
+            localStorage.setItem(cacheKey, JSON.stringify(dataToSave));
+            setGeminiStatus('success');
+            setFetchingImdb(false);
+            return;
+          }
+        } catch (error) {
+          console.error("Gemini fetch failed", error);
+        }
+
+        // If both fail, just save what we have
+        setImdbData(prev => ({ ...prev, ...data, isFetched: true, source: 'imdb' }));
+        localStorage.setItem(cacheKey, JSON.stringify({ ...data, isFetched: true, source: 'imdb', timestamp: Date.now() }));
         setFetchingImdb(false);
+        setGeminiStatus('error');
       };
-      fetchData();
+      fetchImdb();
     }
-  }, [content?.id, content?.imdbLink]);
+  }, [content?.imdbLink, content?.title]);
 
   const getYouTubeEmbedUrl = (url?: string) => {
     if (!url) return null;
@@ -367,21 +280,35 @@ export default function MovieDetails() {
 
   const toggleWatchLater = async () => {
     if (!profile) return;
-    const userRef = doc(db, 'users', profile.uid);
-    if (profile.watchLater?.includes(content.id)) {
-      await updateDoc(userRef, { watchLater: arrayRemove(content.id) });
-    } else {
-      await updateDoc(userRef, { watchLater: arrayUnion(content.id) });
+    setIsWatchLaterLoading(true);
+    try {
+      const userRef = doc(db, 'users', profile.uid);
+      if (profile.watchLater?.includes(content.id)) {
+        await updateDoc(userRef, { watchLater: arrayRemove(content.id) });
+      } else {
+        await updateDoc(userRef, { watchLater: arrayUnion(content.id) });
+      }
+    } catch (error) {
+      console.error("Error toggling watch later:", error);
+    } finally {
+      setIsWatchLaterLoading(false);
     }
   };
 
   const toggleFavorite = async () => {
     if (!profile) return;
-    const userRef = doc(db, 'users', profile.uid);
-    if (profile.favorites?.includes(content.id)) {
-      await updateDoc(userRef, { favorites: arrayRemove(content.id) });
-    } else {
-      await updateDoc(userRef, { favorites: arrayUnion(content.id) });
+    setIsFavoriteLoading(true);
+    try {
+      const userRef = doc(db, 'users', profile.uid);
+      if (profile.favorites?.includes(content.id)) {
+        await updateDoc(userRef, { favorites: arrayRemove(content.id) });
+      } else {
+        await updateDoc(userRef, { favorites: arrayUnion(content.id) });
+      }
+    } catch (error) {
+      console.error("Error toggling favorite:", error);
+    } finally {
+      setIsFavoriteLoading(false);
     }
   };
 
@@ -397,6 +324,10 @@ export default function MovieDetails() {
   };
 
   const handlePlayClick = (url: string, linkName?: string, linkId?: string, isZip?: boolean) => {
+    if (!profile) {
+      setShowLoginPrompt(true);
+      return;
+    }
     if (!canPlay) {
       if (isPending) {
         setAlertConfig({ isOpen: true, title: 'Account Pending', message: 'Your account is pending admin approval. Please contact admin to activate your account.' });
@@ -642,6 +573,7 @@ export default function MovieDetails() {
 
   const handleShare = async () => {
     if (!content) return;
+    setIsShareLoading(true);
     
     let shareUrl = window.location.href;
     
@@ -656,17 +588,59 @@ export default function MovieDetails() {
       }
     } catch (err) {
       console.error('Error shortening URL:', err);
-      // Fallback to original URL if shortening fails
     }
+
+    const contentQuality = qualities.find(q => q.id === content.qualityId)?.name || 'N/A';
+    
+    let text = `🎬 *${formatContentTitle(content)} (${content.year})*\n\n` +
+               `🗣️ *Language:* ${contentLangs || 'N/A'}\n` +
+               `🎭 *Genre:* ${contentGenres || 'N/A'}\n` +
+               `🖨️ *Print Quality:* ${contentQuality}\n`;
+    
+    if (content.runtime) text += `⏱️ Runtime: ${content.runtime}\n`;
+    if (content.releaseDate) text += `📅 Release: ${formatReleaseDate(content.releaseDate)}\n`;
+
+    if (content.type === 'movie' && content.movieLinks) {
+      const links: QualityLinks = JSON.parse(content.movieLinks);
+      if (links.length > 0) {
+        text += `\n📥 *Download Links:*\n`;
+        links.forEach(l => {
+          if (l.url) {
+            text += `▪️ ${l.name} (${l.size}${l.unit})\n${l.url}\n`;
+          }
+        });
+      }
+    } else if (content.type === 'series' && content.seasons) {
+      try {
+        const parsedSeasons: Season[] = JSON.parse(content.seasons);
+        parsedSeasons.forEach(season => {
+          text += `\n📺 *Season ${season.seasonNumber}${season.year ? ` (${season.year})` : ''}*\n`;
+          
+          if (season.zipLinks && season.zipLinks.length > 0) {
+            text += `📦 *Full Season ZIP:*\n`;
+            season.zipLinks.forEach(l => {
+              if (l.url) text += `  ▪️ ${l.name} (${l.size}${l.unit})\n  ${l.url}\n`;
+            });
+          }
+          
+          if (season.mkvLinks && season.mkvLinks.length > 0) {
+            text += `\n🎞️ *Full Season MKV:*\n`;
+            season.mkvLinks.forEach(l => {
+              if (l.url) text += `  ▪️ ${l.name} (${l.size}${l.unit})\n  ${l.url}\n`;
+            });
+          }
+        });
+      } catch (e) {
+        console.error("Error parsing seasons for share:", e);
+      }
+    }
+
+    text += (profile?.phone ? `\n📱 *WhatsApp:* ${profile.phone}\n\n` : '\n') +
+            `Watch it here:`;
 
     const shareData = {
       title: `${formatContentTitle(content)} (${content.year})`,
-      text: `🎬 *${formatContentTitle(content)} (${content.year})*\n\n` +
-            `🗣️ *Language:* ${contentLangs || 'N/A'}\n` +
-            `🎭 *Genre:* ${contentGenres || 'N/A'}\n` +
-            `🖨️ *Print Quality:* ${qualities.find(q => q.id === content.qualityId)?.name || 'N/A'}\n` +
-            (profile?.phone ? `📱 *WhatsApp:* ${profile.phone}\n\n` : '\n') +
-            `Watch it here:`,
+      text: text,
       url: shareUrl,
     };
 
@@ -680,6 +654,8 @@ export default function MovieDetails() {
       }
     } catch (err) {
       console.error('Error sharing:', err);
+    } finally {
+      setIsShareLoading(false);
     }
   };
 
@@ -761,26 +737,37 @@ export default function MovieDetails() {
                 
                 <button
                   onClick={toggleWatchLater}
-                  className={`p-4 rounded-xl border transition-colors ${profile?.watchLater?.includes(content.id) ? 'bg-emerald-500/20 border-emerald-500 text-emerald-500' : 'bg-zinc-900 border-zinc-800 hover:bg-zinc-800 text-zinc-300'}`}
+                  disabled={isWatchLaterLoading}
+                  className={`p-4 rounded-xl border transition-colors ${profile?.watchLater?.includes(content.id) ? 'bg-emerald-500/20 border-emerald-500 text-emerald-500' : 'bg-zinc-900 border-zinc-800 hover:bg-zinc-800 text-zinc-300'} ${isWatchLaterLoading ? 'opacity-50 cursor-not-allowed' : ''}`}
                   title="Watch Later"
                 >
-                  <Clock className="w-5 h-5" />
+                  {isWatchLaterLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Clock className="w-5 h-5" />}
                 </button>
                 
                 <button
                   onClick={toggleFavorite}
-                  className={`p-4 rounded-xl border transition-colors ${profile?.favorites?.includes(content.id) ? 'bg-red-500/20 border-red-500 text-red-500' : 'bg-zinc-900 border-zinc-800 hover:bg-zinc-800 text-zinc-300'}`}
+                  disabled={isFavoriteLoading}
+                  className={`p-4 rounded-xl border transition-colors ${profile?.favorites?.includes(content.id) ? 'bg-red-500/20 border-red-500 text-red-500' : 'bg-zinc-900 border-zinc-800 hover:bg-zinc-800 text-zinc-300'} ${isFavoriteLoading ? 'opacity-50 cursor-not-allowed' : ''}`}
                   title="Favorite"
                 >
-                  <Heart className={`w-5 h-5 ${profile?.favorites?.includes(content.id) ? 'fill-current' : ''}`} />
+                  {isFavoriteLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Heart className={`w-5 h-5 ${profile?.favorites?.includes(content.id) ? 'fill-current' : ''}`} />}
+                </button>
+
+                <button
+                  onClick={() => setIsGeminiModalOpen(true)}
+                  className="p-4 rounded-xl border bg-emerald-500/20 border-emerald-500 text-emerald-500 hover:bg-emerald-500/30 transition-colors"
+                  title="Gemini Assistant"
+                >
+                  <Bot className="w-5 h-5" />
                 </button>
 
                 <button
                   onClick={handleShare}
-                  className="p-4 rounded-xl border bg-zinc-900 border-zinc-800 hover:bg-zinc-800 text-zinc-300 transition-colors"
+                  disabled={isShareLoading}
+                  className={`p-4 rounded-xl border bg-zinc-900 border-zinc-800 hover:bg-zinc-800 text-zinc-300 transition-colors ${isShareLoading ? 'opacity-50 cursor-not-allowed' : ''}`}
                   title="Share"
                 >
-                  <Share2 className="w-5 h-5" />
+                  {isShareLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Share2 className="w-5 h-5" />}
                 </button>
 
                 {(profile?.role === 'admin' || profile?.role === 'data_editor') && (
@@ -810,8 +797,30 @@ export default function MovieDetails() {
       </div>
 
       {/* Main Content Area */}
-      <div className="max-w-7xl mx-auto px-8 pt-0 pb-12">
-        {!canPlay && (
+      <div className="max-w-7xl mx-auto px-8 py-12">
+        {profileLoading ? (
+          <div className="flex justify-center py-12">
+            <Loader2 className="w-12 h-12 text-emerald-500 animate-spin" />
+          </div>
+        ) : !profile ? (
+          <div className="bg-emerald-500/10 border border-emerald-500/20 text-emerald-500 p-6 rounded-2xl mb-12 flex items-center justify-between gap-4">
+            <div className="flex items-start gap-4">
+              <Lock className="w-6 h-6 shrink-0 mt-0.5" />
+              <div>
+                <h3 className="font-bold text-lg mb-1">Sign in required</h3>
+                <p className="text-emerald-400 mb-0">
+                  Please sign in or log in to access links and watch this content.
+                </p>
+              </div>
+            </div>
+            <button 
+              onClick={() => navigate('/login', { state: { from: location.pathname } })}
+              className="bg-emerald-500 text-white px-6 py-2 rounded-xl font-bold hover:bg-emerald-600 transition-colors whitespace-nowrap"
+            >
+              Log In
+            </button>
+          </div>
+        ) : !canPlay && (
           <div className="bg-red-500/10 border border-red-500/20 text-red-500 p-6 rounded-2xl mb-12 flex items-start gap-4">
             <AlertCircle className="w-6 h-6 shrink-0 mt-0.5" />
             <div>
@@ -830,41 +839,38 @@ export default function MovieDetails() {
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-12">
           <div className="lg:col-span-2 space-y-12">
-            <section className="-mt-4 md:-mt-8 relative z-20">
+            <section className="mt-8">
               {imdbData ? (
                 <div className="bg-cyan-500/10 border border-cyan-500/30 rounded-2xl p-6 md:p-8 flex flex-col md:flex-row gap-8 relative overflow-hidden">
                   {fetchingImdb && (
-                    <div className="absolute top-3 right-3 flex items-center gap-1.5 bg-cyan-500/20 backdrop-blur-md px-2 py-1 rounded-full border border-cyan-500/30 z-10">
-                      <Loader2 className="w-3 h-3 animate-spin text-cyan-400" />
-                      <span className="text-[9px] font-bold text-cyan-400 uppercase tracking-tighter">Updating</span>
-                    </div>
-                  )}
-                  {imdbData.isAiGenerated && !fetchingImdb && (
-                    <div className="absolute top-3 right-3 flex items-center gap-1.5 bg-purple-500/20 backdrop-blur-md px-2 py-1 rounded-full border border-purple-500/30 z-10">
-                      <div className="w-1.5 h-1.5 rounded-full bg-purple-400 animate-pulse" />
-                      <span className="text-[9px] font-bold text-purple-400 uppercase tracking-tighter">AI Enhanced</span>
-                    </div>
-                  )}
-                  {(imdbData.posterUrl || content.posterUrl) && (
-                    <img 
-                      src={imdbData.posterUrl || content.posterUrl} 
-                      alt="Poster" 
-                      className="w-32 md:w-48 mx-auto md:mx-0 rounded-xl shadow-lg object-cover cursor-pointer hover:scale-105 transition-transform" 
-                      referrerPolicy="no-referrer"
-                      onClick={() => setIsPosterExpanded(true)}
-                    />
+                    <div className="absolute top-4 right-4 animate-spin rounded-full h-4 w-4 border-t-2 border-b-2 border-cyan-500"></div>
                   )}
                   <div className="flex-1 space-y-4">
-                    <div className="flex justify-between items-start">
-                      <h3 className="text-3xl font-bold text-cyan-400">
+                    <div className="flex justify-between items-start gap-4">
+                      <h3 className="text-3xl font-bold text-cyan-400 flex-1">
                         {imdbData.title} {imdbData.year ? `(${imdbData.year})` : ''}
                       </h3>
-                      <div className="flex flex-col items-end gap-2">
-                        {imdbData.rating && imdbData.fetchedFields?.includes('rating') && (
-                          <div className="bg-[#f5c518] text-black px-2.5 py-1 rounded-md flex items-center gap-2 font-bold text-sm shadow-[0_0_20px_rgba(245,197,24,0.2)]">
-                            <span className="bg-black text-[#f5c518] px-1 rounded-sm text-[10px] font-black leading-none py-0.5 tracking-tighter">IMDb</span>
-                            <div className="flex items-center gap-1">
-                              <Star className="w-3.5 h-3.5 fill-current" />
+                      <div className="flex flex-col items-end gap-2 shrink-0">
+                        {!fetchingImdb && imdbData.isFetched && (
+                          <div className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-zinc-900/80 border border-zinc-800 backdrop-blur-sm whitespace-nowrap">
+                            {imdbData.source === 'ai' ? (
+                              <div className="flex items-center gap-1.5">
+                                <Sparkles className="w-3 h-3 text-emerald-500" />
+                                <span className="text-[10px] font-bold text-emerald-500 tracking-wider uppercase leading-none">AI Fetched</span>
+                              </div>
+                            ) : (
+                              <div className="flex items-center gap-1.5">
+                                <span className="bg-[#f5c518] text-black px-1 rounded-sm text-[10px] font-black tracking-tighter leading-none">IMDb</span>
+                                <span className="text-[10px] font-bold text-zinc-400 tracking-wider uppercase leading-none">Fetched</span>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                        {imdbData.rating && imdbData.isFetched && (
+                          <div className="bg-[#f5c518] text-black px-2 py-1 rounded flex items-center gap-1.5 font-black text-xs shadow-[0_0_15px_rgba(245,197,24,0.3)] whitespace-nowrap">
+                            <span className="bg-black text-[#f5c518] px-1 rounded-sm text-[10px] tracking-tighter">IMDb</span>
+                            <div className="flex items-center gap-0.5">
+                              <span className="text-[10px]">⭐</span>
                               <span>{imdbData.rating.replace('/10', '')}</span>
                             </div>
                           </div>
@@ -876,7 +882,7 @@ export default function MovieDetails() {
                       {imdbData.releaseDate && (
                         <div className="flex flex-col">
                           <span className="text-zinc-500 text-[10px] uppercase tracking-wider">Release Date</span>
-                          <span>{imdbData.releaseDate}</span>
+                          <span>{formatReleaseDate(imdbData.releaseDate)}</span>
                         </div>
                       )}
                       {imdbData.duration && content.type !== 'series' && (
@@ -925,17 +931,11 @@ export default function MovieDetails() {
                 </div>
               ) : (
                 <div className="space-y-12">
-                  <section className="bg-cyan-500/5 border border-cyan-500/20 rounded-2xl p-8 relative overflow-hidden">
-                    {fetchingImdb && (
-                      <div className="absolute top-3 right-3 flex items-center gap-1.5 bg-cyan-500/20 backdrop-blur-md px-2 py-1 rounded-full border border-cyan-500/30 z-10">
-                        <Loader2 className="w-3 h-3 animate-spin text-cyan-400" />
-                        <span className="text-[9px] font-bold text-cyan-400 uppercase tracking-tighter">Updating</span>
-                      </div>
-                    )}
+                  <section className="bg-cyan-500/5 border border-cyan-500/20 rounded-2xl p-8">
                     <div className="flex flex-wrap gap-6 mb-8 text-sm font-medium text-cyan-400/80">
                       {content.year && <span className="flex items-center gap-2 bg-cyan-500/10 px-3 py-1.5 rounded-lg"><Clock className="w-4 h-4 text-cyan-500" /> {content.year}</span>}
                       {content.runtime && content.type !== 'series' && <span className="flex items-center gap-2 bg-cyan-500/10 px-3 py-1.5 rounded-lg"><Clock className="w-4 h-4 text-cyan-500" /> {content.runtime}</span>}
-                      {content.releaseDate && <span className="flex items-center gap-2 bg-cyan-500/10 px-3 py-1.5 rounded-lg"><Film className="w-4 h-4 text-cyan-500" /> {content.releaseDate}</span>}
+                      {content.releaseDate && <span className="flex items-center gap-2 bg-cyan-500/10 px-3 py-1.5 rounded-lg"><Film className="w-4 h-4 text-cyan-500" /> {formatReleaseDate(content.releaseDate)}</span>}
                       {contentGenres && <span className="flex items-center gap-2 bg-cyan-500/10 px-3 py-1.5 rounded-lg">Genre: {contentGenres}</span>}
                       {contentLangs && <span className="flex items-center gap-2 bg-cyan-500/10 px-3 py-1.5 rounded-lg">Language: {contentLangs}</span>}
                       {content.qualityId && (
@@ -1100,6 +1100,12 @@ export default function MovieDetails() {
         </div>
       </div>
 
+      <GeminiAssistantModal 
+        isOpen={isGeminiModalOpen} 
+        onClose={() => setIsGeminiModalOpen(false)} 
+        context={`${content.title} (${content.year}) - ${content.type}`}
+      />
+
       <AlertModal
         isOpen={alertConfig.isOpen}
         title={alertConfig.title}
@@ -1252,6 +1258,15 @@ export default function MovieDetails() {
           </motion.div>
         )}
       </AnimatePresence>
+      <ConfirmModal
+        isOpen={showLoginPrompt}
+        title="Sign in required"
+        message="Please sign in or log in to access links and watch this content."
+        onConfirm={() => navigate('/login', { state: { from: location.pathname } })}
+        onCancel={() => setShowLoginPrompt(false)}
+        confirmText="Log In"
+        cancelText="Cancel"
+      />
     </div>
   );
 }

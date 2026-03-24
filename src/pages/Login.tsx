@@ -4,7 +4,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { Film } from 'lucide-react';
 
 export default function Login() {
-  const { user, profile, signInWithGoogle, loading, error } = useAuth();
+  const { user, profile, signInWithGoogle, loading, authLoading, error } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const [isLoggingIn, setIsLoggingIn] = useState(false);
@@ -27,7 +27,7 @@ export default function Login() {
     await signInWithGoogle();
   };
 
-  if (loading) return null;
+  if (authLoading) return null;
 
   return (
     <div className="min-h-screen bg-zinc-950 flex flex-col items-center justify-center text-white p-4">

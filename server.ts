@@ -2,6 +2,8 @@ import express from "express";
 import { createServer as createViteServer } from "vite";
 import path from "path";
 import { fileURLToPath } from "url";
+import fs from "fs";
+import firebaseConfig from "./firebase-applet-config.json" assert { type: "json" };
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -16,10 +18,12 @@ async function startServer() {
   app.get("/api/imdb/suggestion/:ttId", async (req, res) => {
     try {
       const { ttId } = req.params;
-      // Try 'x' prefix first, then 't' if needed, or just use 'x' as it's common for tt IDs
-      const response = await fetch(`https://v3.sg.media-imdb.com/suggestion/x/${ttId}.json`);
+      const firstLetter = ttId.charAt(0).toLowerCase();
+      
+      const response = await fetch(`https://v3.sg.media-imdb.com/suggestion/${firstLetter}/${ttId}.json`);
       if (!response.ok) {
-        const fallbackResponse = await fetch(`https://v3.sg.media-imdb.com/suggestion/t/${ttId}.json`);
+        // Fallback to 'x' if the first letter doesn't work (sometimes used for newer IDs)
+        const fallbackResponse = await fetch(`https://v3.sg.media-imdb.com/suggestion/x/${ttId}.json`);
         if (!fallbackResponse.ok) {
           return res.status(fallbackResponse.status).json({ error: "Failed to fetch from IMDb" });
         }
@@ -97,18 +101,121 @@ async function startServer() {
     }
   });
 
+  // Helper to fetch movie details and generate OG tags
+  const getOgTags = async (req: express.Request) => {
+    const urlPath = req.originalUrl;
+    const host = req.get('host') || '';
+    const protocol = req.protocol || 'https';
+    const baseUrl = `${protocol}://${host}`;
+    
+    let title = "MovizNow";
+    let description = "Your premium movie and series streaming platform";
+    let image = `${baseUrl}/logo.svg`; // Use absolute URL for OG image
+    
+    const movieMatch = urlPath.match(/^\/movie\/([^/?]+)/);
+    if (movieMatch) {
+      const movieId = movieMatch[1];
+      try {
+        const { projectId, firestoreDatabaseId } = firebaseConfig;
+        const dbId = firestoreDatabaseId || '(default)';
+        const apiUrl = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/${dbId}/documents/content/${movieId}`;
+        
+        const response = await fetch(apiUrl);
+        if (response.ok) {
+          const data = await response.json();
+          if (data.fields) {
+            const movieTitle = data.fields.title?.stringValue || "";
+            const year = data.fields.year?.integerValue || data.fields.year?.stringValue || "";
+            
+            // Fetch genres if available
+            let genreNames = "";
+            if (data.fields.genreIds?.arrayValue?.values) {
+              try {
+                const genresUrl = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/${dbId}/documents/genres`;
+                const genresResponse = await fetch(genresUrl);
+                if (genresResponse.ok) {
+                  const genresData = await genresResponse.json();
+                  if (genresData.documents) {
+                    const genreIds = data.fields.genreIds.arrayValue.values.map((v: any) => v.stringValue);
+                    const matchedGenres = genresData.documents
+                      .filter((doc: any) => genreIds.includes(doc.name.split('/').pop()))
+                      .map((doc: any) => doc.fields.name?.stringValue)
+                      .filter(Boolean);
+                    if (matchedGenres.length > 0) {
+                      genreNames = ` | ${matchedGenres.join(', ')}`;
+                    }
+                  }
+                }
+              } catch (e) {
+                console.error("Error fetching genres for OG tags:", e);
+              }
+            }
+
+            title = `${movieTitle} ${year ? `(${year})` : ''}${genreNames} - MovizNow`;
+            
+            description = data.fields.description?.stringValue || description;
+            
+            if (data.fields.posterUrl?.stringValue) {
+              image = data.fields.posterUrl.stringValue;
+            }
+          }
+        }
+      } catch (error) {
+        console.error("Error fetching movie for OG tags:", error);
+      }
+    }
+
+    return `
+      <meta property="og:title" content="${title.replace(/"/g, '&quot;')}" />
+      <meta property="og:description" content="${description.replace(/"/g, '&quot;')}" />
+      <meta property="og:image" content="${image}" />
+      <meta property="og:type" content="website" />
+      <meta property="og:url" content="${baseUrl}${urlPath}" />
+      <meta name="twitter:card" content="summary_large_image" />
+      <meta name="twitter:title" content="${title.replace(/"/g, '&quot;')}" />
+      <meta name="twitter:description" content="${description.replace(/"/g, '&quot;')}" />
+      <meta name="twitter:image" content="${image}" />
+    `;
+  };
+
   // Vite middleware for development
   if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({
       server: { middlewareMode: true },
-      appType: "spa",
+      appType: "custom", // Change to custom to handle HTML manually
     });
     app.use(vite.middlewares);
+    
+    app.use('*', async (req, res, next) => {
+      try {
+        const url = req.originalUrl;
+        let template = fs.readFileSync(path.resolve(__dirname, 'index.html'), 'utf-8');
+        template = await vite.transformIndexHtml(url, template);
+        
+        const ogTags = await getOgTags(req);
+        const html = template.replace('</head>', `${ogTags}</head>`);
+        
+        res.status(200).set({ 'Content-Type': 'text/html' }).end(html);
+      } catch (e) {
+        vite.ssrFixStacktrace(e as Error);
+        next(e);
+      }
+    });
   } else {
     const distPath = path.join(process.cwd(), 'dist');
-    app.use(express.static(distPath));
-    app.get('*', (req, res) => {
-      res.sendFile(path.join(distPath, 'index.html'));
+    app.use(express.static(distPath, { index: false })); // Disable default index.html serving
+    
+    app.get('*', async (req, res) => {
+      try {
+        let template = fs.readFileSync(path.join(distPath, 'index.html'), 'utf-8');
+        
+        const ogTags = await getOgTags(req);
+        const html = template.replace('</head>', `${ogTags}</head>`);
+        
+        res.status(200).set({ 'Content-Type': 'text/html' }).send(html);
+      } catch (e) {
+        res.status(500).end((e as Error).message);
+      }
     });
   }
 

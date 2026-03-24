@@ -10,6 +10,7 @@ interface AuthContextType {
   user: User | null;
   profile: UserProfile | null;
   loading: boolean;
+  authLoading: boolean;
   error: string | null;
   signInWithGoogle: () => Promise<void>;
   logout: () => Promise<void>;
@@ -21,6 +22,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
+  const [authLoading, setAuthLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const sessionStartTimeRef = useRef<number | null>(null);
 
@@ -37,6 +39,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
 
       setUser(currentUser);
+      setAuthLoading(false);
+      
       if (currentUser) {
         if (!sessionStorage.getItem('session_started')) {
           sessionStorage.setItem('session_started', 'true');
@@ -180,7 +184,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, profile, loading, error, signInWithGoogle, logout }}>
+    <AuthContext.Provider value={{ user, profile, loading, authLoading, error, signInWithGoogle, logout }}>
       {children}
     </AuthContext.Provider>
   );

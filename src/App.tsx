@@ -45,7 +45,7 @@ export default function App() {
             
             {/* User Routes */}
             <Route path="/" element={<ProtectedRoute><Home /></ProtectedRoute>} />
-            <Route path="/movie/:id" element={<ProtectedRoute><MovieDetails /></ProtectedRoute>} />
+            <Route path="/movie/:id" element={<MovieDetails />} />
             <Route path="/watch-later" element={<ProtectedRoute><WatchLater /></ProtectedRoute>} />
             <Route path="/favorites" element={<ProtectedRoute><Favorites /></ProtectedRoute>} />
             <Route path="/requests" element={<ProtectedRoute><MovieRequests /></ProtectedRoute>} />
