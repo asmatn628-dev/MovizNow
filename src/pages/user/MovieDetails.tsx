@@ -1,10 +1,11 @@
+import { GoogleGenAI, Type } from "@google/genai";
 import { useState, useEffect, useRef } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { db } from '../../firebase';
 import { doc, onSnapshot, updateDoc, arrayUnion, arrayRemove, collection, deleteDoc } from 'firebase/firestore';
 import { Content, Genre, Language, QualityLinks, Season, Quality } from '../../types';
 import { useAuth } from '../../contexts/AuthContext';
-import { Film, ArrowLeft, Play, Clock, Heart, MessageCircle, AlertCircle, Download, Share2, Chrome, Copy, Youtube, X, Edit2, Trash2, Settings, Lock, ChevronDown, ChevronUp } from 'lucide-react';
+import { Film, ArrowLeft, Play, Clock, Heart, MessageCircle, AlertCircle, Download, Share2, Chrome, Copy, Youtube, X, Edit2, Trash2, Settings, Lock, ChevronDown, ChevronUp, Star, Loader2 } from 'lucide-react';
 import { logEvent } from '../../services/analytics';
 import { handleFirestoreError, OperationType } from '../../utils/firestoreErrorHandler';
 import AlertModal from '../../components/AlertModal';
@@ -30,6 +31,46 @@ export default function MovieDetails() {
   const [fetchingImdb, setFetchingImdb] = useState(false);
   const hasLoggedView = useRef(false);
   const navigate = useNavigate();
+
+  const fetchAiData = async (title: string, year: string, type: string, currentImdbId: string | null) => {
+    try {
+      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY! });
+      const response = await ai.models.generateContent({
+        model: "gemini-3-flash-preview",
+        contents: `Search for the official IMDb details for the ${type} "${title}" (${year}). 
+        Current IMDb ID provided: ${currentImdbId || 'None'}.
+        If the provided ID is missing or seems incorrect for this title, find the correct official IMDb 'tt' ID.
+        Return the data in JSON format including:
+        - imdbId: The official IMDb ID (e.g., tt0111161)
+        - rating: The current IMDb rating (e.g., 9.3/10)
+        - releaseDate: The official release date
+        - duration: The runtime in minutes
+        - cast: Top 5 lead actors
+        - description: A concise synopsis
+        - posterUrl: A direct link to a high-quality official poster (prefer IMDb or TMDB CDN links).`,
+        config: {
+          tools: [{ googleSearch: {} }],
+          responseMimeType: "application/json",
+          responseSchema: {
+            type: Type.OBJECT,
+            properties: {
+              imdbId: { type: Type.STRING, description: "Official IMDb tt ID" },
+              rating: { type: Type.STRING, description: "IMDb rating" },
+              releaseDate: { type: Type.STRING, description: "Release date" },
+              duration: { type: Type.STRING, description: "Runtime" },
+              cast: { type: Type.STRING, description: "Top cast members" },
+              description: { type: Type.STRING, description: "Synopsis" },
+              posterUrl: { type: Type.STRING, description: "High quality poster URL" }
+            }
+          }
+        }
+      });
+      return JSON.parse(response.text);
+    } catch (error) {
+      console.error("AI fetch error:", error);
+      return null;
+    }
+  };
 
   // Initialize IMDb data from content and cache
   useEffect(() => {
@@ -148,92 +189,153 @@ export default function MovieDetails() {
   }, [isPosterExpanded]);
 
   useEffect(() => {
-    if (content?.imdbLink) {
-      const fetchImdb = async () => {
-        const ttMatch = content.imdbLink!.match(/tt\d+/);
-        if (!ttMatch) return;
-        const ttId = ttMatch[0];
-
-        // Check cache again to avoid unnecessary background fetch if already cached
-        const cacheKey = `imdb_${ttId}`;
-        const cached = localStorage.getItem(cacheKey);
-        if (cached) {
-          try {
-            const parsed = JSON.parse(cached);
-            if (parsed.ttId === ttId && (Date.now() - parsed.timestamp < 24 * 60 * 60 * 1000)) {
-              return; // Cache is fresh (less than 24h old)
-            }
-          } catch (e) {}
-        }
+    if (content) {
+      const fetchData = async () => {
+        const ttMatch = content.imdbLink?.match(/tt\d+/);
+        let ttId = ttMatch ? ttMatch[0] : null;
 
         setFetchingImdb(true);
-        let data: any = { ttId, timestamp: Date.now() };
-        
-        // Try TVMaze first
-        try {
-          const tvmazeRes = await fetch(`https://api.tvmaze.com/lookup/shows?imdb=${ttId}`);
-          if (tvmazeRes.ok) {
-            const show = await tvmazeRes.json();
-            if (show.image?.original) data.posterUrl = show.image.original;
-            data.rating = show.rating?.average ? `${show.rating.average}/10` : '';
-          }
-        } catch (error) {
-          // TVMaze fetch failed, silently fallback
+        let data: any = { ttId, timestamp: Date.now(), fetchedFields: [] };
+
+        // 1. Parallel API & AI Fetching
+        // We start AI fetch immediately if we're missing critical data
+        const aiPromise = fetchAiData(content.title, String(content.year || ''), content.type, ttId);
+        const fetchPromises: Promise<any>[] = [aiPromise];
+
+        if (ttId) {
+          // TVMaze
+          fetchPromises.push(
+            fetch(`https://api.tvmaze.com/lookup/shows?imdb=${ttId}`)
+              .then(res => res.ok ? res.json() : null)
+              .then(show => {
+                if (show) {
+                  if (show.image?.original && !content.posterUrl && !data.posterUrl) {
+                    data.posterUrl = show.image.original;
+                    if (!data.fetchedFields.includes('posterUrl')) data.fetchedFields.push('posterUrl');
+                  }
+                  if (show.rating?.average && !data.rating) {
+                    data.rating = `${show.rating.average}/10`;
+                    if (!data.fetchedFields.includes('rating')) data.fetchedFields.push('rating');
+                  }
+                  if (show.premiered && !content.releaseDate && !data.releaseDate) {
+                    data.releaseDate = show.premiered;
+                    if (!data.fetchedFields.includes('releaseDate')) data.fetchedFields.push('releaseDate');
+                  }
+                  if (show.runtime && !content.runtime && content.type !== 'series' && !data.duration) {
+                    data.duration = `${show.runtime} min`;
+                    if (!data.fetchedFields.includes('duration')) data.fetchedFields.push('duration');
+                  }
+                  if (show.summary && !content.description && !data.description) {
+                    data.description = show.summary.replace(/<[^>]*>/g, '');
+                    if (!data.fetchedFields.includes('description')) data.fetchedFields.push('description');
+                  }
+                }
+              })
+              .catch(() => null)
+          );
+
+          // IMDb Suggestion API
+          fetchPromises.push(
+            fetch(`/api/imdb/suggestion/${ttId}`)
+              .then(res => res.ok ? res.json() : null)
+              .then(suggestData => {
+                if (suggestData) {
+                  const item = suggestData.d?.find((i: any) => i.id === ttId) || suggestData.d?.[0];
+                  if (item && item.i?.imageUrl && !content.posterUrl && !data.posterUrl) {
+                    data.posterUrl = item.i.imageUrl;
+                    if (!data.fetchedFields.includes('posterUrl')) data.fetchedFields.push('posterUrl');
+                  }
+                }
+              })
+              .catch(() => null)
+          );
+
+          // IMDb Scraper Proxy
+          fetchPromises.push(
+            fetch(`/api/imdb/title/${ttId}`)
+              .then(res => res.ok ? res.text() : null)
+              .then(html => {
+                if (html) {
+                  const parser = new DOMParser();
+                  const doc = parser.parseFromString(html, 'text/html');
+                  
+                  if (!data.rating) {
+                    const ratingEl = doc.querySelector('[data-testid="hero-rating-bar__aggregate-rating__score"] span');
+                    if (ratingEl && ratingEl.textContent?.trim()) {
+                      data.rating = `${ratingEl.textContent.trim()}/10`;
+                      if (!data.fetchedFields.includes('rating')) data.fetchedFields.push('rating');
+                    }
+                  }
+                  if (!content.releaseDate && !data.releaseDate) {
+                    const releaseEl = doc.querySelector('[data-testid="title-details-releasedate"] .ipc-metadata-list-item__list-content-item');
+                    if (releaseEl) {
+                      data.releaseDate = releaseEl.textContent?.trim();
+                      if (!data.fetchedFields.includes('releaseDate')) data.fetchedFields.push('releaseDate');
+                    }
+                  }
+                  if (!content.runtime && !data.duration && content.type !== 'series') {
+                    const runtimeEl = doc.querySelector('[data-testid="title-techspec_runtime"] .ipc-metadata-list-item__list-content-item');
+                    if (runtimeEl) {
+                      data.duration = runtimeEl.textContent?.trim();
+                      if (!data.fetchedFields.includes('duration')) data.fetchedFields.push('duration');
+                    }
+                  }
+                  if (!content.cast || content.cast.length === 0) {
+                    const castEls = doc.querySelectorAll('[data-testid="title-cast-item__actor"]');
+                    if (castEls.length > 0 && !data.cast) {
+                      data.cast = Array.from(castEls).slice(0, 10).map(el => el.textContent?.trim()).join(', ');
+                      if (!data.fetchedFields.includes('cast')) data.fetchedFields.push('cast');
+                    }
+                  }
+                  if (!content.description && !data.description) {
+                    const descEl = doc.querySelector('[data-testid="plot-l"]');
+                    if (descEl) {
+                      data.description = descEl.textContent?.trim();
+                      if (!data.fetchedFields.includes('description')) data.fetchedFields.push('description');
+                    }
+                  }
+                }
+              })
+              .catch(() => null)
+          );
         }
 
-        // Fallback to suggestion API for poster
-        try {
-          let suggestRes = await fetch(`/api/imdb/suggestion/${ttId}`).catch(() => null);
-          let suggestData = null;
-          
-          if (suggestRes && suggestRes.ok) {
-            suggestData = await suggestRes.json();
-          }
+        // Wait for all fetches to complete
+        const results = await Promise.all(fetchPromises);
+        const aiResult = results[0]; // The first promise was AI
 
-          if (suggestData) {
-            const item = suggestData.d?.find((i: any) => i.id === ttId) || suggestData.d?.[0];
-            if (item && item.i?.imageUrl && !data.posterUrl) {
-              data.posterUrl = item.i.imageUrl;
+        // 2. Merge AI results for missing fields
+        if (aiResult) {
+          if (aiResult.imdbId && !ttId) {
+            ttId = aiResult.imdbId;
+            data.ttId = ttId;
+            if (!data.fetchedFields.includes('imdbId')) data.fetchedFields.push('imdbId');
+          }
+          
+          const fieldsToFill = ['rating', 'releaseDate', 'duration', 'cast', 'description', 'posterUrl'];
+          fieldsToFill.forEach(field => {
+            // Only use AI data if we don't have it from standard APIs and it's missing in content
+            const isMissingInContent = field === 'duration' ? !content.runtime : 
+                                      field === 'cast' ? (!content.cast || content.cast.length === 0) :
+                                      !(content as any)[field];
+            
+            if (aiResult[field] && !data[field] && isMissingInContent) {
+              data[field] = aiResult[field];
+              if (!data.fetchedFields.includes(field)) data.fetchedFields.push(field);
+              data.isAiGenerated = true;
             }
-          }
-        } catch (error) {
-          // IMDb suggestion fetch failed, silently fallback
-        }
-        
-        // Try to get rating via proxy
-        try {
-          const proxyUrl = `/api/imdb/title/${ttId}`;
-          let pageRes = await fetch(proxyUrl);
-          let html = '';
-          
-          if (pageRes.ok) {
-            html = await pageRes.text();
-          }
-          
-          if (html && !data.rating) {
-            const parser = new DOMParser();
-            const doc = parser.parseFromString(html, 'text/html');
-            const ratingEl = doc.querySelector('[data-testid="hero-rating-bar__aggregate-rating__score"] span');
-            if (ratingEl && ratingEl.textContent?.trim()) {
-              data.rating = `${ratingEl.textContent.trim()}/10`;
-            }
-          }
-        } catch (error) {
-          console.error("IMDb proxy fetch error", error);
+          });
         }
 
-        if (data.posterUrl && data.rating) {
+        if (data.fetchedFields.length > 0) {
           setImdbData(prev => ({ ...prev, ...data, isFetched: true }));
-          localStorage.setItem(`imdb_${ttId}`, JSON.stringify({ ...data, ttId, timestamp: Date.now(), isFetched: true }));
-        } else if (Object.keys(data).length > 2) {
-          setImdbData(prev => ({ ...prev, ...data }));
-          localStorage.setItem(`imdb_${ttId}`, JSON.stringify({ ...data, ttId, timestamp: Date.now() }));
+          localStorage.setItem(`imdb_${ttId || content.id}`, JSON.stringify({ ...data, ttId, timestamp: Date.now(), isFetched: true }));
         }
         setFetchingImdb(false);
       };
-      fetchImdb();
+      fetchData();
     }
-  }, [content?.imdbLink]);
+  }, [content?.id, content?.imdbLink]);
 
   const getYouTubeEmbedUrl = (url?: string) => {
     if (!url) return null;
@@ -708,7 +810,7 @@ export default function MovieDetails() {
       </div>
 
       {/* Main Content Area */}
-      <div className="max-w-7xl mx-auto px-8 py-12">
+      <div className="max-w-7xl mx-auto px-8 pt-0 pb-12">
         {!canPlay && (
           <div className="bg-red-500/10 border border-red-500/20 text-red-500 p-6 rounded-2xl mb-12 flex items-start gap-4">
             <AlertCircle className="w-6 h-6 shrink-0 mt-0.5" />
@@ -728,14 +830,29 @@ export default function MovieDetails() {
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-12">
           <div className="lg:col-span-2 space-y-12">
-            <section className="mt-8">
+            <section className="-mt-4 md:-mt-8 relative z-20">
               {imdbData ? (
                 <div className="bg-cyan-500/10 border border-cyan-500/30 rounded-2xl p-6 md:p-8 flex flex-col md:flex-row gap-8 relative overflow-hidden">
                   {fetchingImdb && (
-                    <div className="absolute top-4 right-4 animate-spin rounded-full h-4 w-4 border-t-2 border-b-2 border-cyan-500"></div>
+                    <div className="absolute top-3 right-3 flex items-center gap-1.5 bg-cyan-500/20 backdrop-blur-md px-2 py-1 rounded-full border border-cyan-500/30 z-10">
+                      <Loader2 className="w-3 h-3 animate-spin text-cyan-400" />
+                      <span className="text-[9px] font-bold text-cyan-400 uppercase tracking-tighter">Updating</span>
+                    </div>
                   )}
-                  {imdbData.posterUrl && imdbData.posterUrl.trim() !== "" && imdbData.isFetched && (
-                    <img src={imdbData.posterUrl} alt="Poster" className="w-32 md:w-48 mx-auto md:mx-0 rounded-xl shadow-lg object-cover" referrerPolicy="no-referrer" />
+                  {imdbData.isAiGenerated && !fetchingImdb && (
+                    <div className="absolute top-3 right-3 flex items-center gap-1.5 bg-purple-500/20 backdrop-blur-md px-2 py-1 rounded-full border border-purple-500/30 z-10">
+                      <div className="w-1.5 h-1.5 rounded-full bg-purple-400 animate-pulse" />
+                      <span className="text-[9px] font-bold text-purple-400 uppercase tracking-tighter">AI Enhanced</span>
+                    </div>
+                  )}
+                  {(imdbData.posterUrl || content.posterUrl) && (
+                    <img 
+                      src={imdbData.posterUrl || content.posterUrl} 
+                      alt="Poster" 
+                      className="w-32 md:w-48 mx-auto md:mx-0 rounded-xl shadow-lg object-cover cursor-pointer hover:scale-105 transition-transform" 
+                      referrerPolicy="no-referrer"
+                      onClick={() => setIsPosterExpanded(true)}
+                    />
                   )}
                   <div className="flex-1 space-y-4">
                     <div className="flex justify-between items-start">
@@ -743,11 +860,11 @@ export default function MovieDetails() {
                         {imdbData.title} {imdbData.year ? `(${imdbData.year})` : ''}
                       </h3>
                       <div className="flex flex-col items-end gap-2">
-                        {imdbData.rating && imdbData.isFetched && (
-                          <div className="bg-[#f5c518] text-black px-2 py-1 rounded flex items-center gap-1.5 font-black text-xs shadow-[0_0_15px_rgba(245,197,24,0.3)]">
-                            <span className="bg-black text-[#f5c518] px-1 rounded-sm text-[10px] tracking-tighter">IMDb</span>
-                            <div className="flex items-center gap-0.5">
-                              <span className="text-[10px]">⭐</span>
+                        {imdbData.rating && imdbData.fetchedFields?.includes('rating') && (
+                          <div className="bg-[#f5c518] text-black px-2.5 py-1 rounded-md flex items-center gap-2 font-bold text-sm shadow-[0_0_20px_rgba(245,197,24,0.2)]">
+                            <span className="bg-black text-[#f5c518] px-1 rounded-sm text-[10px] font-black leading-none py-0.5 tracking-tighter">IMDb</span>
+                            <div className="flex items-center gap-1">
+                              <Star className="w-3.5 h-3.5 fill-current" />
                               <span>{imdbData.rating.replace('/10', '')}</span>
                             </div>
                           </div>
@@ -808,7 +925,13 @@ export default function MovieDetails() {
                 </div>
               ) : (
                 <div className="space-y-12">
-                  <section className="bg-cyan-500/5 border border-cyan-500/20 rounded-2xl p-8">
+                  <section className="bg-cyan-500/5 border border-cyan-500/20 rounded-2xl p-8 relative overflow-hidden">
+                    {fetchingImdb && (
+                      <div className="absolute top-3 right-3 flex items-center gap-1.5 bg-cyan-500/20 backdrop-blur-md px-2 py-1 rounded-full border border-cyan-500/30 z-10">
+                        <Loader2 className="w-3 h-3 animate-spin text-cyan-400" />
+                        <span className="text-[9px] font-bold text-cyan-400 uppercase tracking-tighter">Updating</span>
+                      </div>
+                    )}
                     <div className="flex flex-wrap gap-6 mb-8 text-sm font-medium text-cyan-400/80">
                       {content.year && <span className="flex items-center gap-2 bg-cyan-500/10 px-3 py-1.5 rounded-lg"><Clock className="w-4 h-4 text-cyan-500" /> {content.year}</span>}
                       {content.runtime && content.type !== 'series' && <span className="flex items-center gap-2 bg-cyan-500/10 px-3 py-1.5 rounded-lg"><Clock className="w-4 h-4 text-cyan-500" /> {content.runtime}</span>}
