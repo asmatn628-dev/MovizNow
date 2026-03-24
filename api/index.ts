@@ -3,7 +3,7 @@ import { createServer as createViteServer } from "vite";
 import path from "path";
 import { fileURLToPath } from "url";
 import fs from "fs";
-import firebaseConfig from "./firebase-applet-config.json" assert { type: "json" };
+import firebaseConfig from "../firebase-applet-config.json" assert { type: "json" };
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -189,7 +189,7 @@ async function startServer() {
     app.use('*', async (req, res, next) => {
       try {
         const url = req.originalUrl;
-        let template = fs.readFileSync(path.resolve(__dirname, 'index.html'), 'utf-8');
+        let template = fs.readFileSync(path.resolve(__dirname, '../index.html'), 'utf-8');
         template = await vite.transformIndexHtml(url, template);
         
         const ogTags = await getOgTags(req);
