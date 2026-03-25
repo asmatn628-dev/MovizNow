@@ -120,4 +120,5 @@ export interface Content {
   status?: 'draft' | 'published';
   movieLinks?: string; // JSON stringified QualityLinks
   seasons?: string; // JSON stringified Season[]
+  imdbRating?: string; // Added imdbRating
 }

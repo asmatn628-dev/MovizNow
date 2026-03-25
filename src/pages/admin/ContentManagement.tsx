@@ -8,7 +8,7 @@ import { Plus, Edit2, Trash2, Share2, Film, Tv, X, Save, Upload, Search, Eye, Ey
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
 import ConfirmModal from '../../components/ConfirmModal';
 import AlertModal from '../../components/AlertModal';
-import IMDbMasterFetchModal from '../../components/IMDbMasterFetchModal';
+import { MediaModal } from '../../components/MediaModal';
 import AIFetchModal from '../../components/AIFetchModal';
 import { formatContentTitle, formatReleaseDate } from '../../utils/contentUtils';
 import { handleFirestoreError, OperationType } from '../../utils/firestoreErrorHandler';
@@ -67,7 +67,7 @@ export default function ContentManagement() {
   const [isLanguageDropdownOpen, setIsLanguageDropdownOpen] = useState(false);
   const [searchParams, setSearchParams] = useSearchParams();
   const [isAIFetchModalOpen, setIsAIFetchModalOpen] = useState(false);
-  const [isImdbMasterFetchModalOpen, setIsImdbMasterFetchModalOpen] = useState(false);
+  const [isMasterFetchModalOpen, setIsMasterFetchModalOpen] = useState(false);
   const [fetchingPoster, setFetchingPoster] = useState(false);
   const [isAutoFillModalOpen, setIsAutoFillModalOpen] = useState(false);
   const [autoFillText, setAutoFillText] = useState('');
@@ -432,7 +432,7 @@ export default function ContentManagement() {
         setAlertConfig({ isOpen: true, title: 'Success', message: 'Data fetched successfully!' });
       } catch (error) {
         console.error("Direct Fetch Error:", error);
-        setAlertConfig({ isOpen: true, title: 'Error', message: 'Failed to fetch data directly. Please try AI fetch.' });
+        setIsAIFetchModalOpen(true);
       } finally {
         setLoading(false);
       }
@@ -620,6 +620,14 @@ export default function ContentManagement() {
   };
 
   const handleShare = (content: Content) => {
+    const isMissingData = !content.runtime || !content.releaseDate || !content.genreIds || content.genreIds.length === 0 || !content.description;
+    if (isMissingData) {
+      handleEdit(content);
+      setIsMasterFetchModalOpen(true);
+      setAlertConfig({ isOpen: true, title: 'Missing Data', message: 'Please fetch missing data before sharing.' });
+      return;
+    }
+
     if (content.type === 'series' && content.seasons) {
       try {
         const parsedSeasons: Season[] = JSON.parse(content.seasons);
@@ -637,6 +645,31 @@ export default function ContentManagement() {
     executeShare(content);
   };
 
+  const formatRuntimeForShare = (runtimeStr?: string) => {
+    if (!runtimeStr) return '';
+    const match = runtimeStr.match(/(\d+)/);
+    if (match) {
+      const mins = parseInt(match[1], 10);
+      if (mins > 60) {
+        const h = Math.floor(mins / 60);
+        const m = mins % 60;
+        return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
+      } else {
+        return `${mins} mins`;
+      }
+    }
+    return runtimeStr;
+  };
+
+  const formatReleaseDateForShare = (dateStr?: string) => {
+    if (!dateStr) return '';
+    const date = new Date(dateStr);
+    if (!isNaN(date.getTime())) {
+      return date.toLocaleDateString('en-US', { month: 'long', day: '2-digit', year: 'numeric' });
+    }
+    return dateStr;
+  };
+
   const executeShare = async (content: Content, selectedSeasonNumbers?: number[]) => {
     let text = `🎬 *${content.title}${content.year ? ` (${content.year})` : ''}*\n\n`;
     
@@ -649,8 +682,8 @@ export default function ContentManagement() {
     const contentQuality = qualities.find(q => q.id === content.qualityId)?.name;
     if (contentQuality) text += `🖨️ Print Quality: ${contentQuality}\n`;
     
-    if (content.runtime) text += `⏱️ Runtime: ${content.runtime}\n`;
-    if (content.releaseDate) text += `📅 Release: ${formatReleaseDate(content.releaseDate)}\n`;
+    if (content.runtime) text += `⏱️ Runtime: ${formatRuntimeForShare(content.runtime)}\n`;
+    if (content.releaseDate) text += `📅 Release: ${formatReleaseDateForShare(content.releaseDate)}\n`;
     
     if (content.sampleUrl) text += `📽️ Sample: ${content.sampleUrl}\n\n`;
     else text += `\n`;
@@ -1720,17 +1753,11 @@ export default function ContentManagement() {
                       </div>
                       <button
                         type="button"
-                        onClick={() => {
-                          if (!imdbLink) {
-                            setAlertConfig({ isOpen: true, title: 'Missing IMDb Link', message: 'Please enter an IMDb link before fetching.' });
-                            return;
-                          }
-                          setIsImdbMasterFetchModalOpen(true);
-                        }}
+                        onClick={() => setIsMasterFetchModalOpen(true)}
                         className="px-3 py-2 bg-emerald-500/10 text-emerald-500 rounded-lg text-xs font-medium hover:bg-emerald-500/20 transition-colors flex items-center gap-1.5"
                       >
                         <Search className="w-3 h-3" />
-                        IMDb Master Fetch
+                        Master Fetch
                       </button>
                     </div>
                   </div>
@@ -2094,10 +2121,12 @@ export default function ContentManagement() {
         </div>
       )}
 
-      <IMDbMasterFetchModal
-        isOpen={isImdbMasterFetchModalOpen}
-        onClose={() => setIsImdbMasterFetchModalOpen(false)}
-        imdbLink={imdbLink}
+      <MediaModal
+        isOpen={isMasterFetchModalOpen}
+        onClose={() => setIsMasterFetchModalOpen(false)}
+        initialImdbId={imdbLink}
+        initialTitle={title}
+        initialYear={year.toString()}
         onApply={applyAIFetchedData}
       />
       <AIFetchModal

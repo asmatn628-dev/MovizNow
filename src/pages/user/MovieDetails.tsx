@@ -5,15 +5,14 @@ import { db } from '../../firebase';
 import { doc, onSnapshot, updateDoc, arrayUnion, arrayRemove, collection, deleteDoc } from 'firebase/firestore';
 import { Content, Genre, Language, QualityLinks, Season, Quality } from '../../types';
 import { useAuth } from '../../contexts/AuthContext';
-import { Film, ArrowLeft, Play, Clock, Heart, MessageCircle, AlertCircle, Download, Share2, Chrome, Copy, Youtube, X, Edit2, Trash2, Settings, Lock, ChevronDown, ChevronUp, Sparkles, Bot, Loader2 } from 'lucide-react';
+import { Film, ArrowLeft, Play, Clock, Heart, MessageCircle, AlertCircle, Download, Share2, Chrome, Copy, Youtube, X, Edit2, Trash2, Settings, Lock, ChevronDown, ChevronUp, Loader2, Search } from 'lucide-react';
 import { logEvent } from '../../services/analytics';
 import { handleFirestoreError, OperationType } from '../../utils/firestoreErrorHandler';
 import AlertModal from '../../components/AlertModal';
 import ConfirmModal from '../../components/ConfirmModal';
-import GeminiAssistantModal from '../../components/GeminiAssistantModal';
 import { motion, AnimatePresence } from 'motion/react';
 import { formatContentTitle, formatReleaseDate } from '../../utils/contentUtils';
-import { fetchMovieMetadata } from '../../services/geminiMovieService';
+import { MediaModal } from '../../components/MediaModal';
 
 export default function MovieDetails() {
   const { id } = useParams<{ id: string }>();
@@ -36,7 +35,6 @@ export default function MovieDetails() {
   const [expandedEpisodes, setExpandedEpisodes] = useState<Record<string, boolean>>({});
   const [imdbData, setImdbData] = useState<any>(null);
   const [fetchingImdb, setFetchingImdb] = useState(false);
-  const [geminiStatus, setGeminiStatus] = useState<'idle' | 'fetching' | 'success' | 'error'>('idle');
   const hasLoggedView = useRef(false);
   const navigate = useNavigate();
   const location = useLocation();
@@ -46,14 +44,9 @@ export default function MovieDetails() {
   const imageUrl = content?.posterUrl || 'https://Moviz-Now.vercel.app/logo.svg';
   const pageUrl = window.location.href;
 
-  // Initialize IMDb data from content and cache
+  // Initialize IMDb data from content
   useEffect(() => {
     if (content) {
-      const ttMatch = content.imdbLink?.match(/tt\d+/);
-      const ttId = ttMatch ? ttMatch[0] : null;
-      const cacheKey = `imdb_${ttId || content.id}`;
-      const cached = localStorage.getItem(cacheKey);
-      
       const initialData = {
         title: content.title,
         year: content.year,
@@ -63,20 +56,10 @@ export default function MovieDetails() {
         genres: genres.filter(g => content.genreIds?.includes(g.id)).map(g => g.name).join(', '),
         releaseDate: content.releaseDate,
         duration: content.runtime,
-        type: content.type
+        type: content.type,
+        rating: content.imdbRating
       };
 
-      if (cached) {
-        try {
-          const parsed = JSON.parse(cached);
-          // Only use cache if it's for the same content
-          if (ttId && parsed.ttId === ttId) {
-            setImdbData({ ...initialData, ...parsed });
-            return;
-          }
-        } catch (e) {}
-      }
-      
       setImdbData(initialData);
     }
   }, [content, genres]);
@@ -162,99 +145,178 @@ export default function MovieDetails() {
     }
   }, [isPosterExpanded]);
 
+  const hasAttemptedFetch = useRef<Record<string, boolean>>({});
+
   useEffect(() => {
-    if (content?.imdbLink || content?.title) {
-      const fetchImdb = async () => {
-        const ttMatch = content.imdbLink?.match(/tt\d+/);
-        const ttId = ttMatch ? ttMatch[0] : null;
+    if (!content || !id || hasAttemptedFetch.current[id]) return;
 
-        // Check cache
-        const cacheKey = `imdb_${ttId || content.id}`;
-        const cached = localStorage.getItem(cacheKey);
-        if (cached) {
-          try {
-            const parsed = JSON.parse(cached);
-            if (parsed.isFetched && (Date.now() - parsed.timestamp < 24 * 60 * 60 * 1000)) {
-              return; // Cache is fresh
-            }
-          } catch (e) {}
+    const fetchMissingData = async () => {
+      const staticCacheKey = `imdb_static_${id}`;
+      const cachedStaticDataStr = sessionStorage.getItem(staticCacheKey);
+      const cachedStaticData = cachedStaticDataStr ? JSON.parse(cachedStaticDataStr) : null;
+      
+      const needsStaticData = (!content.runtime || !content.description || !content.cast || !content.releaseDate || !content.posterUrl) && !cachedStaticData;
+      const ratingCacheKey = `imdb_rating_${id}`;
+      const hasLiveRating = sessionStorage.getItem(ratingCacheKey);
+      const needsRating = !hasLiveRating;
+
+      if (!needsStaticData && !needsRating) {
+        // If we already have a cached rating, just display it
+        if (hasLiveRating && content.imdbRating !== hasLiveRating) {
+          setImdbData(prev => ({ ...prev, rating: hasLiveRating, isFetched: true }));
         }
+        if (cachedStaticData) {
+          setImdbData(prev => ({ ...prev, ...cachedStaticData }));
+        }
+        return;
+      }
 
-        setFetchingImdb(true);
-        setGeminiStatus('fetching');
+      hasAttemptedFetch.current[id] = true;
+      setFetchingImdb(true);
+
+      try {
+        const TMDB_API_KEY = import.meta.env.VITE_TMDB_API_KEY || 'f71c2391161526fa9d19bd0b2759efaf';
+        const OMDB_API_KEY = import.meta.env.VITE_OMDB_API_KEY || '19daa310';
         
-        let data: any = { ttId, timestamp: Date.now() };
-        let imdbSuccess = false;
+        let tmdbData: any = null;
+        let imdbId = content.imdbLink?.match(/tt\d+/)?.[0];
 
-        // Try legacy methods (IMDb algorithms) first
-        if (ttId) {
-          try {
-            const tvmazeRes = await fetch(`https://api.tvmaze.com/lookup/shows?imdb=${ttId}`);
-            if (tvmazeRes.ok) {
-              const show = await tvmazeRes.json();
-              if (show.rating?.average) data.rating = `${show.rating.average}/10`;
-            }
-          } catch (error) {}
+        // If we have cached static data but need rating, apply static data first
+        if (cachedStaticData) {
+           setImdbData(prev => ({ ...prev, ...cachedStaticData }));
+        }
 
-          try {
-            const proxyUrl = `/api/imdb/title/${ttId}`;
-            let pageRes = await fetch(proxyUrl);
-            if (pageRes.ok) {
-              const html = await pageRes.text();
-              const parser = new DOMParser();
-              const doc = parser.parseFromString(html, 'text/html');
-              const ratingEl = doc.querySelector('[data-testid="hero-rating-bar__aggregate-rating__score"] span');
-              if (ratingEl && ratingEl.textContent?.trim()) {
-                data.rating = `${ratingEl.textContent.trim()}/10`;
-              }
-            }
-          } catch (error) {}
-          
-          if (data.rating) {
-            imdbSuccess = true;
+        // 1. Try IMDb ID first
+        if (imdbId && needsStaticData) {
+          const findRes = await fetch(`https://api.themoviedb.org/3/find/${imdbId}?api_key=${TMDB_API_KEY}&external_source=imdb_id`);
+          const findData = await findRes.json();
+          const results = content.type === 'series' ? findData.tv_results : findData.movie_results;
+          if (results && results.length > 0) {
+            tmdbData = results[0];
           }
         }
 
-        if (imdbSuccess) {
-          const dataToSave = { ...data, isFetched: true, source: 'imdb' };
-          setImdbData(prev => ({ ...prev, ...dataToSave }));
-          localStorage.setItem(cacheKey, JSON.stringify(dataToSave));
-          setGeminiStatus('idle');
-          setFetchingImdb(false);
-          return;
-        }
-
-        // Fallback to Gemini if IMDb algorithms failed to get the rating
-        try {
-          const geminiData = await fetchMovieMetadata(content.title, content.year, content.imdbLink);
-          
-          if (geminiData) {
-            const dataToSave = {
-              ...geminiData,
-              ttId,
-              timestamp: Date.now(),
-              isFetched: true,
-              source: 'ai'
-            };
-            setImdbData(prev => ({ ...prev, ...dataToSave }));
-            localStorage.setItem(cacheKey, JSON.stringify(dataToSave));
-            setGeminiStatus('success');
-            setFetchingImdb(false);
-            return;
+        // 2. Try Title + Year if not found
+        if (!tmdbData && needsStaticData && content.title) {
+          const searchType = content.type === 'series' ? 'tv' : 'movie';
+          let searchUrl = `https://api.themoviedb.org/3/search/${searchType}?api_key=${TMDB_API_KEY}&query=${encodeURIComponent(content.title)}`;
+          if (content.year) {
+            searchUrl += content.type === 'series' ? `&first_air_date_year=${content.year}` : `&primary_release_year=${content.year}`;
           }
-        } catch (error) {
-          console.error("Gemini fetch failed", error);
+          const searchRes = await fetch(searchUrl);
+          const searchData = await searchRes.json();
+          if (searchData.results && searchData.results.length > 0) {
+            tmdbData = searchData.results[0];
+            // If we found it by title, try to get the IMDb ID for OMDB
+            const detailsRes = await fetch(`https://api.themoviedb.org/3/${searchType}/${tmdbData.id}?api_key=${TMDB_API_KEY}&append_to_response=external_ids`);
+            const detailsData = await detailsRes.json();
+            if (detailsData.external_ids?.imdb_id) {
+              imdbId = detailsData.external_ids.imdb_id;
+            }
+          }
         }
 
-        // If both fail, just save what we have
-        setImdbData(prev => ({ ...prev, ...data, isFetched: true, source: 'imdb' }));
-        localStorage.setItem(cacheKey, JSON.stringify({ ...data, isFetched: true, source: 'imdb', timestamp: Date.now() }));
+        const updates: Partial<Content> = {};
+        let hasUpdates = false;
+
+        if (tmdbData && needsStaticData) {
+          const typePath = content.type === 'series' ? 'tv' : 'movie';
+          const detailsRes = await fetch(`https://api.themoviedb.org/3/${typePath}/${tmdbData.id}?api_key=${TMDB_API_KEY}&append_to_response=credits,external_ids`);
+          const details = await detailsRes.json();
+
+          if (!content.description && details.overview) { updates.description = details.overview; hasUpdates = true; }
+          if (!content.releaseDate && (details.release_date || details.first_air_date)) { updates.releaseDate = details.release_date || details.first_air_date; hasUpdates = true; }
+          if (!content.posterUrl && details.poster_path) { updates.posterUrl = `https://image.tmdb.org/t/p/w500${details.poster_path}`; hasUpdates = true; }
+          
+          if (!content.runtime) {
+            if (details.runtime) { updates.runtime = `${details.runtime} min`; hasUpdates = true; }
+            else if (details.episode_run_time && details.episode_run_time.length > 0) { updates.runtime = `${details.episode_run_time[0]} min/episode`; hasUpdates = true; }
+          }
+
+          if ((!content.cast || content.cast.length === 0) && details.credits?.cast) {
+            updates.cast = details.credits.cast.slice(0, 5).map((a: any) => a.name);
+            hasUpdates = true;
+          }
+
+          if (!content.imdbLink && details.external_ids?.imdb_id) {
+            updates.imdbLink = `https://www.imdb.com/title/${details.external_ids.imdb_id}`;
+            imdbId = details.external_ids.imdb_id;
+            hasUpdates = true;
+          }
+          
+          if ((!content.genreIds || content.genreIds.length === 0) && details.genres) {
+            const matchedGenreIds: string[] = [];
+            details.genres.forEach((tg: any) => {
+              const match = genres.find(g => g.name.toLowerCase() === tg.name.toLowerCase());
+              if (match) matchedGenreIds.push(match.id);
+            });
+            if (matchedGenreIds.length > 0) {
+              updates.genreIds = matchedGenreIds;
+              hasUpdates = true;
+            }
+          }
+        }
+
+        // Fetch Live IMDb Rating
+        if (imdbId && needsRating) {
+          const omdbRes = await fetch(`https://www.omdbapi.com/?i=${imdbId}&apikey=${OMDB_API_KEY}`);
+          const omdbData = await omdbRes.json();
+          if (omdbData.imdbRating && omdbData.imdbRating !== 'N/A') {
+            const newRating = `${omdbData.imdbRating}/10`;
+            sessionStorage.setItem(ratingCacheKey, newRating);
+            setImdbData(prev => ({ ...prev, rating: newRating, isFetched: true }));
+            if (content.imdbRating !== newRating) {
+              updates.imdbRating = newRating;
+              hasUpdates = true;
+            }
+          }
+        }
+
+        if (hasUpdates) {
+          const newStaticData = {
+            ...(updates.description && { description: updates.description }),
+            ...(updates.releaseDate && { releaseDate: updates.releaseDate }),
+            ...(updates.posterUrl && { posterUrl: updates.posterUrl }),
+            ...(updates.runtime && { duration: updates.runtime }),
+            ...(updates.cast && { cast: updates.cast.join(', ') }),
+            ...(updates.genreIds && { genres: genres.filter(g => updates.genreIds?.includes(g.id)).map(g => g.name).join(', ') })
+          };
+          
+          if (Object.keys(newStaticData).length > 0) {
+             sessionStorage.setItem(staticCacheKey, JSON.stringify(newStaticData));
+          }
+
+          setImdbData(prev => ({
+            ...prev,
+            ...newStaticData
+          }));
+        }
+
+      } catch (err) {
+        console.error("Auto-fetch failed:", err);
+      } finally {
         setFetchingImdb(false);
-        setGeminiStatus('error');
-      };
-      fetchImdb();
+      }
+    };
+
+    fetchMissingData();
+  }, [content?.id, id, genres]);
+
+  const formatRuntime = (runtimeStr?: string) => {
+    if (!runtimeStr) return '';
+    const match = runtimeStr.match(/(\d+)/);
+    if (match) {
+      const mins = parseInt(match[1], 10);
+      if (mins > 60) {
+        const h = Math.floor(mins / 60);
+        const m = mins % 60;
+        return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
+      } else {
+        return `${mins} mins`;
+      }
     }
-  }, [content?.imdbLink, content?.title]);
+    return runtimeStr;
+  };
 
   const getYouTubeEmbedUrl = (url?: string) => {
     if (!url) return null;
@@ -733,14 +795,6 @@ export default function MovieDetails() {
                 </button>
 
                 <button
-                  onClick={() => setIsGeminiModalOpen(true)}
-                  className="p-4 rounded-xl border bg-emerald-500/20 border-emerald-500 text-emerald-500 hover:bg-emerald-500/30 transition-colors"
-                  title="Gemini Assistant"
-                >
-                  <Bot className="w-5 h-5" />
-                </button>
-
-                <button
                   onClick={handleShare}
                   disabled={isShareLoading}
                   className={`p-4 rounded-xl border bg-zinc-900 border-zinc-800 hover:bg-zinc-800 text-zinc-300 transition-colors ${isShareLoading ? 'opacity-50 cursor-not-allowed' : ''}`}
@@ -820,7 +874,7 @@ export default function MovieDetails() {
           <div className="lg:col-span-2 space-y-12">
             <section className="mt-8">
               {imdbData ? (
-                <div className="bg-cyan-500/10 border border-cyan-500/30 rounded-2xl p-6 md:p-8 flex flex-col md:flex-row gap-8 relative overflow-hidden">
+                <div className="bg-cyan-500/10 border border-cyan-500/30 rounded-2xl p-6 md:p-8 flex flex-col md:flex-row gap-8 relative overflow-hidden group">
                   {fetchingImdb && (
                     <div className="absolute top-4 right-4 animate-spin rounded-full h-4 w-4 border-t-2 border-b-2 border-cyan-500"></div>
                   )}
@@ -829,22 +883,7 @@ export default function MovieDetails() {
                       <h3 className="text-3xl font-bold text-cyan-400 flex-1">
                         {imdbData.title} {imdbData.year ? `(${imdbData.year})` : ''}
                       </h3>
-                      <div className="flex flex-col items-end gap-2 shrink-0">
-                        {!fetchingImdb && imdbData.isFetched && (
-                          <div className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-zinc-900/80 border border-zinc-800 backdrop-blur-sm whitespace-nowrap">
-                            {imdbData.source === 'ai' ? (
-                              <div className="flex items-center gap-1.5">
-                                <Sparkles className="w-3 h-3 text-emerald-500" />
-                                <span className="text-[10px] font-bold text-emerald-500 tracking-wider uppercase leading-none">AI Fetched</span>
-                              </div>
-                            ) : (
-                              <div className="flex items-center gap-1.5">
-                                <span className="bg-[#f5c518] text-black px-1 rounded-sm text-[10px] font-black tracking-tighter leading-none">IMDb</span>
-                                <span className="text-[10px] font-bold text-zinc-400 tracking-wider uppercase leading-none">Fetched</span>
-                              </div>
-                            )}
-                          </div>
-                        )}
+                      <div className="flex flex-col items-end gap-2 shrink-0 mr-8 md:mr-12">
                         {imdbData.rating && imdbData.isFetched && (
                           <div className="bg-[#f5c518] text-black px-2 py-1 rounded flex items-center gap-1.5 font-black text-xs shadow-[0_0_15px_rgba(245,197,24,0.3)] whitespace-nowrap">
                             <span className="bg-black text-[#f5c518] px-1 rounded-sm text-[10px] tracking-tighter">IMDb</span>
@@ -864,10 +903,10 @@ export default function MovieDetails() {
                           <span>{formatReleaseDate(imdbData.releaseDate)}</span>
                         </div>
                       )}
-                      {imdbData.duration && content.type !== 'series' && (
+                      {imdbData.duration && (
                         <div className="flex flex-col">
                           <span className="text-zinc-500 text-[10px] uppercase tracking-wider">Runtime</span>
-                          <span>{imdbData.duration}</span>
+                          <span>{formatRuntime(imdbData.duration)}</span>
                         </div>
                       )}
                     </div>
@@ -910,10 +949,10 @@ export default function MovieDetails() {
                 </div>
               ) : (
                 <div className="space-y-12">
-                  <section className="bg-cyan-500/5 border border-cyan-500/20 rounded-2xl p-8">
+                  <section className="bg-cyan-500/5 border border-cyan-500/20 rounded-2xl p-8 relative group">
                     <div className="flex flex-wrap gap-6 mb-8 text-sm font-medium text-cyan-400/80">
                       {content.year && <span className="flex items-center gap-2 bg-cyan-500/10 px-3 py-1.5 rounded-lg"><Clock className="w-4 h-4 text-cyan-500" /> {content.year}</span>}
-                      {content.runtime && content.type !== 'series' && <span className="flex items-center gap-2 bg-cyan-500/10 px-3 py-1.5 rounded-lg"><Clock className="w-4 h-4 text-cyan-500" /> {content.runtime}</span>}
+                      {content.runtime && <span className="flex items-center gap-2 bg-cyan-500/10 px-3 py-1.5 rounded-lg"><Clock className="w-4 h-4 text-cyan-500" /> {formatRuntime(content.runtime)}</span>}
                       {content.releaseDate && <span className="flex items-center gap-2 bg-cyan-500/10 px-3 py-1.5 rounded-lg"><Film className="w-4 h-4 text-cyan-500" /> {formatReleaseDate(content.releaseDate)}</span>}
                       {contentGenres && <span className="flex items-center gap-2 bg-cyan-500/10 px-3 py-1.5 rounded-lg">Genre: {contentGenres}</span>}
                       {contentLangs && <span className="flex items-center gap-2 bg-cyan-500/10 px-3 py-1.5 rounded-lg">Language: {contentLangs}</span>}
@@ -1079,12 +1118,6 @@ export default function MovieDetails() {
         </div>
       </div>
 
-      <GeminiAssistantModal 
-        isOpen={isGeminiModalOpen} 
-        onClose={() => setIsGeminiModalOpen(false)} 
-        context={`${content.title} (${content.year}) - ${content.type}`}
-      />
-
       <AlertModal
         isOpen={alertConfig.isOpen}
         title={alertConfig.title}
@@ -1245,6 +1278,12 @@ export default function MovieDetails() {
         onCancel={() => setShowLoginPrompt(false)}
         confirmText="Log In"
         cancelText="Cancel"
+      />
+      <AlertModal
+        isOpen={alertConfig.isOpen}
+        onClose={() => setAlertConfig(prev => ({ ...prev, isOpen: false }))}
+        title={alertConfig.title}
+        message={alertConfig.message}
       />
     </div>
   );

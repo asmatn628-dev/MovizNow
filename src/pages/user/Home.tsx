@@ -13,7 +13,7 @@ import { formatContentTitle } from '../../utils/contentUtils';
 
 import { NotificationMenu } from '../../components/NotificationMenu';
 
-export default function Home() {
+export default function Home({ onOpenMediaModal }: { onOpenMediaModal: () => void }) {
   const { profile, logout } = useAuth();
   const [contentList, setContentList] = useState<Content[]>([]);
   const [genres, setGenres] = useState<Genre[]>([]);
@@ -276,6 +276,9 @@ export default function Home() {
             <Link to="/watch-later" className="text-zinc-400 hover:text-white transition-colors" title="Watch Later">
               <Clock className="w-5 h-5" />
             </Link>
+            <button onClick={onOpenMediaModal} className="text-zinc-400 hover:text-white transition-colors" title="Search Media">
+              <Search className="w-5 h-5" />
+            </button>
             <Link to="/favorites" className="text-zinc-400 hover:text-white transition-colors" title="Favorites">
               <Heart className="w-5 h-5" />
             </Link>

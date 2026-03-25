@@ -1,9 +1,10 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
-import { Suspense, lazy } from 'react';
+import { Suspense, lazy, useState } from 'react';
 import { AuthProvider } from './contexts/AuthContext';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import { Loader2 } from 'lucide-react';
 import { SystemNotificationWrapper } from './components/SystemNotificationWrapper';
+import { MediaModal } from './components/MediaModal';
 
 // Pages
 const Login = lazy(() => import('./pages/Login'));
@@ -33,16 +34,19 @@ const LoadingFallback = () => (
 );
 
 export default function App() {
+  const [isMediaModalOpen, setIsMediaModalOpen] = useState(false);
+
   return (
     <AuthProvider>
       <SystemNotificationWrapper />
+      <MediaModal isOpen={isMediaModalOpen} onClose={() => setIsMediaModalOpen(false)} />
       <BrowserRouter>
         <Suspense fallback={<LoadingFallback />}>
           <Routes>
             <Route path="/login" element={<Login />} />
             
             {/* User Routes */}
-            <Route path="/" element={<ProtectedRoute><Home /></ProtectedRoute>} />
+            <Route path="/" element={<ProtectedRoute><Home onOpenMediaModal={() => setIsMediaModalOpen(true)} /></ProtectedRoute>} />
             <Route path="/movie/:id" element={<MovieDetails />} />
             <Route path="/watch-later" element={<ProtectedRoute><WatchLater /></ProtectedRoute>} />
             <Route path="/favorites" element={<ProtectedRoute><Favorites /></ProtectedRoute>} />
