@@ -1741,10 +1741,18 @@ export default function ContentManagement() {
                     <div className="md:col-span-2">
                       <label className="block text-xs font-medium text-zinc-500 mb-1">Release Year</label>
                       <div className="flex gap-2">
-                        <input type="number" value={year || ''} onChange={(e) => setYear(parseInt(e.target.value) || new Date().getFullYear())} className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-emerald-500" />
-                        <button type="button" onClick={handleMasterAutoFetch} disabled={!title} className="bg-emerald-500 hover:bg-emerald-600 disabled:bg-emerald-500/50 text-white px-3 py-2 rounded-lg text-xs font-medium transition-colors flex items-center justify-center gap-2 whitespace-nowrap" title="Auto Fetch All with AI">
+                        <input type="number" value={year || ''} onChange={(e) => setYear(parseInt(e.target.value) || new Date().getFullYear())} className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-2 py-1 text-sm focus:outline-none focus:border-emerald-500" />
+                        <button type="button" onClick={handleMasterAutoFetch} disabled={!title} className="bg-emerald-500 hover:bg-emerald-600 disabled:bg-emerald-500/50 text-white px-2 py-1 rounded-lg text-xs font-medium transition-colors flex items-center justify-center gap-2 whitespace-nowrap" title="Auto Fetch All with AI">
                           <RefreshCw className="w-4 h-4" />
-                          Master Auto Fetch
+                          AI Fetch
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setIsMasterFetchModalOpen(true)}
+                          className="px-3 py-1.5 bg-black border border-cyan-500 text-white rounded-lg text-xs font-medium hover:bg-zinc-900 transition-colors flex items-center gap-1.5 whitespace-nowrap"
+                        >
+                          <Search className="w-3 h-3" />
+                          Master Fetch
                         </button>
                       </div>
                     </div>
@@ -1852,14 +1860,6 @@ export default function ContentManagement() {
                           placeholder="Rating" 
                         />
                       </div>
-                      <button
-                        type="button"
-                        onClick={() => setIsMasterFetchModalOpen(true)}
-                        className="px-3 py-2 bg-emerald-500/10 text-emerald-500 rounded-lg text-xs font-medium hover:bg-emerald-500/20 transition-colors flex items-center gap-1.5"
-                      >
-                        <Search className="w-3 h-3" />
-                        Master Fetch
-                      </button>
                     </div>
                   </div>
 
