@@ -8,7 +8,7 @@ import { Plus, Edit2, Trash2, Share2, Film, Tv, X, Save, Upload, Search, Eye, Ey
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
 import ConfirmModal from '../../components/ConfirmModal';
 import AlertModal from '../../components/AlertModal';
-import { MediaModal } from '../../components/MediaModal';
+import { MediaModal, findTMDBByImdb, searchTMDBByTitle, fetchTMDBDetails, fetchSeriesSeasons, fetchIMDbRating } from '../../components/MediaModal';
 import AIFetchModal from '../../components/AIFetchModal';
 import { formatContentTitle, formatReleaseDate } from '../../utils/contentUtils';
 import { handleFirestoreError, OperationType } from '../../utils/firestoreErrorHandler';
@@ -34,6 +34,7 @@ export default function ContentManagement() {
   const [trailerTitle, setTrailerTitle] = useState('');
   const [sampleUrl, setSampleUrl] = useState('');
   const [imdbLink, setImdbLink] = useState('');
+  const [imdbRating, setImdbRating] = useState('');
   const [selectedGenres, setSelectedGenres] = useState<string[]>([]);
   const [selectedLanguages, setSelectedLanguages] = useState<string[]>([]);
   const [selectedQuality, setSelectedQuality] = useState<string>('');
@@ -70,6 +71,7 @@ export default function ContentManagement() {
   const [isMasterFetchModalOpen, setIsMasterFetchModalOpen] = useState(false);
   const [fetchingPoster, setFetchingPoster] = useState(false);
   const [isAutoFillModalOpen, setIsAutoFillModalOpen] = useState(false);
+  const [loadingShareId, setLoadingShareId] = useState<string | null>(null);
   const [autoFillText, setAutoFillText] = useState('');
   const [imdbSeasonsPopup, setImdbSeasonsPopup] = useState<{ isOpen: boolean; seasons: any[]; show: any; epData: any[] } | null>(null);
   const [selectedImdbSeasons, setSelectedImdbSeasons] = useState<number[]>([]);
@@ -147,6 +149,7 @@ export default function ContentManagement() {
     setTrailerUrl('');
     setSampleUrl('');
     setImdbLink('');
+    setImdbRating('');
     setSelectedGenres([]);
     setSelectedLanguages([]);
     setSelectedQuality('');
@@ -193,6 +196,7 @@ export default function ContentManagement() {
     setTrailerUrl(content.trailerUrl);
     setSampleUrl(content.sampleUrl || '');
     setImdbLink(content.imdbLink || '');
+    setImdbRating(content.imdbRating || '');
     setSelectedGenres(content.genreIds || []);
     setSelectedLanguages(content.languageIds || []);
     setSelectedQuality(content.qualityId || '');
@@ -287,6 +291,7 @@ export default function ContentManagement() {
         trailerUrl,
         sampleUrl,
         imdbLink,
+        imdbRating,
         genreIds: selectedGenres,
         languageIds: selectedLanguages,
         qualityId: selectedQuality,
@@ -396,48 +401,28 @@ export default function ContentManagement() {
       return;
     }
 
-    if (imdbLink) {
-      try {
-        setLoading(true);
-        const response = await fetch(`/api/imdb-fetch?url=${encodeURIComponent(imdbLink)}`);
-        const data = await response.json();
-        if (!response.ok) throw new Error(data.error || "Failed to fetch data from IMDb/TVMaze.");
-        
-        // Map TVMaze data to our content structure
-        const mappedData = {
-          title: data.name,
-          description: data.summary?.replace(/<[^>]*>/g, ''),
-          genres: data.genres,
-          posterUrl: data.image?.original,
-          imdbLink: imdbLink,
-          // Map episodes if available
-          seasons: data.episodes ? data.episodes.reduce((acc: any[], ep: any) => {
-            const seasonNum = ep.season;
-            let season = acc.find(s => s.seasonNumber === seasonNum);
-            if (!season) {
-              season = { seasonNumber: seasonNum, episodes: [] };
-              acc.push(season);
-            }
-            season.episodes.push({
-              episodeNumber: ep.number,
-              title: ep.name,
-              description: ep.summary?.replace(/<[^>]*>/g, ''),
-              duration: ep.runtime ? `${ep.runtime}m` : ''
-            });
-            return acc;
-          }, []) : []
-        };
-        
-        applyAIFetchedData(mappedData);
-        setAlertConfig({ isOpen: true, title: 'Success', message: 'Data fetched successfully!' });
-      } catch (error) {
-        console.error("Direct Fetch Error:", error);
-        setIsAIFetchModalOpen(true);
-      } finally {
-        setLoading(false);
-      }
-    } else {
+    try {
+      setLoading(true);
+      const aiData = await aiService.fetchMovieData(title || '', year.toString(), type, imdbLink, 'gemini-3-flash');
+      
+      if (!aiData) throw new Error("Failed to fetch data from AI.");
+      
+      const mappedData = {
+        title: aiData.title || title,
+        description: aiData.description,
+        genres: selectedGenres,
+        posterUrl: aiData.posterUrl,
+        imdbLink: aiData.imdbId ? `https://www.imdb.com/title/${aiData.imdbId}` : imdbLink,
+        seasons: aiData.seasons || []
+      };
+      
+      applyAIFetchedData(mappedData);
+      setAlertConfig({ isOpen: true, title: 'Success', message: 'Data fetched successfully!' });
+    } catch (error) {
+      console.error("AI Fetch Error:", error);
       setIsAIFetchModalOpen(true);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -475,6 +460,7 @@ export default function ContentManagement() {
     if (data.releaseDate) setReleaseDate(data.releaseDate);
     if (data.runtime) setRuntime(data.runtime);
     if (data.imdbLink) setImdbLink(data.imdbLink);
+    if (data.imdbRating) setImdbRating(data.imdbRating);
     if (data.posterUrl) setPosterUrl(data.posterUrl);
     if (data.trailerUrl) {
       setTrailerUrl(data.trailerUrl);
@@ -619,18 +605,105 @@ export default function ContentManagement() {
     return unit === 'GB' ? size * 1024 : size;
   };
 
-  const handleShare = (content: Content) => {
+  const handleShare = async (content: Content) => {
     const isMissingData = !content.runtime || !content.releaseDate || !content.genreIds || content.genreIds.length === 0 || !content.description;
+    
     if (isMissingData) {
-      handleEdit(content);
-      setIsMasterFetchModalOpen(true);
-      setAlertConfig({ isOpen: true, title: 'Missing Data', message: 'Please fetch missing data before sharing.' });
+      setLoadingShareId(content.id);
+      try {
+        let tmdbItem = null;
+        let type = content.type;
+        
+        if (content.imdbLink) {
+            const match = content.imdbLink.match(/tt\d+/);
+            if (match) {
+                const found = await findTMDBByImdb(match[0]);
+                if (found) {
+                    tmdbItem = found.item;
+                    type = found.type === 'tv' ? 'series' : 'movie';
+                }
+            }
+        }
+        
+        if (!tmdbItem) {
+            const found = await searchTMDBByTitle(content.title, content.year?.toString() || '');
+            if (found) {
+                tmdbItem = found.item;
+                type = found.type === 'tv' ? 'series' : 'movie';
+            }
+        }
+        
+        if (tmdbItem) {
+            const tmdbType = type === 'series' ? 'tv' : 'movie';
+            const details = await fetchTMDBDetails(tmdbItem.id, tmdbType);
+            let imdbRatingData = null;
+            if (details.external_ids && details.external_ids.imdb_id) {
+                imdbRatingData = await fetchIMDbRating(details.external_ids.imdb_id);
+            }
+            
+            const updatedContent = {
+                ...content,
+                description: content.description || details.overview,
+                runtime: content.runtime || (details.runtime ? `${details.runtime} min` : (details.episode_run_time && details.episode_run_time.length > 0 ? `${details.episode_run_time[0]} min/episode` : '')),
+                releaseDate: content.releaseDate || details.release_date || details.first_air_date,
+                imdbRating: content.imdbRating || (imdbRatingData?.rating ? `${imdbRatingData.rating}/10` : ''),
+            };
+
+            if (updatedContent.type === 'series') {
+                try {
+                    let parsedSeasons: Season[] = typeof updatedContent.seasons === 'string' ? JSON.parse(updatedContent.seasons) : updatedContent.seasons;
+                    const needsDuration = parsedSeasons.some(s => s.episodes?.some(e => !e.duration));
+                    
+                    if (needsDuration) {
+                        const fetchedSeasons = await fetchSeriesSeasons(tmdbItem.id);
+                        parsedSeasons = parsedSeasons.map(s => {
+                            const fetchedSeason = fetchedSeasons.find((fs: any) => fs.season === s.seasonNumber);
+                            if (fetchedSeason) {
+                                return {
+                                    ...s,
+                                    episodes: s.episodes?.map(e => {
+                                        const fetchedEpisode = fetchedSeason.episodes.find((fe: any) => fe.episode_number === e.episodeNumber);
+                                        return {
+                                            ...e,
+                                            duration: e.duration || (fetchedEpisode?.runtime ? `${fetchedEpisode.runtime}m` : '')
+                                        };
+                                    })
+                                };
+                            }
+                            return s;
+                        });
+                        updatedContent.seasons = JSON.stringify(parsedSeasons);
+                    }
+
+                    if (parsedSeasons.length > 1) {
+                        setShareSeasonModal({ isOpen: true, content: updatedContent, seasons: parsedSeasons });
+                        setSelectedShareSeasons(parsedSeasons.map(s => s.seasonNumber));
+                        setLoadingShareId(null);
+                        return;
+                    }
+                } catch (e) {
+                    console.error("Error parsing/updating seasons for share:", e);
+                    setAlertConfig({ isOpen: true, title: 'Error', message: 'Failed to parse content data.' });
+                    setLoadingShareId(null);
+                    return;
+                }
+            }
+            executeShare(updatedContent);
+        } else {
+            setAlertConfig({ isOpen: true, title: 'Error', message: 'Failed to fetch missing data.' });
+        }
+      } catch (error) {
+        console.error("Share Fetch Error:", error);
+        setAlertConfig({ isOpen: true, title: 'Error', message: 'Failed to fetch missing data.' });
+      } finally {
+        setLoadingShareId(null);
+      }
       return;
     }
 
     if (content.type === 'series' && content.seasons) {
       try {
-        const parsedSeasons: Season[] = JSON.parse(content.seasons);
+        const parsedSeasons: Season[] = typeof content.seasons === 'string' ? JSON.parse(content.seasons) : content.seasons;
         if (parsedSeasons.length > 1) {
           setShareSeasonModal({ isOpen: true, content, seasons: parsedSeasons });
           setSelectedShareSeasons(parsedSeasons.map(s => s.seasonNumber));
@@ -647,10 +720,29 @@ export default function ContentManagement() {
 
   const formatRuntimeForShare = (runtimeStr?: string) => {
     if (!runtimeStr) return '';
+    
+    // Check for existing hh:mm format
+    if (/^\d{1,2}:\d{2}$/.test(runtimeStr)) return runtimeStr;
+
+    // Parse "1h 40m" or "100 min"
+    let totalMinutes = 0;
+    const hoursMatch = runtimeStr.match(/(\d+)\s*h/);
+    const minutesMatch = runtimeStr.match(/(\d+)\s*m/);
+    
+    if (hoursMatch) totalMinutes += parseInt(hoursMatch[1], 10) * 60;
+    if (minutesMatch) totalMinutes += parseInt(minutesMatch[1], 10);
+    
+    if (totalMinutes > 0) {
+        const h = Math.floor(totalMinutes / 60);
+        const m = totalMinutes % 60;
+        return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
+    }
+
+    // Fallback to original parsing if no h/m found
     const match = runtimeStr.match(/(\d+)/);
     if (match) {
       const mins = parseInt(match[1], 10);
-      if (mins > 60) {
+      if (mins >= 60) {
         const h = Math.floor(mins / 60);
         const m = mins % 60;
         return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
@@ -742,7 +834,7 @@ export default function ContentManagement() {
         if (season.episodes && season.episodes.length > 0) {
           text += `\n🎬 *Episodes:*\n`;
           season.episodes.forEach(ep => {
-            text += `  E${ep.episodeNumber}: ${ep.title}\n`;
+            text += `  E${ep.episodeNumber}: ${ep.title}${ep.duration ? ` (${ep.duration})` : ''}\n`;
             const epLinks = parseLinks(JSON.stringify(ep.links)).sort((a, b) => getSizeInMB(a.size, a.unit) - getSizeInMB(b.size, b.unit));
             epLinks.forEach((link) => {
               if (link && link.url) {
@@ -1322,8 +1414,8 @@ export default function ContentManagement() {
   };
 
   const uniqueYears = useMemo(() => {
-    const years = new Set(contentList.map(c => c.year));
-    return Array.from(years).sort((a, b) => Number(b) - Number(a));
+    const years = new Set(contentList.map(c => Number(c.year)).filter(y => y > 0 && !isNaN(y)));
+    return Array.from(years).sort((a, b) => b - a);
   }, [contentList]);
 
   const filteredContent = useMemo(() => {
@@ -1563,8 +1655,8 @@ export default function ContentManagement() {
                 
                 <div className="mt-auto flex items-center justify-between pt-2 border-t border-zinc-800/50">
                   <div className="flex gap-1">
-                    <button onClick={() => handleShare(content)} className="text-emerald-500 hover:text-emerald-400 p-1.5 transition-colors" title="Share to WhatsApp">
-                      <Share2 className="w-4 h-4 md:w-5 md:h-5" />
+                    <button onClick={() => handleShare(content)} className="text-emerald-500 hover:text-emerald-400 p-1.5 transition-colors" title="Share to WhatsApp" disabled={loadingShareId === content.id}>
+                      {loadingShareId === content.id ? <RefreshCw className="w-4 h-4 md:w-5 md:h-5 animate-spin" /> : <Share2 className="w-4 h-4 md:w-5 md:h-5" />}
                     </button>
                     <button onClick={() => setNotificationModal({ isOpen: true, content, status: 'idle' })} className="text-blue-500 hover:text-blue-400 p-1.5 transition-colors" title="Send Notification">
                       <Bell className="w-4 h-4 md:w-5 md:h-5" />
@@ -1749,6 +1841,15 @@ export default function ContentManagement() {
                           onChange={(e) => setImdbLink(e.target.value)} 
                           className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-emerald-500" 
                           placeholder="https://www.imdb.com/title/..." 
+                        />
+                      </div>
+                      <div className="w-16">
+                        <input 
+                          type="text" 
+                          value={imdbRating} 
+                          onChange={(e) => setImdbRating(e.target.value)} 
+                          className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-2 py-2 text-sm focus:outline-none focus:border-emerald-500" 
+                          placeholder="Rating" 
                         />
                       </div>
                       <button

@@ -117,8 +117,8 @@ export default function Home({ onOpenMediaModal }: { onOpenMediaModal: () => voi
   }, [contentList.length]);
 
   const uniqueYears = useMemo(() => {
-    const years = new Set(contentList.map(c => c.year));
-    return Array.from(years).sort((a, b) => Number(b) - Number(a));
+    const years = new Set(contentList.map(c => Number(c.year)).filter(y => y > 0 && !isNaN(y)));
+    return Array.from(years).sort((a, b) => b - a);
   }, [contentList]);
 
   const recentlyAddedContent = useMemo(() => {

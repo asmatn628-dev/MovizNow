@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { useParams, Link, useNavigate, useLocation } from 'react-router-dom';
 import { Helmet } from 'react-helmet-async';
 import { db } from '../../firebase';
@@ -11,7 +11,7 @@ import { handleFirestoreError, OperationType } from '../../utils/firestoreErrorH
 import AlertModal from '../../components/AlertModal';
 import ConfirmModal from '../../components/ConfirmModal';
 import { motion, AnimatePresence } from 'motion/react';
-import { formatContentTitle, formatReleaseDate } from '../../utils/contentUtils';
+import { formatContentTitle, formatReleaseDate, formatRuntime } from '../../utils/contentUtils';
 import { MediaModal } from '../../components/MediaModal';
 
 export default function MovieDetails() {
@@ -31,38 +31,62 @@ export default function MovieDetails() {
   const [linkPopup, setLinkPopup] = useState<{ isOpen: boolean; url: string; name: string; id: string; isZip?: boolean } | null>(null);
   const [isPosterExpanded, setIsPosterExpanded] = useState(false);
   const [isTrailerPopupOpen, setIsTrailerPopupOpen] = useState(false);
-  const [isGeminiModalOpen, setIsGeminiModalOpen] = useState(false);
+  const [isMediaModalOpen, setIsMediaModalOpen] = useState(false);
   const [expandedEpisodes, setExpandedEpisodes] = useState<Record<string, boolean>>({});
+  const [cachedMetadata, setCachedMetadata] = useState<Partial<Content>>({});
   const [imdbData, setImdbData] = useState<any>(null);
   const [fetchingImdb, setFetchingImdb] = useState(false);
   const hasLoggedView = useRef(false);
   const navigate = useNavigate();
   const location = useLocation();
 
-  const title = content ? `${formatContentTitle(content)} (${content.year}) - MovizNow` : 'MovizNow';
-  const description = content?.description || 'Watch the latest movies and series on MovizNow.';
-  const imageUrl = content?.posterUrl || 'https://Moviz-Now.vercel.app/logo.svg';
+  // Load cache from sessionStorage
+  useEffect(() => {
+    if (id) {
+      const cached = sessionStorage.getItem(`content_cache_${id}`);
+      if (cached) {
+        try {
+          setCachedMetadata(JSON.parse(cached));
+        } catch (e) {
+          console.error("Error parsing cached metadata:", e);
+        }
+      }
+    }
+  }, [id]);
+
+  const mergedContent = useMemo(() => {
+    if (!content) return null;
+    return {
+      ...content,
+      ...cachedMetadata
+    };
+  }, [content, cachedMetadata]);
+
+  const title = mergedContent ? `${formatContentTitle(mergedContent)} (${mergedContent.year}) - MovizNow` : 'MovizNow';
+  const description = mergedContent?.description || 'Watch the latest movies and series on MovizNow.';
+  const imageUrl = mergedContent?.posterUrl || 'https://Moviz-Now.vercel.app/logo.svg';
   const pageUrl = window.location.href;
 
-  // Initialize IMDb data from content
+  // Initialize IMDb data from mergedContent
   useEffect(() => {
-    if (content) {
+    if (mergedContent) {
       const initialData = {
-        title: content.title,
-        year: content.year,
-        description: content.description,
-        cast: content.cast?.join(', '),
-        posterUrl: content.posterUrl,
-        genres: genres.filter(g => content.genreIds?.includes(g.id)).map(g => g.name).join(', '),
-        releaseDate: content.releaseDate,
-        duration: content.runtime,
-        type: content.type,
-        rating: content.imdbRating
+        title: mergedContent.title,
+        year: mergedContent.year,
+        description: mergedContent.description,
+        cast: mergedContent.cast?.join(', '),
+        posterUrl: mergedContent.posterUrl,
+        genres: genres.filter(g => mergedContent.genreIds?.includes(g.id)).map(g => g.name).join(', '),
+        releaseDate: mergedContent.releaseDate,
+        duration: mergedContent.runtime,
+        type: mergedContent.type,
+        rating: mergedContent.imdbRating,
+        isFetched: !!mergedContent.imdbRating
       };
 
       setImdbData(initialData);
     }
-  }, [content, genres]);
+  }, [mergedContent, genres]);
 
   useEffect(() => {
     window.scrollTo(0, 0);
@@ -148,25 +172,21 @@ export default function MovieDetails() {
   const hasAttemptedFetch = useRef<Record<string, boolean>>({});
 
   useEffect(() => {
-    if (!content || !id || hasAttemptedFetch.current[id]) return;
+    if (!mergedContent || !id || hasAttemptedFetch.current[id]) return;
 
     const fetchMissingData = async () => {
-      const staticCacheKey = `imdb_static_${id}`;
-      const cachedStaticDataStr = sessionStorage.getItem(staticCacheKey);
-      const cachedStaticData = cachedStaticDataStr ? JSON.parse(cachedStaticDataStr) : null;
+      const seasons = mergedContent.type === 'series' && mergedContent.seasons ? JSON.parse(mergedContent.seasons) : [];
+      const needsEpisodeData = mergedContent.type === 'series' && seasons.some((s: any) => s.episodes?.some((ep: any) => !ep.description || !ep.duration));
       
-      const needsStaticData = (!content.runtime || !content.description || !content.cast || !content.releaseDate || !content.posterUrl) && !cachedStaticData;
+      const needsStaticData = !mergedContent.runtime || !mergedContent.description || !mergedContent.cast || !mergedContent.releaseDate || !mergedContent.posterUrl || needsEpisodeData;
       const ratingCacheKey = `imdb_rating_${id}`;
       const hasLiveRating = sessionStorage.getItem(ratingCacheKey);
       const needsRating = !hasLiveRating;
 
       if (!needsStaticData && !needsRating) {
         // If we already have a cached rating, just display it
-        if (hasLiveRating && content.imdbRating !== hasLiveRating) {
+        if (hasLiveRating && mergedContent.imdbRating !== hasLiveRating) {
           setImdbData(prev => ({ ...prev, rating: hasLiveRating, isFetched: true }));
-        }
-        if (cachedStaticData) {
-          setImdbData(prev => ({ ...prev, ...cachedStaticData }));
         }
         return;
       }
@@ -179,29 +199,24 @@ export default function MovieDetails() {
         const OMDB_API_KEY = import.meta.env.VITE_OMDB_API_KEY || '19daa310';
         
         let tmdbData: any = null;
-        let imdbId = content.imdbLink?.match(/tt\d+/)?.[0];
-
-        // If we have cached static data but need rating, apply static data first
-        if (cachedStaticData) {
-           setImdbData(prev => ({ ...prev, ...cachedStaticData }));
-        }
+        let imdbId = mergedContent.imdbLink?.match(/tt\d+/)?.[0];
 
         // 1. Try IMDb ID first
         if (imdbId && needsStaticData) {
           const findRes = await fetch(`https://api.themoviedb.org/3/find/${imdbId}?api_key=${TMDB_API_KEY}&external_source=imdb_id`);
           const findData = await findRes.json();
-          const results = content.type === 'series' ? findData.tv_results : findData.movie_results;
+          const results = mergedContent.type === 'series' ? findData.tv_results : findData.movie_results;
           if (results && results.length > 0) {
             tmdbData = results[0];
           }
         }
 
         // 2. Try Title + Year if not found
-        if (!tmdbData && needsStaticData && content.title) {
-          const searchType = content.type === 'series' ? 'tv' : 'movie';
-          let searchUrl = `https://api.themoviedb.org/3/search/${searchType}?api_key=${TMDB_API_KEY}&query=${encodeURIComponent(content.title)}`;
-          if (content.year) {
-            searchUrl += content.type === 'series' ? `&first_air_date_year=${content.year}` : `&primary_release_year=${content.year}`;
+        if (!tmdbData && needsStaticData && mergedContent.title) {
+          const searchType = mergedContent.type === 'series' ? 'tv' : 'movie';
+          let searchUrl = `https://api.themoviedb.org/3/search/${searchType}?api_key=${TMDB_API_KEY}&query=${encodeURIComponent(mergedContent.title)}`;
+          if (mergedContent.year) {
+            searchUrl += mergedContent.type === 'series' ? `&first_air_date_year=${mergedContent.year}` : `&primary_release_year=${mergedContent.year}`;
           }
           const searchRes = await fetch(searchUrl);
           const searchData = await searchRes.json();
@@ -220,31 +235,31 @@ export default function MovieDetails() {
         let hasUpdates = false;
 
         if (tmdbData && needsStaticData) {
-          const typePath = content.type === 'series' ? 'tv' : 'movie';
+          const typePath = mergedContent.type === 'series' ? 'tv' : 'movie';
           const detailsRes = await fetch(`https://api.themoviedb.org/3/${typePath}/${tmdbData.id}?api_key=${TMDB_API_KEY}&append_to_response=credits,external_ids`);
           const details = await detailsRes.json();
 
-          if (!content.description && details.overview) { updates.description = details.overview; hasUpdates = true; }
-          if (!content.releaseDate && (details.release_date || details.first_air_date)) { updates.releaseDate = details.release_date || details.first_air_date; hasUpdates = true; }
-          if (!content.posterUrl && details.poster_path) { updates.posterUrl = `https://image.tmdb.org/t/p/w500${details.poster_path}`; hasUpdates = true; }
+          if (!mergedContent.description && details.overview) { updates.description = details.overview; hasUpdates = true; }
+          if (!mergedContent.releaseDate && (details.release_date || details.first_air_date)) { updates.releaseDate = details.release_date || details.first_air_date; hasUpdates = true; }
+          if (!mergedContent.posterUrl && details.poster_path) { updates.posterUrl = `https://image.tmdb.org/t/p/w500${details.poster_path}`; hasUpdates = true; }
           
-          if (!content.runtime) {
+          if (!mergedContent.runtime) {
             if (details.runtime) { updates.runtime = `${details.runtime} min`; hasUpdates = true; }
             else if (details.episode_run_time && details.episode_run_time.length > 0) { updates.runtime = `${details.episode_run_time[0]} min/episode`; hasUpdates = true; }
           }
 
-          if ((!content.cast || content.cast.length === 0) && details.credits?.cast) {
+          if ((!mergedContent.cast || mergedContent.cast.length === 0) && details.credits?.cast) {
             updates.cast = details.credits.cast.slice(0, 5).map((a: any) => a.name);
             hasUpdates = true;
           }
 
-          if (!content.imdbLink && details.external_ids?.imdb_id) {
+          if (!mergedContent.imdbLink && details.external_ids?.imdb_id) {
             updates.imdbLink = `https://www.imdb.com/title/${details.external_ids.imdb_id}`;
             imdbId = details.external_ids.imdb_id;
             hasUpdates = true;
           }
           
-          if ((!content.genreIds || content.genreIds.length === 0) && details.genres) {
+          if ((!mergedContent.genreIds || mergedContent.genreIds.length === 0) && details.genres) {
             const matchedGenreIds: string[] = [];
             details.genres.forEach((tg: any) => {
               const match = genres.find(g => g.name.toLowerCase() === tg.name.toLowerCase());
@@ -253,6 +268,46 @@ export default function MovieDetails() {
             if (matchedGenreIds.length > 0) {
               updates.genreIds = matchedGenreIds;
               hasUpdates = true;
+            }
+          }
+
+          // Episode Data Fetching for Series
+          if (mergedContent.type === 'series' && mergedContent.seasons) {
+            try {
+              let seasonsUpdated = false;
+              const currentSeasons = [...seasons];
+
+              for (let i = 0; i < currentSeasons.length; i++) {
+                const season = currentSeasons[i];
+                const missingEpData = season.episodes?.some((ep: any) => !ep.description || !ep.duration);
+
+                if (missingEpData) {
+                  const seasonRes = await fetch(`https://api.themoviedb.org/3/tv/${tmdbData.id}/season/${season.seasonNumber}?api_key=${TMDB_API_KEY}`);
+                  const seasonData = await seasonRes.json();
+
+                  if (seasonData.episodes) {
+                    season.episodes = season.episodes.map((ep: any) => {
+                      const tmdbEp = seasonData.episodes.find((te: any) => te.episode_number === ep.episodeNumber);
+                      if (tmdbEp) {
+                        return {
+                          ...ep,
+                          description: ep.description || tmdbEp.overview,
+                          duration: ep.duration || (tmdbEp.runtime ? `${tmdbEp.runtime} min` : undefined)
+                        };
+                      }
+                      return ep;
+                    });
+                    seasonsUpdated = true;
+                  }
+                }
+              }
+
+              if (seasonsUpdated) {
+                updates.seasons = JSON.stringify(currentSeasons);
+                hasUpdates = true;
+              }
+            } catch (e) {
+              console.error("Error auto-fetching episode data:", e);
             }
           }
         }
@@ -265,7 +320,7 @@ export default function MovieDetails() {
             const newRating = `${omdbData.imdbRating}/10`;
             sessionStorage.setItem(ratingCacheKey, newRating);
             setImdbData(prev => ({ ...prev, rating: newRating, isFetched: true }));
-            if (content.imdbRating !== newRating) {
+            if (mergedContent.imdbRating !== newRating) {
               updates.imdbRating = newRating;
               hasUpdates = true;
             }
@@ -273,23 +328,10 @@ export default function MovieDetails() {
         }
 
         if (hasUpdates) {
-          const newStaticData = {
-            ...(updates.description && { description: updates.description }),
-            ...(updates.releaseDate && { releaseDate: updates.releaseDate }),
-            ...(updates.posterUrl && { posterUrl: updates.posterUrl }),
-            ...(updates.runtime && { duration: updates.runtime }),
-            ...(updates.cast && { cast: updates.cast.join(', ') }),
-            ...(updates.genreIds && { genres: genres.filter(g => updates.genreIds?.includes(g.id)).map(g => g.name).join(', ') })
-          };
-          
-          if (Object.keys(newStaticData).length > 0) {
-             sessionStorage.setItem(staticCacheKey, JSON.stringify(newStaticData));
-          }
-
-          setImdbData(prev => ({
-            ...prev,
-            ...newStaticData
-          }));
+          // Instead of updating Firestore, we update local cache only
+          const newCache = { ...cachedMetadata, ...updates };
+          setCachedMetadata(newCache);
+          sessionStorage.setItem(`content_cache_${id}`, JSON.stringify(newCache));
         }
 
       } catch (err) {
@@ -300,23 +342,7 @@ export default function MovieDetails() {
     };
 
     fetchMissingData();
-  }, [content?.id, id, genres]);
-
-  const formatRuntime = (runtimeStr?: string) => {
-    if (!runtimeStr) return '';
-    const match = runtimeStr.match(/(\d+)/);
-    if (match) {
-      const mins = parseInt(match[1], 10);
-      if (mins > 60) {
-        const h = Math.floor(mins / 60);
-        const m = mins % 60;
-        return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
-      } else {
-        return `${mins} mins`;
-      }
-    }
-    return runtimeStr;
-  };
+  }, [mergedContent?.id, id, genres, cachedMetadata]);
 
   const getYouTubeEmbedUrl = (url?: string) => {
     if (!url) return null;
@@ -705,7 +731,7 @@ export default function MovieDetails() {
       {/* Hero Section */}
       <div className="relative h-[60vh] md:h-[70vh] w-full">
         <div className="absolute inset-0">
-          <img src={content.posterUrl || 'https://picsum.photos/seed/movie/1920/1080'} alt={content.title} className="w-full h-full object-cover opacity-30" referrerPolicy="no-referrer" />
+          <img src={mergedContent.posterUrl || 'https://picsum.photos/seed/movie/1920/1080'} alt={mergedContent.title} className="w-full h-full object-cover opacity-30" referrerPolicy="no-referrer" />
           <div className="absolute inset-0 bg-gradient-to-t from-zinc-950 via-zinc-950/60 to-transparent" />
         </div>
         
@@ -723,8 +749,8 @@ export default function MovieDetails() {
         <div className="absolute inset-0 flex items-center justify-center p-8 z-10 pt-20">
           <div className="max-w-7xl mx-auto flex flex-col items-center gap-8 text-center">
             <img 
-              src={content.posterUrl || 'https://picsum.photos/seed/movie/400/600'} 
-              alt={content.title} 
+              src={mergedContent.posterUrl || 'https://picsum.photos/seed/movie/400/600'} 
+              alt={mergedContent.title} 
               className="w-32 md:w-64 rounded-2xl shadow-2xl cursor-pointer hover:scale-105 transition-transform" 
               referrerPolicy="no-referrer" 
               onClick={() => setIsPosterExpanded(true)}
@@ -733,45 +759,45 @@ export default function MovieDetails() {
             <div className="flex-1">
               <div className="flex items-center gap-3 mb-4">
                 <span className="bg-emerald-500 text-white px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider">
-                  {content.type}
+                  {mergedContent.type}
                 </span>
-                <span className="text-zinc-300 font-medium">{content.year}</span>
-                {content.qualityId && (
+                <span className="text-zinc-300 font-medium">{mergedContent.year}</span>
+                {mergedContent.qualityId && (
                   <span className={`px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider ${
                     (() => {
-                      const qName = qualities.find(q => q.id === content.qualityId)?.name || '';
+                      const qName = qualities.find(q => q.id === mergedContent.qualityId)?.name || '';
                       return ['WEB-DL', 'WebRip', 'HDRip', 'BluRay'].some(hq => qName.toUpperCase().includes(hq.toUpperCase()))
                         ? 'bg-cyan-500 text-black shadow-[0_0_10px_rgba(6,182,212,0.5)]'
                         : 'bg-amber-500 text-black shadow-[0_0_10px_rgba(245,158,11,0.5)]';
                     })()
                   }`}>
-                    {qualities.find(q => q.id === content.qualityId)?.name}
+                    {qualities.find(q => q.id === mergedContent.qualityId)?.name}
                   </span>
                 )}
               </div>
               
-              <h1 className="text-4xl md:text-6xl font-bold mb-4 leading-tight">{formatContentTitle(content)}</h1>
+              <h1 className="text-4xl md:text-6xl font-bold mb-4 leading-tight">{formatContentTitle(mergedContent)}</h1>
               
               <div className="flex flex-wrap items-center justify-center gap-4">
-                {content.trailerUrl && (
+                {mergedContent.trailerUrl && (
                   <button 
                     onClick={() => setIsTrailerPopupOpen(true)}
-                    className={`${getYouTubeEmbedUrl(content.trailerUrl) ? 'bg-red-600 hover:bg-red-700' : 'bg-emerald-500 hover:bg-emerald-600'} text-white px-8 py-4 rounded-xl font-bold flex items-center gap-2 transition-colors`}
+                    className={`${getYouTubeEmbedUrl(mergedContent.trailerUrl) ? 'bg-red-600 hover:bg-red-700' : 'bg-emerald-500 hover:bg-emerald-600'} text-white px-8 py-4 rounded-xl font-bold flex items-center gap-2 transition-colors`}
                   >
-                    {getYouTubeEmbedUrl(content.trailerUrl) ? <Youtube className="w-5 h-5" /> : <Play className="w-5 h-5" />}
+                    {getYouTubeEmbedUrl(mergedContent.trailerUrl) ? <Youtube className="w-5 h-5" /> : <Play className="w-5 h-5" />}
                     Watch Trailer
                   </button>
                 )}
-                {content.sampleUrl && (
+                {mergedContent.sampleUrl && (
                   <button 
-                    onClick={() => handlePlayClick(content.sampleUrl!, 'Sample', 'sample')}
+                    onClick={() => handlePlayClick(mergedContent.sampleUrl!, 'Sample', 'sample')}
                     className="bg-zinc-800 hover:bg-zinc-700 text-white px-8 py-4 rounded-xl font-bold flex items-center gap-2 transition-colors border border-zinc-700"
                   >
                     <Play className="w-5 h-5" /> Sample
                   </button>
                 )}
-                {content.imdbLink && (
-                  <a href={content.imdbLink} target="_blank" rel="noreferrer" className="bg-yellow-500 hover:bg-yellow-600 text-black px-8 py-4 rounded-xl font-bold flex items-center gap-2 transition-colors">
+                {mergedContent.imdbLink && (
+                  <a href={mergedContent.imdbLink} target="_blank" rel="noreferrer" className="bg-yellow-500 hover:bg-yellow-600 text-black px-8 py-4 rounded-xl font-bold flex items-center gap-2 transition-colors">
                     IMDb
                   </a>
                 )}
@@ -779,7 +805,7 @@ export default function MovieDetails() {
                 <button
                   onClick={toggleWatchLater}
                   disabled={isWatchLaterLoading}
-                  className={`p-4 rounded-xl border transition-colors ${profile?.watchLater?.includes(content.id) ? 'bg-emerald-500/20 border-emerald-500 text-emerald-500' : 'bg-zinc-900 border-zinc-800 hover:bg-zinc-800 text-zinc-300'} ${isWatchLaterLoading ? 'opacity-50 cursor-not-allowed' : ''}`}
+                  className={`p-4 rounded-xl border transition-colors ${profile?.watchLater?.includes(mergedContent.id) ? 'bg-emerald-500/20 border-emerald-500 text-emerald-500' : 'bg-zinc-900 border-zinc-800 hover:bg-zinc-800 text-zinc-300'} ${isWatchLaterLoading ? 'opacity-50 cursor-not-allowed' : ''}`}
                   title="Watch Later"
                 >
                   {isWatchLaterLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Clock className="w-5 h-5" />}
@@ -788,10 +814,10 @@ export default function MovieDetails() {
                 <button
                   onClick={toggleFavorite}
                   disabled={isFavoriteLoading}
-                  className={`p-4 rounded-xl border transition-colors ${profile?.favorites?.includes(content.id) ? 'bg-red-500/20 border-red-500 text-red-500' : 'bg-zinc-900 border-zinc-800 hover:bg-zinc-800 text-zinc-300'} ${isFavoriteLoading ? 'opacity-50 cursor-not-allowed' : ''}`}
+                  className={`p-4 rounded-xl border transition-colors ${profile?.favorites?.includes(mergedContent.id) ? 'bg-red-500/20 border-red-500 text-red-500' : 'bg-zinc-900 border-zinc-800 hover:bg-zinc-800 text-zinc-300'} ${isFavoriteLoading ? 'opacity-50 cursor-not-allowed' : ''}`}
                   title="Favorite"
                 >
-                  {isFavoriteLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Heart className={`w-5 h-5 ${profile?.favorites?.includes(content.id) ? 'fill-current' : ''}`} />}
+                  {isFavoriteLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Heart className={`w-5 h-5 ${profile?.favorites?.includes(mergedContent.id) ? 'fill-current' : ''}`} />}
                 </button>
 
                 <button
@@ -805,8 +831,16 @@ export default function MovieDetails() {
 
                 {(profile?.role === 'admin' || profile?.role === 'data_editor') && (
                   <div className="flex gap-4">
+                    <button
+                      onClick={() => setIsMediaModalOpen(true)}
+                      className="p-4 rounded-xl border bg-cyan-500/10 border-cyan-500 text-cyan-500 hover:bg-cyan-500/20 transition-colors flex items-center gap-2"
+                      title="Fetch Media Data"
+                    >
+                      <Search className="w-5 h-5" />
+                      <span className="hidden sm:inline">Fetch</span>
+                    </button>
                     <Link
-                      to={`/admin/content?edit=${content.id}`}
+                      to={`/admin/content?edit=${mergedContent.id}`}
                       className="p-4 rounded-xl border bg-emerald-500/10 border-emerald-500 text-emerald-500 hover:bg-emerald-500/20 transition-colors flex items-center gap-2"
                       title="Edit Content"
                     >
@@ -814,7 +848,7 @@ export default function MovieDetails() {
                       <span className="hidden sm:inline">Edit</span>
                     </Link>
                     <button
-                      onClick={() => setDeleteId(content.id)}
+                      onClick={() => setDeleteId(mergedContent.id)}
                       className="p-4 rounded-xl border bg-red-500/10 border-red-500 text-red-500 hover:bg-red-500/20 transition-colors flex items-center gap-2"
                       title="Delete Content"
                     >
@@ -884,7 +918,7 @@ export default function MovieDetails() {
                         {imdbData.title} {imdbData.year ? `(${imdbData.year})` : ''}
                       </h3>
                       <div className="flex flex-col items-end gap-2 shrink-0 mr-8 md:mr-12">
-                        {imdbData.rating && imdbData.isFetched && (
+                        {imdbData.rating && (
                           <div className="bg-[#f5c518] text-black px-2 py-1 rounded flex items-center gap-1.5 font-black text-xs shadow-[0_0_15px_rgba(245,197,24,0.3)] whitespace-nowrap">
                             <span className="bg-black text-[#f5c518] px-1 rounded-sm text-[10px] tracking-tighter">IMDb</span>
                             <div className="flex items-center gap-0.5">
@@ -903,7 +937,7 @@ export default function MovieDetails() {
                           <span>{formatReleaseDate(imdbData.releaseDate)}</span>
                         </div>
                       )}
-                      {imdbData.duration && (
+                      {imdbData.duration && mergedContent.type !== 'series' && (
                         <div className="flex flex-col">
                           <span className="text-zinc-500 text-[10px] uppercase tracking-wider">Runtime</span>
                           <span>{formatRuntime(imdbData.duration)}</span>
@@ -926,11 +960,11 @@ export default function MovieDetails() {
                       )}
                     </div>
                     
-                    {(imdbData.cast || (content.cast && content.cast.length > 0)) && (
+                    {(imdbData.cast || (mergedContent.cast && mergedContent.cast.length > 0)) && (
                       <div className="pt-2">
                         <h4 className="text-sm font-bold text-cyan-400 mb-2 uppercase tracking-wider opacity-70">Cast</h4>
                         <div className="flex flex-wrap gap-1.5">
-                          {(imdbData.cast ? imdbData.cast.split(',').map(c => c.trim()) : content.cast).map((actor, idx) => (
+                          {(imdbData.cast ? imdbData.cast.split(',').map(c => c.trim()) : mergedContent.cast).map((actor, idx) => (
                             <span key={idx} className="bg-cyan-500/5 border border-cyan-500/10 px-2 py-1 rounded-md text-[11px] text-zinc-400">
                               {actor}
                             </span>
@@ -939,10 +973,10 @@ export default function MovieDetails() {
                       </div>
                     )}
 
-                    {(imdbData.description || content.description) && (
+                    {(imdbData.description || mergedContent.description) && (
                       <div className="pt-2">
                         <h4 className="text-sm font-bold text-cyan-400 mb-1 uppercase tracking-wider opacity-70">Synopsis</h4>
-                        <p className="text-zinc-400 text-xs leading-relaxed">{imdbData.description || content.description}</p>
+                        <p className="text-zinc-400 text-xs leading-relaxed">{imdbData.description || mergedContent.description}</p>
                       </div>
                     )}
                   </div>
@@ -951,30 +985,36 @@ export default function MovieDetails() {
                 <div className="space-y-12">
                   <section className="bg-cyan-500/5 border border-cyan-500/20 rounded-2xl p-8 relative group">
                     <div className="flex flex-wrap gap-6 mb-8 text-sm font-medium text-cyan-400/80">
-                      {content.year && <span className="flex items-center gap-2 bg-cyan-500/10 px-3 py-1.5 rounded-lg"><Clock className="w-4 h-4 text-cyan-500" /> {content.year}</span>}
-                      {content.runtime && <span className="flex items-center gap-2 bg-cyan-500/10 px-3 py-1.5 rounded-lg"><Clock className="w-4 h-4 text-cyan-500" /> {formatRuntime(content.runtime)}</span>}
-                      {content.releaseDate && <span className="flex items-center gap-2 bg-cyan-500/10 px-3 py-1.5 rounded-lg"><Film className="w-4 h-4 text-cyan-500" /> {formatReleaseDate(content.releaseDate)}</span>}
+                      {mergedContent.year && <span className="flex items-center gap-2 bg-cyan-500/10 px-3 py-1.5 rounded-lg"><Clock className="w-4 h-4 text-cyan-500" /> {mergedContent.year}</span>}
+                      {mergedContent.imdbRating && (
+                        <span className="flex items-center gap-2 bg-[#f5c518]/10 px-3 py-1.5 rounded-lg border border-[#f5c518]/20">
+                          <span className="bg-[#f5c518] text-black px-1 rounded-sm text-[10px] font-black tracking-tighter">IMDb</span>
+                          <span className="text-[#f5c518] font-bold">{mergedContent.imdbRating.replace('/10', '')}</span>
+                        </span>
+                      )}
+                      {mergedContent.runtime && mergedContent.type !== 'series' && <span className="flex items-center gap-2 bg-cyan-500/10 px-3 py-1.5 rounded-lg"><Clock className="w-4 h-4 text-cyan-500" /> {mergedContent.runtime}</span>}
+                      {mergedContent.releaseDate && <span className="flex items-center gap-2 bg-cyan-500/10 px-3 py-1.5 rounded-lg"><Film className="w-4 h-4 text-cyan-500" /> {formatReleaseDate(mergedContent.releaseDate)}</span>}
                       {contentGenres && <span className="flex items-center gap-2 bg-cyan-500/10 px-3 py-1.5 rounded-lg">Genre: {contentGenres}</span>}
                       {contentLangs && <span className="flex items-center gap-2 bg-cyan-500/10 px-3 py-1.5 rounded-lg">Language: {contentLangs}</span>}
-                      {content.qualityId && (
+                      {mergedContent.qualityId && (
                         <span className={`flex items-center gap-2 px-3 py-1.5 rounded-lg font-bold ${
                           (() => {
-                            const qName = qualities.find(q => q.id === content.qualityId)?.name || '';
+                            const qName = qualities.find(q => q.id === mergedContent.qualityId)?.name || '';
                             return ['WEB-DL', 'WebRip', 'HDRip', 'BluRay'].some(hq => qName.toUpperCase().includes(hq.toUpperCase()))
                               ? 'bg-cyan-500 text-black shadow-[0_0_10px_rgba(6,182,212,0.5)]'
                               : 'bg-amber-500 text-black shadow-[0_0_10px_rgba(245,158,11,0.5)]';
                           })()
                         }`}>
-                          Quality: {qualities.find(q => q.id === content.qualityId)?.name}
+                          Quality: {qualities.find(q => q.id === mergedContent.qualityId)?.name}
                         </span>
                       )}
                     </div>
                     
-                    {content.cast && content.cast.length > 0 && (
+                    {mergedContent.cast && mergedContent.cast.length > 0 && (
                       <div className="mb-6">
                         <h3 className="text-sm font-bold text-cyan-400 mb-2 uppercase tracking-wider opacity-70">Cast</h3>
                         <div className="flex flex-wrap gap-1.5">
-                          {content.cast.map((actor, idx) => (
+                          {mergedContent.cast.map((actor, idx) => (
                             <span key={idx} className="bg-cyan-500/5 border border-cyan-500/10 px-2 py-1 rounded-md text-[11px] text-zinc-400">
                               {actor}
                             </span>
@@ -984,7 +1024,7 @@ export default function MovieDetails() {
                     )}
 
                     <h3 className="text-sm font-bold mb-1 text-cyan-400 uppercase tracking-wider opacity-70">Synopsis</h3>
-                    <p className="text-zinc-400 text-xs leading-relaxed">{content.description}</p>
+                    <p className="text-zinc-400 text-xs leading-relaxed">{mergedContent.description}</p>
                   </section>
                 </div>
               )}
@@ -994,12 +1034,12 @@ export default function MovieDetails() {
             <section>
               <h2 className="text-2xl font-bold mb-6">Download & Play</h2>
               
-              {content.type === 'movie' && content.movieLinks && (
+              {mergedContent.type === 'movie' && mergedContent.movieLinks && (
                 <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6">
                   <h3 className="font-bold mb-4 text-zinc-400">Movie Links</h3>
                   {(() => {
                     try {
-                      return renderLinks(JSON.parse(content.movieLinks));
+                      return renderLinks(JSON.parse(mergedContent.movieLinks));
                     } catch (e) {
                       console.error("Error parsing movie links:", e);
                       return <p className="text-red-500">Error loading links</p>;
@@ -1008,11 +1048,11 @@ export default function MovieDetails() {
                 </div>
               )}
 
-              {content.type === 'series' && content.seasons && (
+              {mergedContent.type === 'series' && mergedContent.seasons && (
                 <div className="space-y-6">
                   {(() => {
                     try {
-                      const allSeasons = JSON.parse(content.seasons);
+                      const allSeasons = JSON.parse(mergedContent.seasons);
                       const sortedSeasons = [...allSeasons].sort((a: Season, b: Season) => {
                         const aAccess = hasFullAccess || allowedSeasons.includes(a.id);
                         const bAccess = hasFullAccess || allowedSeasons.includes(b.id);
@@ -1067,19 +1107,19 @@ export default function MovieDetails() {
                                       {season.episodes.map(ep => (
                                         <div key={ep.id} className="bg-zinc-950 border border-zinc-800 rounded-xl p-4 flex flex-col gap-4">
                                           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                                            <div>
-                                              <span className="text-emerald-500 font-bold mr-3">E{ep.episodeNumber}</span>
+                                            <div className="flex items-center flex-wrap gap-2">
+                                              <span className="text-emerald-500 font-bold">E{ep.episodeNumber}</span>
                                               <span className="font-medium">{ep.title}</span>
                                               {ep.description && (
                                                 <button
                                                   onClick={() => setExpandedEpisodes(prev => ({ ...prev, [ep.id]: !prev[ep.id] }))}
-                                                  className="ml-3 text-xs text-zinc-400 hover:text-emerald-500 transition-colors"
+                                                  className="text-xs text-zinc-400 hover:text-emerald-500 transition-colors"
                                                 >
                                                   {expandedEpisodes[ep.id] ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
                                                 </button>
                                               )}
                                               {ep.duration && (
-                                                <span className="ml-3 text-xs text-zinc-500 bg-zinc-800 px-2 py-0.5 rounded">
+                                                <span className="text-xs text-zinc-500 bg-zinc-800 px-2 py-0.5 rounded whitespace-nowrap">
                                                   {ep.duration}
                                                 </span>
                                               )}
@@ -1216,8 +1256,8 @@ export default function MovieDetails() {
               <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
             </button>
             <img 
-              src={content.posterUrl || 'https://picsum.photos/seed/movie/400/600'} 
-              alt={content.title} 
+              src={mergedContent.posterUrl || 'https://picsum.photos/seed/movie/400/600'} 
+              alt={mergedContent.title} 
               className="max-w-full max-h-[90vh] object-contain rounded-lg shadow-2xl" 
               referrerPolicy="no-referrer"
               onClick={(e) => e.stopPropagation()}
@@ -1249,9 +1289,9 @@ export default function MovieDetails() {
               >
                 <X className="w-6 h-6" />
               </button>
-              {getYouTubeEmbedUrl(content.trailerUrl!) ? (
+              {getYouTubeEmbedUrl(mergedContent.trailerUrl!) ? (
                 <iframe
-                  src={`${getYouTubeEmbedUrl(content.trailerUrl!)}?autoplay=1`}
+                  src={`${getYouTubeEmbedUrl(mergedContent.trailerUrl!)}?autoplay=1`}
                   title="Trailer"
                   className="w-full h-full border-0"
                   allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
@@ -1261,7 +1301,7 @@ export default function MovieDetails() {
                 <div className="w-full h-full flex flex-col items-center justify-center text-white gap-4 bg-zinc-900">
                   <Play className="w-16 h-16 opacity-50" />
                   <p>This trailer cannot be played directly here.</p>
-                  <a href={content.trailerUrl} target="_blank" rel="noreferrer" className="bg-emerald-500 hover:bg-emerald-600 px-6 py-3 rounded-xl font-bold transition-colors">
+                  <a href={mergedContent.trailerUrl} target="_blank" rel="noreferrer" className="bg-emerald-500 hover:bg-emerald-600 px-6 py-3 rounded-xl font-bold transition-colors">
                     Open in New Tab
                   </a>
                 </div>
@@ -1285,6 +1325,90 @@ export default function MovieDetails() {
         title={alertConfig.title}
         message={alertConfig.message}
       />
+
+      {isMediaModalOpen && mergedContent && (
+        <MediaModal
+          isOpen={isMediaModalOpen}
+          onClose={() => setIsMediaModalOpen(false)}
+          onApply={async (data) => {
+            try {
+              const contentRef = doc(db, 'content', mergedContent.id);
+              const updateData: any = { ...data };
+              
+              // Handle seasons if they are in the data
+              if (data.seasons && Array.isArray(data.seasons)) {
+                const currentSeasons = JSON.parse(mergedContent.seasons || '[]');
+                
+                data.seasons.forEach((fetchedSeason: any) => {
+                  const existingSeasonIndex = currentSeasons.findIndex((s: any) => s.seasonNumber === fetchedSeason.seasonNumber);
+                  
+                  if (existingSeasonIndex !== -1) {
+                    const existingSeason = currentSeasons[existingSeasonIndex];
+                    if (fetchedSeason.seasonYear) existingSeason.year = fetchedSeason.seasonYear;
+                    
+                    fetchedSeason.episodes.forEach((fetchedEp: any) => {
+                      const existingEpIndex = existingSeason.episodes.findIndex((ep: any) => ep.episodeNumber === fetchedEp.episodeNumber);
+                      if (existingEpIndex !== -1) {
+                        existingSeason.episodes[existingEpIndex] = {
+                          ...existingSeason.episodes[existingEpIndex],
+                          title: fetchedEp.title || existingSeason.episodes[existingEpIndex].title,
+                          description: fetchedEp.description || existingSeason.episodes[existingEpIndex].description,
+                          duration: fetchedEp.duration || existingSeason.episodes[existingEpIndex].duration,
+                        };
+                      } else {
+                        existingSeason.episodes.push({
+                          id: Math.random().toString(36).substr(2, 9),
+                          episodeNumber: fetchedEp.episodeNumber,
+                          title: fetchedEp.title || `Episode ${fetchedEp.episodeNumber}`,
+                          description: fetchedEp.description || '',
+                          duration: fetchedEp.duration || '',
+                          links: [{ id: Math.random().toString(36).substr(2, 9), name: '720p', url: '', size: '', unit: 'MB' }],
+                        });
+                      }
+                    });
+                    existingSeason.episodes.sort((a: any, b: any) => a.episodeNumber - b.episodeNumber);
+                  } else {
+                    currentSeasons.push({
+                      id: Math.random().toString(36).substr(2, 9),
+                      seasonNumber: fetchedSeason.seasonNumber,
+                      year: fetchedSeason.seasonYear,
+                      zipLinks: [
+                        { id: Math.random().toString(36).substr(2, 9), name: '480p', url: '', size: '', unit: 'GB' },
+                        { id: Math.random().toString(36).substr(2, 9), name: '720p', url: '', size: '', unit: 'GB' },
+                        { id: Math.random().toString(36).substr(2, 9), name: '1080p', url: '', size: '', unit: 'GB' }
+                      ],
+                      mkvLinks: [
+                        { id: Math.random().toString(36).substr(2, 9), name: '480p', url: '', size: '', unit: 'GB' },
+                        { id: Math.random().toString(36).substr(2, 9), name: '720p', url: '', size: '', unit: 'GB' },
+                        { id: Math.random().toString(36).substr(2, 9), name: '1080p', url: '', size: '', unit: 'GB' }
+                      ],
+                      episodes: fetchedSeason.episodes.map((ep: any) => ({
+                        id: Math.random().toString(36).substr(2, 9),
+                        episodeNumber: ep.episodeNumber,
+                        title: ep.title || `Episode ${ep.episodeNumber}`,
+                        description: ep.description || '',
+                        duration: ep.duration || '',
+                        links: [{ id: Math.random().toString(36).substr(2, 9), name: '720p', url: '', size: '', unit: 'MB' }],
+                      })).sort((a: any, b: any) => a.episodeNumber - b.episodeNumber)
+                    });
+                  }
+                });
+                updateData.seasons = JSON.stringify(currentSeasons.sort((a: any, b: any) => a.seasonNumber - b.seasonNumber));
+              }
+
+              await updateDoc(contentRef, updateData);
+              setIsMediaModalOpen(false);
+              setAlertConfig({ isOpen: true, title: 'Success', message: 'Content updated successfully' });
+            } catch (error) {
+              console.error("Error updating content:", error);
+              setAlertConfig({ isOpen: true, title: 'Error', message: 'Failed to update content' });
+            }
+          }}
+          initialImdbId={mergedContent.imdbLink?.match(/tt\d+/)?.[0] || ''}
+          initialTitle={mergedContent.title}
+          initialYear={mergedContent.year?.toString() || ''}
+        />
+      )}
     </div>
   );
 }

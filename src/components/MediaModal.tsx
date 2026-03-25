@@ -14,7 +14,76 @@ const TMDB_API_KEY = import.meta.env.VITE_TMDB_API_KEY || 'f71c2391161526fa9d19b
 const OMDB_API_KEY = import.meta.env.VITE_OMDB_API_KEY || '19daa310';
 const TMDB_BASE = 'https://api.themoviedb.org/3';
 const OMDB_BASE = 'https://www.omdbapi.com/';
-const IMAGE_BASE = 'https://image.tmdb.org/t/p/w200';
+
+export async function findTMDBByImdb(imdbID: string) {
+  const url = `${TMDB_BASE}/find/${imdbID}?api_key=${TMDB_API_KEY}&external_source=imdb_id`;
+  const res = await fetch(url);
+  const data = await res.json();
+  if (data.movie_results && data.movie_results.length > 0) return { item: data.movie_results[0], type: 'movie' };
+  if (data.tv_results && data.tv_results.length > 0) return { item: data.tv_results[0], type: 'tv' };
+  return null;
+}
+
+export async function searchTMDBByTitle(searchTitle: string, searchYear: string) {
+  let movieUrl = `${TMDB_BASE}/search/movie?api_key=${TMDB_API_KEY}&query=${encodeURIComponent(searchTitle)}`;
+  if (searchYear) movieUrl += `&year=${searchYear}`;
+  let movieRes = await fetch(movieUrl);
+  let movieData = await movieRes.json();
+  if (movieData.results && movieData.results.length > 0) {
+    return { item: movieData.results[0], type: 'movie' };
+  }
+  let tvUrl = `${TMDB_BASE}/search/tv?api_key=${TMDB_API_KEY}&query=${encodeURIComponent(searchTitle)}`;
+  if (searchYear) tvUrl += `&first_air_date_year=${searchYear}`;
+  let tvRes = await fetch(tvUrl);
+  let tvData = await tvRes.json();
+  if (tvData.results && tvData.results.length > 0) {
+    return { item: tvData.results[0], type: 'tv' };
+  }
+  return null;
+}
+
+export async function fetchTMDBDetails(tmdbId: string, type: string) {
+  const url = `${TMDB_BASE}/${type}/${tmdbId}?api_key=${TMDB_API_KEY}&append_to_response=credits,external_ids,content_ratings`;
+  const res = await fetch(url);
+  return await res.json();
+}
+
+export async function fetchSeriesSeasons(tmdbId: string) {
+  const url = `${TMDB_BASE}/tv/${tmdbId}?api_key=${TMDB_API_KEY}`;
+  const res = await fetch(url);
+  const data = await res.json();
+  if (!data.seasons) return [];
+
+  const seasons = [];
+  for (const season of data.seasons) {
+    if (season.season_number === 0) continue;
+    const seasonUrl = `${TMDB_BASE}/tv/${tmdbId}/season/${season.season_number}?api_key=${TMDB_API_KEY}`;
+    const seasonRes = await fetch(seasonUrl);
+    const seasonData = await seasonRes.json();
+    seasons.push({
+      season: season.season_number,
+      name: season.name,
+      year: season.air_date ? season.air_date.split('-')[0] : 'N/A',
+      episodes: seasonData.episodes || []
+    });
+    await new Promise(resolve => setTimeout(resolve, 100));
+  }
+  return seasons;
+}
+
+export async function fetchIMDbRating(imdbID: string) {
+  if (!imdbID) return null;
+  const url = `${OMDB_BASE}?i=${imdbID}&apikey=${OMDB_API_KEY}`;
+  const res = await fetch(url);
+  const data = await res.json();
+  if (data.Response === 'True') {
+    return {
+      rating: data.imdbRating,
+      votes: data.imdbVotes,
+    };
+  }
+  return null;
+}
 
 export const MediaModal: React.FC<MediaModalProps> = ({ isOpen, onClose, initialImdbId = '', initialTitle = '', initialYear = '', onApply }) => {
   const [imdbId, setImdbId] = useState(initialImdbId);
@@ -23,8 +92,34 @@ export const MediaModal: React.FC<MediaModalProps> = ({ isOpen, onClose, initial
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [fetchedData, setFetchedData] = useState<any>(null);
-  const [selectedFields, setSelectedFields] = useState<Record<string, boolean>>({});
-  const [selectedSeasons, setSelectedSeasons] = useState<number[]>([]);
+  const [selectedFields, setSelectedFields] = useState<Record<string, boolean>>(() => {
+    const saved = localStorage.getItem('mediaModal_selectedFields');
+    return saved ? JSON.parse(saved) : {};
+  });
+  const [selectedSeasons, setSelectedSeasons] = useState<number[]>(() => {
+    const saved = localStorage.getItem('mediaModal_selectedSeasons');
+    return saved ? JSON.parse(saved) : [];
+  });
+  const [includeEpisodeDescriptions, setIncludeEpisodeDescriptions] = useState(() => {
+    const saved = localStorage.getItem('mediaModal_includeEpisodeDescriptions');
+    return saved ? JSON.parse(saved) : true;
+  });
+
+  React.useEffect(() => {
+    localStorage.setItem('mediaModal_includeEpisodeDescriptions', JSON.stringify(includeEpisodeDescriptions));
+  }, [includeEpisodeDescriptions]);
+
+  React.useEffect(() => {
+    if (Object.keys(selectedFields).length > 0) {
+      localStorage.setItem('mediaModal_selectedFields', JSON.stringify(selectedFields));
+    }
+  }, [selectedFields]);
+
+  React.useEffect(() => {
+    if (selectedSeasons.length > 0) {
+      localStorage.setItem('mediaModal_selectedSeasons', JSON.stringify(selectedSeasons));
+    }
+  }, [selectedSeasons]);
 
   React.useEffect(() => {
     if (isOpen) {
@@ -33,8 +128,6 @@ export const MediaModal: React.FC<MediaModalProps> = ({ isOpen, onClose, initial
       setYear(initialYear);
       setFetchedData(null);
       setError(null);
-      setSelectedFields({});
-      setSelectedSeasons([]);
       
       if (initialImdbId || initialTitle) {
         handleFetchWithParams(initialImdbId, initialTitle, initialYear);
@@ -175,17 +268,24 @@ export const MediaModal: React.FC<MediaModalProps> = ({ isOpen, onClose, initial
 
       setFetchedData(parsedData);
       
-      // Select all fields by default
+      // Select all fields by default if not already set
       const allFields: Record<string, boolean> = {};
       Object.keys(parsedData).forEach(k => {
         if (k !== 'seasons' && parsedData[k] && (Array.isArray(parsedData[k]) ? parsedData[k].length > 0 : true)) {
           allFields[k] = true;
         }
       });
-      setSelectedFields(allFields);
+      
+      setSelectedFields(prev => {
+        if (Object.keys(prev).length === 0) return allFields;
+        return prev;
+      });
       
       if (seasonsData) {
-        setSelectedSeasons(seasonsData.map((s: any) => s.season));
+        setSelectedSeasons(prev => {
+          if (prev.length === 0) return seasonsData.map((s: any) => s.season);
+          return prev;
+        });
       }
 
     } catch (err: any) {
@@ -210,10 +310,13 @@ export const MediaModal: React.FC<MediaModalProps> = ({ isOpen, onClose, initial
         id: `s${s.season}`,
         seasonNumber: s.season,
         title: s.name,
+        seasonYear: s.year !== 'N/A' ? parseInt(s.year) : undefined,
         episodes: s.episodes.map((e: any) => ({
           id: `e${e.episode_number}`,
           episodeNumber: e.episode_number,
           title: e.name,
+          description: includeEpisodeDescriptions ? (e.overview || '') : '',
+          duration: e.runtime ? `${e.runtime}m` : '',
           videoUrl: ''
         }))
       }));
@@ -350,21 +453,55 @@ export const MediaModal: React.FC<MediaModalProps> = ({ isOpen, onClose, initial
 
               {fetchedData.seasons && fetchedData.seasons.length > 0 && (
                 <div className="border-t border-zinc-800 pt-4 mt-4">
-                  <h4 className="font-semibold text-white mb-3">Select Seasons:</h4>
-                  <div className="flex flex-wrap gap-2">
+                  <div className="flex items-center justify-between mb-3">
+                    <h4 className="font-semibold text-white">Select Seasons:</h4>
+                    <label className="flex items-center gap-2 text-sm text-zinc-400 cursor-pointer hover:text-zinc-300 transition-colors">
+                      <input 
+                        type="checkbox" 
+                        checked={includeEpisodeDescriptions}
+                        onChange={(e) => setIncludeEpisodeDescriptions(e.target.checked)}
+                        className="rounded bg-zinc-900 border-zinc-700 text-emerald-500 focus:ring-emerald-500"
+                      />
+                      Include Episode Descriptions
+                    </label>
+                  </div>
+                  <div className="space-y-3">
                     {fetchedData.seasons.map((s: any) => (
-                      <label key={s.season} className="flex items-center gap-2 bg-zinc-800 px-3 py-1.5 rounded-lg text-sm text-zinc-300 cursor-pointer hover:bg-zinc-700 transition-colors border border-zinc-700">
-                        <input 
-                          type="checkbox" 
-                          checked={selectedSeasons.includes(s.season)}
-                          onChange={(e) => {
-                            if (e.target.checked) setSelectedSeasons([...selectedSeasons, s.season]);
-                            else setSelectedSeasons(selectedSeasons.filter(sn => sn !== s.season));
-                          }}
-                          className="rounded bg-zinc-900 border-zinc-600 text-emerald-500 focus:ring-emerald-500"
-                        />
-                        Season {s.season}
-                      </label>
+                      <div key={s.season} className="border border-zinc-800 rounded-xl overflow-hidden bg-zinc-950/30">
+                        <label className="flex items-center gap-3 p-4 cursor-pointer hover:bg-zinc-900/50 transition-colors">
+                          <input 
+                            type="checkbox" 
+                            checked={selectedSeasons.includes(s.season)}
+                            onChange={(e) => {
+                              if (e.target.checked) setSelectedSeasons([...selectedSeasons, s.season]);
+                              else setSelectedSeasons(selectedSeasons.filter(sn => sn !== s.season));
+                            }}
+                            className="rounded bg-zinc-900 border-zinc-600 text-emerald-500 focus:ring-emerald-500"
+                          />
+                          <div className="font-medium text-white">Season {s.season}</div>
+                          <div className="text-xs text-zinc-500 ml-auto">
+                            {s.year !== 'N/A' ? `${s.year} • ` : ''}
+                            {s.episodes?.length || 0} Episodes
+                          </div>
+                        </label>
+                        
+                        {selectedSeasons.includes(s.season) && s.episodes && (
+                          <div className="px-4 pb-4 pt-1 border-t border-zinc-800/50">
+                            <div className="max-h-48 overflow-y-auto custom-scrollbar pr-2 space-y-2">
+                              {s.episodes.map((ep: any) => (
+                                <div key={ep.episode_number} className="text-sm flex gap-3 p-2 rounded-lg bg-zinc-900/50">
+                                  <div className="text-zinc-500 font-mono w-6 shrink-0">{ep.episode_number}.</div>
+                                  <div className="flex-1 min-w-0">
+                                    <div className="text-zinc-200 font-medium truncate">{ep.name}</div>
+                                    {ep.overview && <div className="text-xs text-zinc-500 line-clamp-1 mt-0.5">{ep.overview}</div>}
+                                  </div>
+                                  {ep.runtime && <div className="text-xs text-zinc-600 shrink-0">{ep.runtime}m</div>}
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
                     ))}
                   </div>
                 </div>

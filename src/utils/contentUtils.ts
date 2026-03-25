@@ -37,3 +37,18 @@ export const formatReleaseDate = (dateString?: string) => {
   }
   return dateString;
 };
+
+export const formatRuntime = (runtime?: string) => {
+  if (!runtime) return '';
+  // Check if runtime is in H:MM or HH:MM format
+  const timeMatch = runtime.match(/^(\d{1,2}):(\d{2})$/);
+  if (timeMatch) {
+    const hours = parseInt(timeMatch[1], 10);
+    const minutes = parseInt(timeMatch[2], 10);
+    if (hours > 0) {
+      return `${hours}h ${minutes}m`;
+    }
+    return `${minutes}m`;
+  }
+  return runtime;
+};

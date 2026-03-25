@@ -4,7 +4,8 @@ import { db } from '../../firebase';
 import { collection, onSnapshot } from 'firebase/firestore';
 import { Content, Quality, Language, Genre } from '../../types';
 import { useAuth } from '../../contexts/AuthContext';
-import { Film, Clock, ArrowLeft } from 'lucide-react';
+import { Film, Clock, ArrowLeft, Star, Lock } from 'lucide-react';
+import { ImdbRatingBadge } from '../../components/ImdbRatingBadge';
 import { handleFirestoreError, OperationType } from '../../utils/firestoreErrorHandler';
 import { formatContentTitle } from '../../utils/contentUtils';
 import { NotificationMenu } from '../../components/NotificationMenu';
@@ -112,6 +113,9 @@ export default function WatchLater() {
                       Locked
                     </div>
                   )}
+                  <div className="absolute bottom-2 left-2 z-10">
+                    <ImdbRatingBadge imdbLink={content.imdbLink} />
+                  </div>
                 </div>
                 <div className="p-4 flex flex-col flex-1">
                   <h3 className="font-bold text-base md:text-lg leading-tight mb-2">{formatContentTitle(content)}</h3>

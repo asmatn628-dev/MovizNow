@@ -37,6 +37,7 @@ export default function AIFetchModal({ isOpen, onClose, initialTitle, initialYea
     trailerUrl: true,
   });
   const [selectedSeasons, setSelectedSeasons] = useState<Record<number, boolean>>({});
+  const [includeEpisodeDescriptions, setIncludeEpisodeDescriptions] = useState(true);
 
   useEffect(() => {
     if (isOpen) {
@@ -109,7 +110,7 @@ export default function AIFetchModal({ isOpen, onClose, initialTitle, initialYea
           }
         },
         required: ["title", "type", "description"]
-      }, 'gemini-3-flash-preview');
+      }, 'gemini-3-flash');
 
       let fullText = '';
       for await (const chunk of responseStream) {
@@ -174,7 +175,13 @@ export default function AIFetchModal({ isOpen, onClose, initialTitle, initialYea
 
     // Apply seasons if it's a series
     if (fetchedData.type === 'series' && fetchedData.seasons) {
-      const filteredSeasons = fetchedData.seasons.filter((s: any) => selectedSeasons[s.seasonNumber]);
+      const filteredSeasons = fetchedData.seasons.filter((s: any) => selectedSeasons[s.seasonNumber]).map((s: any) => ({
+        ...s,
+        episodes: s.episodes.map((ep: any) => ({
+          ...ep,
+          description: includeEpisodeDescriptions ? (ep.description || '') : ''
+        }))
+      }));
       if (filteredSeasons.length > 0) {
         dataToApply.seasons = filteredSeasons;
       }
@@ -376,7 +383,18 @@ export default function AIFetchModal({ isOpen, onClose, initialTitle, initialYea
 
                 {fetchedData.type === 'series' && fetchedData.seasons && fetchedData.seasons.length > 0 && (
                   <div className="pt-6 border-t border-zinc-800">
-                    <h3 className="text-sm font-bold text-white uppercase tracking-wider mb-4">Seasons & Episodes</h3>
+                    <div className="flex items-center justify-between mb-4">
+                      <h3 className="text-sm font-bold text-white uppercase tracking-wider">Seasons & Episodes</h3>
+                      <label className="flex items-center gap-2 text-sm text-zinc-400 cursor-pointer hover:text-zinc-300 transition-colors">
+                        <input 
+                          type="checkbox" 
+                          checked={includeEpisodeDescriptions}
+                          onChange={(e) => setIncludeEpisodeDescriptions(e.target.checked)}
+                          className="rounded bg-zinc-900 border-zinc-700 text-emerald-500 focus:ring-emerald-500"
+                        />
+                        Include Episode Descriptions
+                      </label>
+                    </div>
                     <div className="space-y-3">
                       {fetchedData.seasons.map((season: any) => (
                         <div key={season.seasonNumber} className="border border-zinc-800 rounded-xl overflow-hidden bg-zinc-950/30">

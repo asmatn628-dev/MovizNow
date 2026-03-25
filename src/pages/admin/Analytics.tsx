@@ -69,14 +69,15 @@ export default function Analytics() {
   const contentCounts = contentClicks.reduce((acc, event) => {
     if (event.contentId && event.contentTitle) {
       acc[event.contentId] = {
+        id: event.contentId,
         title: event.contentTitle,
         count: (acc[event.contentId]?.count || 0) + 1
       };
     }
     return acc;
-  }, {} as Record<string, { title: string, count: number }>);
+  }, {} as Record<string, { id: string, title: string, count: number }>);
   
-  const topContent = (Object.values(contentCounts) as { title: string, count: number }[])
+  const topContent = (Object.values(contentCounts) as { id: string, title: string, count: number }[])
     .sort((a, b) => b.count - a.count)
     .slice(0, 10);
 
@@ -85,15 +86,16 @@ export default function Analytics() {
     if (event.linkId && event.linkName && event.contentTitle) {
       const key = `${event.contentId}_${event.linkId}`;
       acc[key] = {
+        id: key,
         contentTitle: event.contentTitle,
         linkName: event.linkName,
         count: (acc[key]?.count || 0) + 1
       };
     }
     return acc;
-  }, {} as Record<string, { contentTitle: string, linkName: string, count: number }>);
+  }, {} as Record<string, { id: string, contentTitle: string, linkName: string, count: number }>);
 
-  const topLinks = (Object.values(linkCounts) as { contentTitle: string, linkName: string, count: number }[])
+  const topLinks = (Object.values(linkCounts) as { id: string, contentTitle: string, linkName: string, count: number }[])
     .sort((a, b) => b.count - a.count)
     .slice(0, 10);
 
@@ -214,7 +216,7 @@ export default function Analytics() {
           </h2>
           <div className="space-y-4">
             {topContent.length > 0 ? topContent.map((item, index) => (
-              <div key={index} className="flex items-center justify-between p-4 bg-zinc-950 rounded-xl border border-zinc-800">
+              <div key={item.id} className="flex items-center justify-between p-4 bg-zinc-950 rounded-xl border border-zinc-800">
                 <div className="flex items-center gap-4">
                   <span className="text-xl font-bold text-zinc-600 w-6">{index + 1}</span>
                   <span className="font-medium text-white">{item.title}</span>
@@ -237,7 +239,7 @@ export default function Analytics() {
           </h2>
           <div className="space-y-4">
             {topLinks.length > 0 ? topLinks.map((item, index) => (
-              <div key={index} className="flex items-center justify-between p-4 bg-zinc-950 rounded-xl border border-zinc-800">
+              <div key={item.id} className="flex items-center justify-between p-4 bg-zinc-950 rounded-xl border border-zinc-800">
                 <div className="flex items-center gap-4">
                   <span className="text-xl font-bold text-zinc-600 w-6">{index + 1}</span>
                   <div>
