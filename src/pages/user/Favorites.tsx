@@ -4,12 +4,12 @@ import { db } from '../../firebase';
 import { collection, onSnapshot } from 'firebase/firestore';
 import { Content, Quality, Language, Genre } from '../../types';
 import { useAuth } from '../../contexts/AuthContext';
-import { Film, Heart, ArrowLeft, Star, Lock } from 'lucide-react';
-import { ImdbRatingBadge } from '../../components/ImdbRatingBadge';
+import { Film, Heart, ArrowLeft } from 'lucide-react';
 import { handleFirestoreError, OperationType } from '../../utils/firestoreErrorHandler';
 import { formatContentTitle } from '../../utils/contentUtils';
 import { NotificationMenu } from '../../components/NotificationMenu';
 
+// Force rebuild
 export default function Favorites() {
   const { profile } = useAuth();
   const [contentList, setContentList] = useState<Content[]>([]);
@@ -113,9 +113,6 @@ export default function Favorites() {
                       Locked
                     </div>
                   )}
-                  <div className="absolute bottom-2 left-2 z-10">
-                    <ImdbRatingBadge imdbLink={content.imdbLink} />
-                  </div>
                 </div>
                 <div className="p-4 flex flex-col flex-1">
                   <h3 className="font-bold text-base md:text-lg leading-tight mb-2">{formatContentTitle(content)}</h3>
