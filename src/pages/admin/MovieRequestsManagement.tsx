@@ -2,11 +2,12 @@ import { useState, useEffect } from 'react';
 import { db } from '../../firebase';
 import { collection, onSnapshot, query, orderBy, deleteDoc, doc, updateDoc, where } from 'firebase/firestore';
 import { useAuth } from '../../contexts/AuthContext';
-import { Film, Search, Clock, CheckCircle2, XCircle, MessageCircle, Trash2, Tv, Filter, User, Mail, Calendar, ArrowUp, ArrowDown, Plus, X, Eye } from 'lucide-react';
+import { Film, Search, Clock, CheckCircle2, XCircle, MessageCircle, Trash2, Tv, Filter, User, Mail, Calendar, ArrowUp, ArrowDown, Plus, X, Eye, MessageSquare } from 'lucide-react';
 import { clsx } from 'clsx';
 import { handleFirestoreError, OperationType } from '../../utils/firestoreErrorHandler';
 import { format } from 'date-fns';
 import ConfirmModal from '../../components/ConfirmModal';
+import CommentModal from '../../components/CommentModal';
 
 interface MovieRequest {
   id: string;
@@ -39,8 +40,7 @@ export default function MovieRequestsManagement() {
   const [isPickerOpen, setIsPickerOpen] = useState(false);
   const [selectedRequestId, setSelectedRequestId] = useState<string | null>(null);
   const [isSelecting, setIsSelecting] = useState<string | null>(null);
-  const [editingCommentId, setEditingCommentId] = useState<string | null>(null);
-  const [tempComment, setTempComment] = useState('');
+  const [requestToComment, setRequestToComment] = useState<MovieRequest | null>(null);
 
   useEffect(() => {
     const q = query(collection(db, 'movie_requests'), orderBy(sortBy === 'count' ? 'requestCount' : 'createdAt', sortOrder));
@@ -73,10 +73,9 @@ export default function MovieRequestsManagement() {
     }
   };
 
-  const handleUpdateComment = async (requestId: string) => {
+  const handleUpdateComment = async (requestId: string, comment: string) => {
     try {
-      await updateDoc(doc(db, 'movie_requests', requestId), { adminComment: tempComment });
-      setEditingCommentId(null);
+      await updateDoc(doc(db, 'movie_requests', requestId), { adminComment: comment });
     } catch (error) {
       console.error("Error updating comment:", error);
       alert("Failed to update comment.");
@@ -213,7 +212,6 @@ export default function MovieRequestsManagement() {
               <tr className="bg-zinc-950/50 border-b border-zinc-800">
                 <th className="px-6 py-4 text-[10px] font-bold text-zinc-500 uppercase tracking-wider">Request Details</th>
                 <th className="px-6 py-4 text-[10px] font-bold text-zinc-500 uppercase tracking-wider">User Info</th>
-                <th className="px-6 py-4 text-[10px] font-bold text-zinc-500 uppercase tracking-wider">Popularity</th>
                 <th className="px-6 py-4 text-[10px] font-bold text-zinc-500 uppercase tracking-wider">Status</th>
                 <th className="px-6 py-4 text-[10px] font-bold text-zinc-500 uppercase tracking-wider text-right">Actions</th>
               </tr>
@@ -221,13 +219,13 @@ export default function MovieRequestsManagement() {
             <tbody className="divide-y divide-zinc-800">
               {loading ? (
                 <tr>
-                  <td colSpan={5} className="px-6 py-20 text-center">
+                  <td colSpan={4} className="px-6 py-20 text-center">
                     <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-emerald-500 mx-auto"></div>
                   </td>
                 </tr>
               ) : filteredRequests.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="px-6 py-20 text-center text-zinc-500">
+                  <td colSpan={4} className="px-6 py-20 text-center text-zinc-500">
                     <Film className="w-12 h-12 mx-auto mb-4 opacity-20" />
                     <p>No movie requests found matching your filters.</p>
                   </td>
@@ -266,69 +264,20 @@ export default function MovieRequestsManagement() {
                       </div>
                     </td>
                     <td className="px-6 py-4">
-                      <div className="flex flex-col">
-                        <span className="text-lg font-bold text-white">{request.requestCount}</span>
-                        <span className="text-[10px] text-zinc-500 uppercase tracking-wider font-bold">Requests</span>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4">
-                      <div className="flex flex-col gap-2">
-                        <select
-                          value={request.status}
-                          onChange={(e) => handleUpdateStatus(request.id, e.target.value as any)}
-                          className={clsx(
-                            "text-xs font-bold px-3 py-1.5 rounded-lg border focus:outline-none transition-colors w-full",
-                            request.status === 'pending' && "bg-yellow-500/10 text-yellow-500 border-yellow-500/20",
-                            request.status === 'completed' && "bg-emerald-500/10 text-emerald-500 border-emerald-500/20",
-                            request.status === 'rejected' && "bg-red-500/10 text-red-500 border-red-500/20"
-                          )}
-                        >
-                          <option value="pending">Pending</option>
-                          <option value="completed">Completed</option>
-                          <option value="rejected">Rejected</option>
-                        </select>
-                        
-                        {editingCommentId === request.id ? (
-                          <div className="flex flex-col gap-1">
-                            <textarea
-                              value={tempComment}
-                              onChange={(e) => setTempComment(e.target.value)}
-                              placeholder="Add a comment..."
-                              className="w-full bg-zinc-950 border border-zinc-800 rounded-lg p-2 text-[10px] focus:outline-none focus:border-emerald-500 min-h-[60px]"
-                              autoFocus
-                            />
-                            <div className="flex gap-1 justify-end">
-                              <button 
-                                onClick={() => setEditingCommentId(null)}
-                                className="p-1 text-zinc-500 hover:text-white"
-                              >
-                                <X className="w-3 h-3" />
-                              </button>
-                              <button 
-                                onClick={() => handleUpdateComment(request.id)}
-                                className="p-1 text-emerald-500 hover:text-emerald-400"
-                              >
-                                <CheckCircle2 className="w-3 h-3" />
-                              </button>
-                            </div>
-                          </div>
-                        ) : (
-                          <button 
-                            onClick={() => {
-                              setEditingCommentId(request.id);
-                              setTempComment(request.adminComment || '');
-                            }}
-                            className="text-[10px] text-zinc-500 hover:text-zinc-300 flex items-center gap-1 text-left"
-                          >
-                            <MessageCircle className="w-3 h-3" />
-                            {request.adminComment ? (
-                              <span className="line-clamp-2 italic">"{request.adminComment}"</span>
-                            ) : (
-                              <span>Add comment</span>
-                            )}
-                          </button>
+                      <select
+                        value={request.status}
+                        onChange={(e) => handleUpdateStatus(request.id, e.target.value as any)}
+                        className={clsx(
+                          "text-xs font-bold px-3 py-1.5 rounded-lg border focus:outline-none transition-colors w-20 text-zinc-100",
+                          request.status === 'pending' && "bg-yellow-500/10 text-yellow-500 border-yellow-500/20",
+                          request.status === 'completed' && "bg-emerald-500/10 text-emerald-500 border-emerald-500/20",
+                          request.status === 'rejected' && "bg-red-500/10 text-red-500 border-red-500/20"
                         )}
-                      </div>
+                      >
+                        <option value="pending">Pending</option>
+                        <option value="completed">Completed</option>
+                        <option value="rejected">Rejected</option>
+                      </select>
                     </td>
                     <td className="px-6 py-4 text-right">
                       <div className="flex items-center justify-end gap-2 transition-opacity">
@@ -357,6 +306,15 @@ export default function MovieRequestsManagement() {
                         )}
                         <button
                           onClick={() => {
+                            setRequestToComment(request);
+                          }}
+                          className="p-2 text-zinc-500 hover:text-emerald-500 hover:bg-emerald-500/10 rounded-lg transition-colors"
+                          title="Add Comment"
+                        >
+                          <MessageSquare className="w-5 h-5" />
+                        </button>
+                        <button
+                          onClick={() => {
                             setRequestToDelete(request.id);
                             setIsDeleteModalOpen(true);
                           }}
@@ -383,6 +341,15 @@ export default function MovieRequestsManagement() {
         onConfirm={handleDeleteRequest}
         onCancel={() => setIsDeleteModalOpen(false)}
       />
+
+      {requestToComment && (
+        <CommentModal
+          isOpen={!!requestToComment}
+          onClose={() => setRequestToComment(null)}
+          onSave={(comment) => handleUpdateComment(requestToComment.id, comment)}
+          initialComment={requestToComment.adminComment || ''}
+        />
+      )}
 
       {/* Content Picker Modal */}
       {isPickerOpen && (

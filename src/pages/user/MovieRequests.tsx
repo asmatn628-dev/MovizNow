@@ -164,8 +164,7 @@ export default function MovieRequests() {
           <div>
             <h3 className="font-bold text-zinc-200">How it works</h3>
             <p className="text-sm text-zinc-400 mt-1">
-              Can't find what you're looking for? Request it here! If others want the same thing, they can upvote your request. 
-              Popular requests are prioritized by our team.
+              Can't find what you're looking for? Request it here!
             </p>
             <div className="mt-3 flex items-center gap-4">
               <span className="text-xs font-medium px-2 py-1 bg-zinc-800 rounded-lg text-zinc-300 border border-zinc-700">

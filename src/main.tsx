@@ -8,12 +8,22 @@ import './index.css';
 // Register service worker for FCM
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
+    // Register FCM SW
     navigator.serviceWorker.register('/firebase-messaging-sw.js')
       .then((registration) => {
         console.log('FCM Service Worker registered with scope:', registration.scope);
       })
       .catch((err) => {
         console.error('FCM Service Worker registration failed:', err);
+      });
+
+    // Register PWA SW
+    navigator.serviceWorker.register('/sw.js')
+      .then((registration) => {
+        console.log('PWA Service Worker registered with scope:', registration.scope);
+      })
+      .catch((err) => {
+        console.error('PWA Service Worker registration failed:', err);
       });
   });
 }

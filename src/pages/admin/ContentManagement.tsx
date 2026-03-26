@@ -552,6 +552,17 @@ export default function ContentManagement() {
       }
     }
 
+    if (data.type === 'movie') {
+      // If movieLinks is empty, initialize with default links
+      setMovieLinks(prev => prev.length > 0 ? prev : [
+        { id: Math.random().toString(36).substr(2, 9), name: '480p', url: '', size: '', unit: 'MB' },
+        { id: Math.random().toString(36).substr(2, 9), name: '720p', url: '', size: '', unit: 'GB' },
+        { id: Math.random().toString(36).substr(2, 9), name: '1080p', url: '', size: '', unit: 'GB' }
+      ]);
+    } else {
+      setMovieLinks([]);
+    }
+    
     if (data.type === 'series' && data.seasons && Array.isArray(data.seasons)) {
       setSeasons(prevSeasons => {
         const updatedSeasons = [...prevSeasons];
