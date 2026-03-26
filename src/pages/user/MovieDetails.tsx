@@ -426,6 +426,12 @@ export default function MovieDetails() {
   };
 
   const handlePlayClick = (url: string, linkName?: string, linkId?: string, isZip?: boolean) => {
+    // Allow Sample link to be played by anyone
+    if (linkId === 'sample') {
+      setLinkPopup({ isOpen: true, url, name: linkName || 'Sample', id: linkId, isZip });
+      return;
+    }
+
     if (!profile) {
       setShowLoginPrompt(true);
       return;
