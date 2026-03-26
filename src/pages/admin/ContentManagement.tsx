@@ -10,7 +10,7 @@ import ConfirmModal from '../../components/ConfirmModal';
 import AlertModal from '../../components/AlertModal';
 import { MediaModal, findTMDBByImdb, searchTMDBByTitle, fetchTMDBDetails, fetchSeriesSeasons, fetchIMDbRating } from '../../components/MediaModal';
 import AIFetchModal from '../../components/AIFetchModal';
-import { formatContentTitle, formatReleaseDate } from '../../utils/contentUtils';
+import { formatContentTitle, formatReleaseDate, formatRuntime, formatDateToMonthDDYYYY } from '../../utils/contentUtils';
 import { handleFirestoreError, OperationType } from '../../utils/firestoreErrorHandler';
 
 export default function ContentManagement() {
@@ -42,6 +42,8 @@ export default function ContentManagement() {
   const [year, setYear] = useState(new Date().getFullYear());
   const [releaseDate, setReleaseDate] = useState('');
   const [runtime, setRuntime] = useState('');
+  const [isDescriptionExpanded, setIsDescriptionExpanded] = useState(false);
+  const [isCastExpanded, setIsCastExpanded] = useState(false);
   
   // Movie specific
   const [movieLinks, setMovieLinks] = useState<QualityLinks>([]);
@@ -127,6 +129,31 @@ export default function ContentManagement() {
     });
     return () => { unsubContent(); unsubGenres(); unsubLangs(); unsubQualities(); };
   }, []);
+
+  useEffect(() => {
+    if (trailerUrl && trailerUrl.includes('youtube.com/watch')) {
+      fetch(`https://www.youtube.com/oembed?url=${trailerUrl}&format=json`)
+        .then(res => res.json())
+        .then(data => {
+          if (data && data.title) {
+            setTrailerTitle(data.title);
+          }
+        })
+        .catch(err => console.error("Error fetching YouTube title:", err));
+    } else if (trailerUrl && trailerUrl.includes('youtu.be/')) {
+      const videoId = trailerUrl.split('youtu.be/')[1].split('?')[0];
+      fetch(`https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v=${videoId}&format=json`)
+        .then(res => res.json())
+        .then(data => {
+          if (data && data.title) {
+            setTrailerTitle(data.title);
+          }
+        })
+        .catch(err => console.error("Error fetching YouTube title:", err));
+    } else {
+      setTrailerTitle('');
+    }
+  }, [trailerUrl]);
 
   useEffect(() => {
     const editId = searchParams.get('edit');
@@ -568,6 +595,46 @@ export default function ContentManagement() {
     });
   };
 
+  const getNotificationPreview = (content: Content | null) => {
+    if (!content) return { title: '', body: '' };
+    
+    let languageName = '';
+    if (content.languageIds && content.languageIds.length > 0) {
+      const langId = content.languageIds.length > 1 ? content.languageIds[1] : content.languageIds[0];
+      const lang = languages.find(l => l.id === langId);
+      if (lang) languageName = lang.name + ' ';
+    }
+
+    let genreNames = '';
+    if (content.genreIds && content.genreIds.length > 0) {
+      genreNames = content.genreIds
+        .map(id => genres.find(g => g.id === id)?.name)
+        .filter(Boolean)
+        .join(', ');
+    }
+
+    let qualityName = '';
+    if (content.qualityId) {
+      const quality = qualities.find(q => q.id === content.qualityId);
+      if (quality) qualityName = quality.name;
+    }
+
+    const contentType = content.type === 'movie' ? 'Movie' : 'Series';
+    const yearStr = content.year ? ` (${content.year})` : '';
+    
+    const title = `🎬 New ${languageName}${contentType} Added: ${content.title}${yearStr}`;
+    
+    let body = '';
+    if (genreNames) body += `${genreNames} ${contentType}`;
+    if (qualityName) body += `${body ? ' in ' : 'In '}${qualityName}`;
+    
+    if (!body) {
+       body = content.description.substring(0, 100) + (content.description.length > 100 ? '...' : '');
+    }
+
+    return { title, body };
+  };
+
   const handleSendNotification = async () => {
     if (!notificationModal.content) return;
     
@@ -575,9 +642,11 @@ export default function ContentManagement() {
     
     try {
       const content = notificationModal.content;
+      const { title, body } = getNotificationPreview(content);
+      
       const notification = {
-        title: `🎬 New ${content.type === 'movie' ? 'Movie' : 'Series'} Added: ${content.title}`,
-        body: content.description.substring(0, 100) + (content.description.length > 100 ? '...' : ''),
+        title,
+        body,
         contentId: content.id,
         posterUrl: content.posterUrl,
         type: content.type,
@@ -719,47 +788,11 @@ export default function ContentManagement() {
   };
 
   const formatRuntimeForShare = (runtimeStr?: string) => {
-    if (!runtimeStr) return '';
-    
-    // Check for existing hh:mm format
-    if (/^\d{1,2}:\d{2}$/.test(runtimeStr)) return runtimeStr;
-
-    // Parse "1h 40m" or "100 min"
-    let totalMinutes = 0;
-    const hoursMatch = runtimeStr.match(/(\d+)\s*h/);
-    const minutesMatch = runtimeStr.match(/(\d+)\s*m/);
-    
-    if (hoursMatch) totalMinutes += parseInt(hoursMatch[1], 10) * 60;
-    if (minutesMatch) totalMinutes += parseInt(minutesMatch[1], 10);
-    
-    if (totalMinutes > 0) {
-        const h = Math.floor(totalMinutes / 60);
-        const m = totalMinutes % 60;
-        return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
-    }
-
-    // Fallback to original parsing if no h/m found
-    const match = runtimeStr.match(/(\d+)/);
-    if (match) {
-      const mins = parseInt(match[1], 10);
-      if (mins >= 60) {
-        const h = Math.floor(mins / 60);
-        const m = mins % 60;
-        return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
-      } else {
-        return `${mins} mins`;
-      }
-    }
-    return runtimeStr;
+    return formatRuntime(runtimeStr);
   };
 
   const formatReleaseDateForShare = (dateStr?: string) => {
-    if (!dateStr) return '';
-    const date = new Date(dateStr);
-    if (!isNaN(date.getTime())) {
-      return date.toLocaleDateString('en-US', { month: 'long', day: '2-digit', year: 'numeric' });
-    }
-    return dateStr;
+    return formatDateToMonthDDYYYY(dateStr);
   };
 
   const executeShare = async (content: Content, selectedSeasonNumbers?: number[]) => {
@@ -812,23 +845,19 @@ export default function ContentManagement() {
 
       seasonsToShare.forEach(season => {
         text += `\n📺 *Season ${season.seasonNumber}${season.year ? ` (${season.year})` : content.year ? ` (${content.year})` : ''}*\n`;
-        const zipLinks = parseLinks(JSON.stringify(season.zipLinks)).sort((a, b) => getSizeInMB(a.size, a.unit) - getSizeInMB(b.size, b.unit));
-        const mkvLinks = parseLinks(JSON.stringify(season.mkvLinks || [])).sort((a, b) => getSizeInMB(a.size, a.unit) - getSizeInMB(b.size, b.unit));
+        const zipLinks = parseLinks(JSON.stringify(season.zipLinks)).filter(l => l && l.url).sort((a, b) => getSizeInMB(a.size, a.unit) - getSizeInMB(b.size, b.unit));
+        const mkvLinks = parseLinks(JSON.stringify(season.mkvLinks || [])).filter(l => l && l.url).sort((a, b) => getSizeInMB(a.size, a.unit) - getSizeInMB(b.size, b.unit));
         
         if (zipLinks.length > 0) {
           text += `📦 *Full Season ZIP:*\n`;
           zipLinks.forEach((link) => {
-            if (link && link.url) {
-              text += `  ▪️ ${link.name} (${link.size}${link.unit})\n  ${link.url}\n`;
-            }
+            text += `  ▪️ ${link.name} (${link.size}${link.unit})\n  ${link.url}\n`;
           });
         }
         if (mkvLinks.length > 0) {
           text += `\n🎞️ *Full Season MKV:*\n`;
           mkvLinks.forEach((link) => {
-            if (link && link.url) {
-              text += `  ▪️ ${link.name} (${link.size}${link.unit})\n  ${link.url}\n`;
-            }
+            text += `  ▪️ ${link.name} (${link.size}${link.unit})\n  ${link.url}\n`;
           });
         }
         if (season.episodes && season.episodes.length > 0) {
@@ -1315,8 +1344,18 @@ export default function ContentManagement() {
                                 return newLinks;
                               });
                             }}
-                            className="flex-1 bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-emerald-500"
+                            className={`${droppableId.startsWith('episode-links') ? 'w-45' : 'w-55'} bg-zinc-950 border border-zinc-800 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:border-emerald-500`}
                           />
+                          <button
+                            type="button"
+                            onClick={() => {
+                              onChange(prev => [...prev, { id: Math.random().toString(36).substr(2, 9), name: '', url: '', size: '', unit: 'MB' }]);
+                            }}
+                            className="p-1.5 bg-emerald-500/10 border border-emerald-500/20 text-emerald-500 rounded-lg hover:bg-emerald-500/20 transition-colors"
+                            title="Add Link"
+                          >
+                            <Plus className="w-3.5 h-3.5" />
+                          </button>
                         </div>
                         {/* 2nd line: Size, Unit, Delete, Drag and drop */}
                         <div className="flex gap-2 items-center">
@@ -1332,7 +1371,7 @@ export default function ContentManagement() {
                                   return newLinks;
                                 });
                               }}
-                              className="w-20 bg-zinc-950 border border-zinc-800 rounded-lg px-2 py-2 text-sm text-center focus:outline-none focus:border-emerald-500"
+                              className="w-20 bg-zinc-950 border border-zinc-800 rounded-lg px-2 py-1.5 text-sm text-center focus:outline-none focus:border-emerald-500"
                             />
                             <div className="flex bg-zinc-950 border border-zinc-800 rounded-lg p-0.5 shrink-0">
                               <button
@@ -1389,7 +1428,7 @@ export default function ContentManagement() {
                             });
                           }}
                           onBlur={(e) => handleUrlBlur(e.target.value, idx)}
-                          className="flex-1 bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-emerald-500"
+                          className="flex-1 bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-emerald-500"
                         />
                       </div>
                     </div>
@@ -1397,15 +1436,6 @@ export default function ContentManagement() {
                 </Draggable>
               ))}
               {provided.placeholder}
-              <button
-                type="button"
-                onClick={() => {
-                  onChange(prev => [...prev, { id: Math.random().toString(36).substr(2, 9), name: '', url: '', size: '', unit: 'MB' }]);
-                }}
-                className="w-full py-2 border-2 border-dashed border-zinc-800 rounded-lg text-zinc-500 hover:text-emerald-500 hover:border-emerald-500/50 hover:bg-emerald-500/5 transition-all flex items-center justify-center gap-2 text-sm font-medium"
-              >
-                <Plus className="w-4 h-4" /> Add New Link
-              </button>
             </div>
           )}
         </Droppable>
@@ -1683,119 +1713,136 @@ export default function ContentManagement() {
       {isModalOpen && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 z-50 overflow-y-auto">
           <div className="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-4xl my-8 flex flex-col max-h-[90vh]">
-            <div className="p-6 border-b border-zinc-800 flex items-center justify-between sticky top-0 bg-zinc-900 z-10">
-              <div className="flex items-center gap-4">
-                <h2 className="text-2xl font-bold">{editingId ? 'Edit Content' : 'Add Content'}</h2>
+            <div className="p-4 border-b border-zinc-800 flex items-center justify-between sticky top-0 bg-zinc-900 z-10">
+              <div className="flex items-center gap-2 sm:gap-4">
+                <h2 className="text-lg sm:text-xl font-bold whitespace-nowrap">{editingId ? 'Edit Content' : 'Add Content'}</h2>
                 <button
                   type="button"
                   onClick={() => setIsAutoFillModalOpen(true)}
-                  className="bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-500 px-4 py-2 rounded-xl text-sm font-bold flex items-center gap-2 transition-colors border border-emerald-500/20"
+                  className="bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-500 px-2 sm:px-3 py-1.5 rounded-xl text-xs sm:text-sm font-bold flex items-center gap-1.5 sm:gap-2 transition-colors border border-emerald-500/20 whitespace-nowrap"
                 >
-                  <ClipboardPaste className="w-4 h-4" /> Auto-Fill from Text
+                  <ClipboardPaste className="w-3.5 h-3.5 sm:w-4 sm:h-4" /> Auto-Fill from Text
                 </button>
               </div>
-              <button onClick={() => setIsModalOpen(false)} className="text-zinc-400 hover:text-white p-2">
-                <X className="w-6 h-6" />
+              <button onClick={() => setIsModalOpen(false)} className="text-zinc-400 hover:text-white p-1 sm:p-2 ml-2 shrink-0">
+                <X className="w-5 h-5" />
               </button>
             </div>
             
-            <div className="flex-1 overflow-y-auto p-6">
-              <form id="content-form" onSubmit={handleSave} className="space-y-6">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="flex-1 overflow-y-auto p-4">
+              <form id="content-form" onSubmit={handleSave} className="space-y-4">
+                <div className="grid grid-cols-1 gap-4">
+                  
+                  {/* 1. Type+Status */}
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="flex gap-4">
-                    <div className="flex-1">
-                      <label className="block text-xs font-medium text-zinc-500 mb-1">Type</label>
-                      <div className="flex gap-2">
-                        <label className={`flex-1 flex items-center justify-center gap-1 p-2 rounded-lg border cursor-pointer transition-colors text-xs ${type === 'movie' ? 'bg-emerald-500/10 border-emerald-500 text-emerald-500' : 'bg-zinc-950 border-zinc-800 text-zinc-400'}`}>
-                          <input type="radio" name="type" value="movie" checked={type === 'movie'} onChange={() => setType('movie')} className="hidden" />
-                          <Film className="w-4 h-4" /> Movie
-                        </label>
-                        <label className={`flex-1 flex items-center justify-center gap-1 p-2 rounded-lg border cursor-pointer transition-colors text-xs ${type === 'series' ? 'bg-emerald-500/10 border-emerald-500 text-emerald-500' : 'bg-zinc-950 border-zinc-800 text-zinc-400'}`}>
-                          <input type="radio" name="type" value="series" checked={type === 'series'} onChange={() => setType('series')} className="hidden" />
-                          <Tv className="w-4 h-4" /> Series
-                        </label>
+                    <div className="flex gap-4">
+                      <div className="flex-1">
+                        <label className="block text-xs font-medium text-zinc-500 mb-1">Type</label>
+                        <div className="flex gap-2">
+                          <label className={`flex-1 flex items-center justify-center gap-1 p-1.5 rounded-lg border cursor-pointer transition-colors text-xs ${type === 'movie' ? 'bg-emerald-500/10 border-emerald-500 text-emerald-500' : 'bg-zinc-950 border-zinc-800 text-zinc-400'}`}>
+                            <input type="radio" name="type" value="movie" checked={type === 'movie'} onChange={() => setType('movie')} className="hidden" />
+                            <Film className="w-3.5 h-3.5" /> Movie
+                          </label>
+                          <label className={`flex-1 flex items-center justify-center gap-1 p-1.5 rounded-lg border cursor-pointer transition-colors text-xs ${type === 'series' ? 'bg-emerald-500/10 border-emerald-500 text-emerald-500' : 'bg-zinc-950 border-zinc-800 text-zinc-400'}`}>
+                            <input type="radio" name="type" value="series" checked={type === 'series'} onChange={() => setType('series')} className="hidden" />
+                            <Tv className="w-3.5 h-3.5" /> Series
+                          </label>
+                        </div>
                       </div>
-                    </div>
-                    <div className="flex-1">
-                      <label className="block text-xs font-medium text-zinc-500 mb-1">Status</label>
-                      <div className="flex gap-2">
-                        <label className={`flex-1 flex items-center justify-center gap-1 p-2 rounded-lg border cursor-pointer transition-colors text-xs ${status === 'published' ? 'bg-emerald-500/10 border-emerald-500 text-emerald-500' : 'bg-zinc-950 border-zinc-800 text-zinc-400'}`}>
-                          <input type="radio" name="status" value="published" checked={status === 'published'} onChange={() => setStatus('published')} className="hidden" />
-                          <Eye className="w-4 h-4" /> Pub
-                        </label>
-                        <label className={`flex-1 flex items-center justify-center gap-1 p-2 rounded-lg border cursor-pointer transition-colors text-xs ${status === 'draft' ? 'bg-yellow-500/10 border-yellow-500 text-yellow-500' : 'bg-zinc-950 border-zinc-800 text-zinc-400'}`}>
-                          <input type="radio" name="status" value="draft" checked={status === 'draft'} onChange={() => setStatus('draft')} className="hidden" />
-                          <EyeOff className="w-4 h-4" /> Draft
-                        </label>
+                      <div className="flex-1">
+                        <label className="block text-xs font-medium text-zinc-500 mb-1">Status</label>
+                        <div className="flex gap-2">
+                          <label className={`flex-1 flex items-center justify-center gap-1 p-1.5 rounded-lg border cursor-pointer transition-colors text-xs ${status === 'published' ? 'bg-emerald-500/10 border-emerald-500 text-emerald-500' : 'bg-zinc-950 border-zinc-800 text-zinc-400'}`}>
+                            <input type="radio" name="status" value="published" checked={status === 'published'} onChange={() => setStatus('published')} className="hidden" />
+                            <Eye className="w-3.5 h-3.5" /> Pub
+                          </label>
+                          <label className={`flex-1 flex items-center justify-center gap-1 p-1.5 rounded-lg border cursor-pointer transition-colors text-xs ${status === 'draft' ? 'bg-yellow-500/10 border-yellow-500 text-yellow-500' : 'bg-zinc-950 border-zinc-800 text-zinc-400'}`}>
+                            <input type="radio" name="status" value="draft" checked={status === 'draft'} onChange={() => setStatus('draft')} className="hidden" />
+                            <EyeOff className="w-3.5 h-3.5" /> Draft
+                          </label>
+                        </div>
                       </div>
-                    </div>
                     </div>
                   </div>
                   
-                  <div className="md:col-span-2 grid grid-cols-1 md:grid-cols-12 gap-4">
-                    <div className="md:col-span-6">
-                      <label className="block text-xs font-medium text-zinc-500 mb-1">Title</label>
-                      <input type="text" value={title} onChange={(e) => setTitle(e.target.value)} className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-emerald-500" />
+                  {/* 2. Title */}
+                  <div>
+                    <label className="block text-xs font-medium text-zinc-500 mb-1">Title</label>
+                    <input type="text" value={title} onChange={(e) => setTitle(e.target.value)} className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-emerald-500" />
+                  </div>
+                  
+                  {/* 3. Release Year+ AI Fetch +Master Fetch */}
+                  <div>
+                    <label className="block text-xs font-medium text-zinc-500 mb-1">Release Year</label>
+                    <div className="flex gap-2">
+                      <input type="number" value={year || ''} onChange={(e) => setYear(parseInt(e.target.value) || new Date().getFullYear())} className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:border-emerald-500" />
+                      <button type="button" onClick={handleMasterAutoFetch} disabled={!title} className="bg-emerald-500 hover:bg-emerald-600 disabled:bg-emerald-500/50 text-white px-2 py-1.5 rounded-lg text-xs font-medium transition-colors flex items-center justify-center gap-2 whitespace-nowrap" title="Auto Fetch All with AI">
+                        <RefreshCw className="w-3.5 h-3.5" />
+                        AI Fetch
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setIsMasterFetchModalOpen(true)}
+                        className="px-3 py-1.5 bg-black border border-cyan-500 text-white rounded-lg text-xs font-medium hover:bg-zinc-900 transition-colors flex items-center gap-1.5 whitespace-nowrap"
+                      >
+                        <Search className="w-3 h-3" />
+                        Master Fetch
+                      </button>
                     </div>
-                    <div className="md:col-span-2">
-                      <label className="block text-xs font-medium text-zinc-500 mb-1">Release Year</label>
-                      <div className="flex gap-2">
-                        <input type="number" value={year || ''} onChange={(e) => setYear(parseInt(e.target.value) || new Date().getFullYear())} className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-2 py-1 text-sm focus:outline-none focus:border-emerald-500" />
-                        <button type="button" onClick={handleMasterAutoFetch} disabled={!title} className="bg-emerald-500 hover:bg-emerald-600 disabled:bg-emerald-500/50 text-white px-2 py-1 rounded-lg text-xs font-medium transition-colors flex items-center justify-center gap-2 whitespace-nowrap" title="Auto Fetch All with AI">
-                          <RefreshCw className="w-4 h-4" />
-                          AI Fetch
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setIsMasterFetchModalOpen(true)}
-                          className="px-3 py-1.5 bg-black border border-cyan-500 text-white rounded-lg text-xs font-medium hover:bg-zinc-900 transition-colors flex items-center gap-1.5 whitespace-nowrap"
-                        >
-                          <Search className="w-3 h-3" />
-                          Master Fetch
-                        </button>
+                  </div>
+
+                  {/* 4. Release date+Runtime */}
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-xs font-medium text-zinc-500 mb-1">Release Date</label>
+                      <input type="text" placeholder="DD-MM-YYYY" value={releaseDate} onChange={(e) => setReleaseDate(e.target.value)} className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-emerald-500" />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-zinc-500 mb-1">Runtime</label>
+                      <input type="text" placeholder="e.g. 120 min" value={runtime} onChange={(e) => setRuntime(e.target.value)} className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-emerald-500" />
+                    </div>
+                  </div>
+
+                  {/* 5. Trailer Link */}
+                  <div>
+                    <label className="block text-xs font-medium text-zinc-500 mb-1">
+                      {trailerTitle ? trailerTitle : "Trailer URL (YouTube)"}
+                    </label>
+                    <input type="url" value={trailerUrl} onChange={(e) => setTrailerUrl(e.target.value)} className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-emerald-500" />
+                  </div>
+
+                  {/* 6. IMDb Link + Rating */}
+                  <div>
+                    <label className="block text-xs font-medium text-zinc-500 mb-1">IMDb Link & Rating (Optional)</label>
+                    <div className="flex gap-2">
+                      <div className="relative flex-1">
+                        <input 
+                          type="url" 
+                          value={imdbLink} 
+                          onChange={(e) => setImdbLink(e.target.value)} 
+                          className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-emerald-500" 
+                          placeholder="https://www.imdb.com/title/..." 
+                        />
+                      </div>
+                      <div className="w-24">
+                        <input 
+                          type="text" 
+                          value={imdbRating} 
+                          onChange={(e) => setImdbRating(e.target.value)} 
+                          className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:border-emerald-500" 
+                          placeholder="Rating" 
+                        />
                       </div>
                     </div>
-                    <div className="md:col-span-2">
-                      <label className="block text-xs font-medium text-zinc-500 mb-1">Release Date</label>
-                      <input type="text" placeholder="DD-MM-YYYY" value={releaseDate} onChange={(e) => setReleaseDate(e.target.value)} className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-emerald-500" />
-                    </div>
-                    <div className="md:col-span-2">
-                      <label className="block text-xs font-medium text-zinc-500 mb-1">Runtime</label>
-                      <input type="text" placeholder="e.g. 120 min" value={runtime} onChange={(e) => setRuntime(e.target.value)} className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-emerald-500" />
-                    </div>
                   </div>
 
-                  <div className="md:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-xs font-medium text-zinc-500 mb-1">Description</label>
-                      <textarea rows={3} value={description} onChange={(e) => setDescription(e.target.value)} className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-emerald-500" />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-medium text-zinc-500 mb-1">Cast (comma separated)</label>
-                      <textarea rows={3} value={cast} onChange={(e) => setCast(e.target.value)} className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-emerald-500" />
-                    </div>
-                  </div>
-
-                  <div className="flex flex-col sm:flex-row gap-4">
+                  {/* 7. Poster link+Upload from gallery (remove auto fetch button) */}
+                  <div className="flex gap-4">
                     <div className="flex-1">
                       <label className="block text-xs font-medium text-zinc-500 mb-1">Poster (URL or Upload)</label>
                       <div className="flex gap-2">
-                        <input type="text" placeholder="https://..." value={posterUrl} onChange={(e) => setPosterUrl(e.target.value)} className="flex-1 bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-emerald-500" />
-                        <button
-                          type="button"
-                          onClick={fetchPosterWithAI}
-                          disabled={fetchingPoster || !title}
-                          className="bg-emerald-500 hover:bg-emerald-600 disabled:bg-emerald-500/50 text-white px-3 py-2 rounded-lg text-xs font-medium transition-colors flex items-center justify-center min-w-[40px]"
-                          title="Auto Fetch HD Poster with AI"
-                        >
-                          {fetchingPoster ? (
-                            <div className="animate-spin rounded-full h-4 w-4 border-t-2 border-b-2 border-white"></div>
-                          ) : (
-                            <Search className="w-4 h-4" />
-                          )}
-                        </button>
-                        <label className="flex items-center justify-center bg-zinc-800 hover:bg-zinc-700 text-white px-3 rounded-lg cursor-pointer transition-colors">
+                        <input type="text" placeholder="https://..." value={posterUrl} onChange={(e) => setPosterUrl(e.target.value)} className="flex-1 bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-emerald-500" />
+                        <label className="flex items-center justify-center bg-zinc-800 hover:bg-zinc-700 text-white px-3 py-1.5 rounded-lg cursor-pointer transition-colors">
                           <Upload className="w-4 h-4" />
                           <input type="file" accept="image/*" onChange={handleImageUpload} className="hidden" />
                         </label>
@@ -1807,7 +1854,7 @@ export default function ContentManagement() {
                       )}
                     </div>
                     {posterUrl && (
-                      <div className="w-20 aspect-[2/3] rounded-lg overflow-hidden border border-zinc-800 bg-zinc-950 shrink-0">
+                      <div className="w-12 aspect-[2/3] rounded-lg overflow-hidden border border-zinc-800 bg-zinc-950 shrink-0">
                         <img 
                           src={posterUrl} 
                           alt="Mini Poster" 
@@ -1821,49 +1868,100 @@ export default function ContentManagement() {
                     )}
                   </div>
 
-                  <div>
-                    <label className="block text-xs font-medium text-zinc-500 mb-1">Trailer URL (YouTube)</label>
-                    <div className="space-y-2">
-                      <input type="url" value={trailerUrl} onChange={(e) => setTrailerUrl(e.target.value)} className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-emerald-500" />
-                      {trailerTitle && (
-                        <div className="flex items-center gap-2 px-3 py-1.5 bg-zinc-950 border border-zinc-800 rounded-lg">
-                          <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse" />
-                          <span className="text-xs text-zinc-400 truncate font-medium">{trailerTitle}</span>
+                  {/* 8. Description+Cast (with Arrows) */}
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="relative">
+                      <div 
+                        className="flex items-center justify-between bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-1 cursor-pointer"
+                        onClick={() => setIsDescriptionExpanded(!isDescriptionExpanded)}
+                      >
+                        <span className="text-xs font-medium text-zinc-400">Description</span>
+                        {isDescriptionExpanded ? <ChevronUp className="w-3.5 h-3.5 text-zinc-400" /> : <ChevronDown className="w-3.5 h-3.5 text-zinc-400" />}
+                      </div>
+                      {isDescriptionExpanded && (
+                        <div className="mt-1">
+                          <textarea rows={3} value={description} onChange={(e) => setDescription(e.target.value)} className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-emerald-500" placeholder="Enter description..." />
+                        </div>
+                      )}
+                    </div>
+                    <div className="relative">
+                      <div 
+                        className="flex items-center justify-between bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-1 cursor-pointer"
+                        onClick={() => setIsCastExpanded(!isCastExpanded)}
+                      >
+                        <span className="text-xs font-medium text-zinc-400">Cast</span>
+                        {isCastExpanded ? <ChevronUp className="w-3.5 h-3.5 text-zinc-400" /> : <ChevronDown className="w-3.5 h-3.5 text-zinc-400" />}
+                      </div>
+                      {isCastExpanded && (
+                        <div className="mt-1">
+                          <textarea rows={3} value={cast} onChange={(e) => setCast(e.target.value)} className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-emerald-500" placeholder="Enter cast (comma separated)..." />
                         </div>
                       )}
                     </div>
                   </div>
 
+                  {/* 9. Genres */}
                   <div>
-                    <label className="block text-xs font-medium text-zinc-500 mb-1">Sample URL (Optional)</label>
-                    <input type="url" value={sampleUrl} onChange={(e) => setSampleUrl(e.target.value)} className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-emerald-500" placeholder="Sample video link" />
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-medium text-zinc-500 mb-1">IMDb Link (Optional)</label>
-                    <div className="flex gap-2">
-                      <div className="relative flex-1">
-                        <input 
-                          type="url" 
-                          value={imdbLink} 
-                          onChange={(e) => setImdbLink(e.target.value)} 
-                          className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-emerald-500" 
-                          placeholder="https://www.imdb.com/title/..." 
-                        />
-                      </div>
-                      <div className="w-16">
-                        <input 
-                          type="text" 
-                          value={imdbRating} 
-                          onChange={(e) => setImdbRating(e.target.value)} 
-                          className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-2 py-2 text-sm focus:outline-none focus:border-emerald-500" 
-                          placeholder="Rating" 
-                        />
-                      </div>
+                    <label className="block text-xs font-medium text-zinc-500 mb-1">Genres</label>
+                    <div className="flex flex-wrap gap-2">
+                      {genres.map(g => {
+                        const isSelected = selectedGenres.includes(g.id);
+                        return (
+                          <button
+                            key={g.id}
+                            type="button"
+                            onClick={() => {
+                              if (isSelected) {
+                                setSelectedGenres(selectedGenres.filter(id => id !== g.id));
+                              } else {
+                                setSelectedGenres([...selectedGenres, g.id]);
+                              }
+                            }}
+                            className={`px-3 py-1 rounded-full text-xs font-medium transition-colors border ${
+                              isSelected 
+                                ? 'bg-emerald-500/20 border-emerald-500 text-emerald-500'
+                                : 'bg-zinc-900 border-zinc-700 text-zinc-400 hover:bg-zinc-800 hover:text-white'
+                            }`}
+                          >
+                            {g.name}
+                          </button>
+                        );
+                      })}
                     </div>
                   </div>
 
-                  <div className="md:col-span-2">
+                  {/* 10. Languages */}
+                  <div>
+                    <label className="block text-xs font-medium text-zinc-500 mb-1">Languages</label>
+                    <div className="flex flex-wrap gap-2">
+                      {languages.map(l => {
+                        const isSelected = selectedLanguages.includes(l.id);
+                        return (
+                          <button
+                            key={l.id}
+                            type="button"
+                            onClick={() => {
+                              if (isSelected) {
+                                setSelectedLanguages(selectedLanguages.filter(id => id !== l.id));
+                              } else {
+                                setSelectedLanguages([...selectedLanguages, l.id]);
+                              }
+                            }}
+                            className={`px-3 py-1 rounded-full text-xs font-medium transition-colors border ${
+                              isSelected 
+                                ? 'bg-emerald-500/20 border-emerald-500 text-emerald-500'
+                                : 'bg-zinc-900 border-zinc-700 text-zinc-400 hover:bg-zinc-800 hover:text-white'
+                            }`}
+                          >
+                            {l.name}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* 11. Print Quality */}
+                  <div>
                     <label className="block text-xs font-medium text-zinc-500 mb-1">Print Quality</label>
                     <div className="flex flex-wrap gap-2">
                       {qualities.map(q => (
@@ -1883,66 +1981,14 @@ export default function ContentManagement() {
                     </div>
                   </div>
 
+                  {/* 12. Sample link */}
                   <div>
-                    <label className="block text-xs font-medium text-zinc-500 mb-1">Genres</label>
-                    <div className="flex flex-wrap gap-2">
-                      {genres.map(g => {
-                        const isSelected = selectedGenres.includes(g.id);
-                        return (
-                          <button
-                            key={g.id}
-                            type="button"
-                            onClick={() => {
-                              if (isSelected) {
-                                setSelectedGenres(selectedGenres.filter(id => id !== g.id));
-                              } else {
-                                setSelectedGenres([...selectedGenres, g.id]);
-                              }
-                            }}
-                            className={`px-3 py-1 rounded-full text-xs font-medium transition-colors border ${
-                              isSelected 
-                                ? 'bg-emerald-500/20 border-emerald-500 text-emerald-500' 
-                                : 'bg-zinc-900 border-zinc-700 text-zinc-400 hover:bg-zinc-800 hover:text-white'
-                            }`}
-                          >
-                            {g.name}
-                          </button>
-                        );
-                      })}
-                    </div>
+                    <input type="url" value={sampleUrl} onChange={(e) => setSampleUrl(e.target.value)} className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-emerald-500" placeholder="Sample Video file" />
                   </div>
 
-                  <div>
-                    <label className="block text-xs font-medium text-zinc-500 mb-1">Languages</label>
-                    <div className="flex flex-wrap gap-2">
-                      {languages.map(l => {
-                        const isSelected = selectedLanguages.includes(l.id);
-                        return (
-                          <button
-                            key={l.id}
-                            type="button"
-                            onClick={() => {
-                              if (isSelected) {
-                                setSelectedLanguages(selectedLanguages.filter(id => id !== l.id));
-                              } else {
-                                setSelectedLanguages([...selectedLanguages, l.id]);
-                              }
-                            }}
-                            className={`px-3 py-1 rounded-full text-xs font-medium transition-colors border ${
-                              isSelected 
-                                ? 'bg-emerald-500/20 border-emerald-500 text-emerald-500' 
-                                : 'bg-zinc-900 border-zinc-700 text-zinc-400 hover:bg-zinc-800 hover:text-white'
-                            }`}
-                          >
-                            {l.name}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
                 </div>
 
-                <hr className="border-zinc-800" />
+                <hr className="border-zinc-800 my-4" />
 
                 {type === 'movie' ? (
                   <div>
@@ -2064,7 +2110,7 @@ export default function ContentManagement() {
                             <div className="space-y-4">
                               {season.episodes.map((ep, eIdx) => (
                                 <div key={ep.id} className="bg-zinc-900 border border-zinc-800 rounded-lg p-4">
-                                  <div className="flex gap-4 mb-4">
+                                  <div className="flex gap-1 mb-4">
                                     <input
                                       type="number"
                                       value={ep.episodeNumber}
@@ -2073,8 +2119,19 @@ export default function ContentManagement() {
                                         newSeasons[sIdx].episodes[eIdx].episodeNumber = parseInt(e.target.value) || 0;
                                         setSeasons(newSeasons);
                                       }}
-                                      className="w-20 bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm"
+                                      className="w-10 bg-zinc-950 border border-zinc-800 rounded-lg px-1 py-1 text-sm text-center"
                                       placeholder="Ep #"
+                                    />
+                                    <input
+                                      type="text"
+                                      value={ep.duration || ''}
+                                      onChange={(e) => {
+                                        const newSeasons = [...seasons];
+                                        newSeasons[sIdx].episodes[eIdx].duration = e.target.value;
+                                        setSeasons(newSeasons);
+                                      }}
+                                      className="w-14 bg-zinc-950 border border-zinc-800 rounded-lg px-1 py-1 text-sm text-center"
+                                      placeholder="Dur"
                                     />
                                     <input
                                       type="text"
@@ -2086,17 +2143,6 @@ export default function ContentManagement() {
                                       }}
                                       className="flex-1 bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm"
                                       placeholder="Episode Title"
-                                    />
-                                    <input
-                                      type="text"
-                                      value={ep.duration || ''}
-                                      onChange={(e) => {
-                                        const newSeasons = [...seasons];
-                                        newSeasons[sIdx].episodes[eIdx].duration = e.target.value;
-                                        setSeasons(newSeasons);
-                                      }}
-                                      className="w-24 bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm"
-                                      placeholder="Duration"
                                     />
                                     <button
                                       type="button"
@@ -2418,8 +2464,8 @@ export default function ContentManagement() {
                 />
               )}
               <div>
-                <h3 className="font-bold text-white mb-1">🎬 New {notificationModal.content.type === 'movie' ? 'Movie' : 'Series'} Added</h3>
-                <p className="text-sm text-zinc-400 line-clamp-2">{notificationModal.content.title}</p>
+                <h3 className="font-bold text-white mb-1">{getNotificationPreview(notificationModal.content).title}</h3>
+                <p className="text-sm text-zinc-400 line-clamp-2">{getNotificationPreview(notificationModal.content).body}</p>
               </div>
             </div>
 

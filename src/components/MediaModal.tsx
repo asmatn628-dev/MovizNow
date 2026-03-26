@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { X, Search, Loader2 } from 'lucide-react';
+import { motion, AnimatePresence } from 'motion/react';
 
 interface MediaModalProps {
   isOpen: boolean;
@@ -135,8 +136,6 @@ export const MediaModal: React.FC<MediaModalProps> = ({ isOpen, onClose, initial
     }
   }, [isOpen, initialImdbId, initialTitle, initialYear]);
 
-  if (!isOpen) return null;
-
   const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
   async function findTMDBByImdb(imdbID: string) {
@@ -167,7 +166,7 @@ export const MediaModal: React.FC<MediaModalProps> = ({ isOpen, onClose, initial
   }
 
   async function fetchTMDBDetails(tmdbId: string, type: string) {
-    const url = `${TMDB_BASE}/${type}/${tmdbId}?api_key=${TMDB_API_KEY}&append_to_response=credits,external_ids,content_ratings`;
+    const url = `${TMDB_BASE}/${type}/${tmdbId}?api_key=${TMDB_API_KEY}&append_to_response=credits,external_ids,content_ratings,videos`;
     const res = await fetch(url);
     return await res.json();
   }
@@ -263,10 +262,28 @@ export const MediaModal: React.FC<MediaModalProps> = ({ isOpen, onClose, initial
         imdbLink: details.external_ids?.imdb_id ? `https://www.imdb.com/title/${details.external_ids.imdb_id}` : '',
         imdbRating: imdbRatingData?.rating && imdbRatingData.rating !== 'N/A' ? `${imdbRatingData.rating}/10` : '',
         genres: details.genres?.map((g: any) => g.name) || [],
+        trailerUrl: details.videos?.results?.find((v: any) => v.site === 'YouTube' && v.type === 'Trailer')?.key 
+          ? `https://www.youtube.com/watch?v=${details.videos.results.find((v: any) => v.site === 'YouTube' && v.type === 'Trailer').key}` 
+          : '',
         seasons: seasonsData
       };
 
       setFetchedData(parsedData);
+
+      // Fetch YouTube title if trailerUrl exists
+      if (parsedData.trailerUrl) {
+        try {
+          const res = await fetch(`https://www.youtube.com/oembed?url=${parsedData.trailerUrl}&format=json`);
+          if (res.ok) {
+            const ytData = await res.json();
+            if (ytData.title) {
+              setFetchedData(prev => prev ? { ...prev, trailerTitle: ytData.title } : null);
+            }
+          }
+        } catch (e) {
+          console.error("Error fetching YouTube title in modal:", e);
+        }
+      }
       
       // Select all fields by default if not already set
       const allFields: Record<string, boolean> = {};
@@ -302,6 +319,10 @@ export const MediaModal: React.FC<MediaModalProps> = ({ isOpen, onClose, initial
     Object.keys(selectedFields).forEach(key => {
       if (selectedFields[key]) {
         dataToApply[key] = fetchedData[key];
+        // If trailerUrl is selected, also include trailerTitle
+        if (key === 'trailerUrl' && fetchedData.trailerTitle) {
+          dataToApply.trailerTitle = fetchedData.trailerTitle;
+        }
       }
     });
 
@@ -331,7 +352,14 @@ export const MediaModal: React.FC<MediaModalProps> = ({ isOpen, onClose, initial
   };
 
   return (
-    <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
+    <AnimatePresence>
+      {isOpen && (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4"
+        >
       <div className="bg-zinc-900 border border-zinc-800 rounded-xl w-full max-w-3xl max-h-[90vh] flex flex-col shadow-2xl">
         <div className="flex items-center justify-between p-4 border-b border-zinc-800">
           <h2 className="text-lg font-semibold text-white">Master Fetch</h2>
@@ -389,6 +417,7 @@ export const MediaModal: React.FC<MediaModalProps> = ({ isOpen, onClose, initial
                     { key: 'runtime', label: 'Runtime', value: fetchedData.runtime },
                     { key: 'imdbRating', label: 'IMDb Rating', value: fetchedData.imdbRating },
                     { key: 'imdbLink', label: 'IMDb Link', value: fetchedData.imdbLink },
+                    { key: 'trailerUrl', label: 'Trailer URL', value: fetchedData.trailerUrl },
                   ].map(field => field.value ? (
                     <div key={field.key} className="flex items-start gap-3">
                       <input 
@@ -399,7 +428,12 @@ export const MediaModal: React.FC<MediaModalProps> = ({ isOpen, onClose, initial
                       />
                       <div>
                         <div className="text-xs text-zinc-500 font-medium uppercase">{field.label}</div>
-                        <div className="text-sm text-white">{field.value}</div>
+                        <div className="text-sm text-white break-all">{field.value}</div>
+                        {field.key === 'trailerUrl' && fetchedData.trailerTitle && (
+                          <div className="text-xs text-emerald-500 mt-1 font-medium">
+                            Title: {fetchedData.trailerTitle}
+                          </div>
+                        )}
                       </div>
                     </div>
                   ) : null)}
@@ -521,7 +555,9 @@ export const MediaModal: React.FC<MediaModalProps> = ({ isOpen, onClose, initial
             </button>
           </div>
         )}
-      </div>
-    </div>
+          </div>
+        </motion.div>
+      )}
+    </AnimatePresence>
   );
 };

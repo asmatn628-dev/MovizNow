@@ -40,6 +40,7 @@ export const formatReleaseDate = (dateString?: string) => {
 
 export const formatRuntime = (runtime?: string) => {
   if (!runtime) return '';
+  
   // Check if runtime is in H:MM or HH:MM format
   const timeMatch = runtime.match(/^(\d{1,2}):(\d{2})$/);
   if (timeMatch) {
@@ -50,5 +51,68 @@ export const formatRuntime = (runtime?: string) => {
     }
     return `${minutes}m`;
   }
+
+  let totalMinutes = 0;
+  let isEpisode = runtime.toLowerCase().includes('/episode');
+  
+  // Check if it's already in Xh XXm format or similar
+  const hMatch = runtime.match(/(\d+)\s*h/i);
+  const mMatch = runtime.match(/(\d+)\s*m(in|ins)?\b/i);
+  
+  if (hMatch || mMatch) {
+    if (hMatch) totalMinutes += parseInt(hMatch[1], 10) * 60;
+    if (mMatch) totalMinutes += parseInt(mMatch[1], 10);
+  } else {
+    // Just a number
+    const numMatch = runtime.match(/^(\d+)$/);
+    if (numMatch) {
+      totalMinutes = parseInt(numMatch[1], 10);
+    }
+  }
+  
+  if (totalMinutes > 0) {
+    const hours = Math.floor(totalMinutes / 60);
+    const minutes = totalMinutes % 60;
+    let result = '';
+    if (hours > 0) {
+      result = `${hours}h ${minutes}m`;
+    } else {
+      result = `${minutes}m`;
+    }
+    return isEpisode ? `${result}/episode` : result;
+  }
+
   return runtime;
+};
+
+export const formatDateToMonthDDYYYY = (dateString?: string) => {
+  if (!dateString) return '';
+  
+  const parts = dateString.split('-');
+  if (parts.length === 3) {
+    let year, month, day;
+    
+    // Check if YYYY-MM-DD
+    if (parts[0].length === 4) {
+      [year, month, day] = parts;
+    } 
+    // Check if DD-MM-YYYY
+    else if (parts[2].length === 4) {
+      [day, month, year] = parts;
+    } else {
+      return dateString;
+    }
+    
+    const monthNames = [
+      "January", "February", "March", "April", "May", "June",
+      "July", "August", "September", "October", "November", "December"
+    ];
+    
+    const monthIndex = parseInt(month, 10) - 1;
+    if (monthIndex >= 0 && monthIndex < 12) {
+      return `${monthNames[monthIndex]} ${parseInt(day, 10)}, ${year}`;
+    }
+  }
+  
+  return dateString;
 };

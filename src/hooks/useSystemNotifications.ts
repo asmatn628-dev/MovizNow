@@ -63,18 +63,20 @@ export function useSystemNotifications(profile: UserProfile | null) {
                   myReg.showNotification(notification.title, {
                     body: notification.body,
                     icon: notification.posterUrl || '/favicon.ico',
+                    image: notification.posterUrl,
                     tag: notification.id,
                     data: {
                       url: notification.contentId ? `/movie/${notification.contentId}` : '/'
                     }
-                  });
+                  } as any);
                 } else {
                   // Fallback to standard Notification if SW not found or not active yet
                   const sysNotif = new Notification(notification.title, {
                     body: notification.body,
                     icon: notification.posterUrl || '/favicon.ico',
+                    image: notification.posterUrl,
                     tag: notification.id,
-                  });
+                  } as any);
 
                   sysNotif.onclick = () => {
                     window.focus();
@@ -89,8 +91,9 @@ export function useSystemNotifications(profile: UserProfile | null) {
               const sysNotif = new Notification(notification.title, {
                 body: notification.body,
                 icon: notification.posterUrl || '/favicon.ico',
+                image: notification.posterUrl,
                 tag: notification.id,
-              });
+              } as any);
 
               sysNotif.onclick = () => {
                 window.focus();

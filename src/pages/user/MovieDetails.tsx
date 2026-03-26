@@ -236,13 +236,21 @@ export default function MovieDetails() {
 
         if (tmdbData && needsStaticData) {
           const typePath = mergedContent.type === 'series' ? 'tv' : 'movie';
-          const detailsRes = await fetch(`https://api.themoviedb.org/3/${typePath}/${tmdbData.id}?api_key=${TMDB_API_KEY}&append_to_response=credits,external_ids`);
+          const detailsRes = await fetch(`https://api.themoviedb.org/3/${typePath}/${tmdbData.id}?api_key=${TMDB_API_KEY}&append_to_response=credits,external_ids,videos`);
           const details = await detailsRes.json();
 
           if (!mergedContent.description && details.overview) { updates.description = details.overview; hasUpdates = true; }
           if (!mergedContent.releaseDate && (details.release_date || details.first_air_date)) { updates.releaseDate = details.release_date || details.first_air_date; hasUpdates = true; }
           if (!mergedContent.posterUrl && details.poster_path) { updates.posterUrl = `https://image.tmdb.org/t/p/w500${details.poster_path}`; hasUpdates = true; }
           
+          if (!mergedContent.trailerUrl && details.videos?.results) {
+            const trailer = details.videos.results.find((v: any) => v.site === 'YouTube' && v.type === 'Trailer');
+            if (trailer) {
+              updates.trailerUrl = `https://www.youtube.com/watch?v=${trailer.key}`;
+              hasUpdates = true;
+            }
+          }
+
           if (!mergedContent.runtime) {
             if (details.runtime) { updates.runtime = `${details.runtime} min`; hasUpdates = true; }
             else if (details.episode_run_time && details.episode_run_time.length > 0) { updates.runtime = `${details.episode_run_time[0]} min/episode`; hasUpdates = true; }
@@ -629,38 +637,38 @@ export default function MovieDetails() {
   const renderLinks = (links: QualityLinks, isZip?: boolean) => {
     if (!Array.isArray(links)) return null;
 
+    const validLinks = links.filter(l => l && l.url);
+    if (validLinks.length === 0) return null;
+
     const getBytes = (size: string, unit: string) => {
       const val = parseFloat(size) || 0;
       return unit === 'GB' ? val * 1024 : val;
     };
 
-    const sortedLinks = [...links].sort((a, b) => getBytes(a.size, a.unit) - getBytes(b.size, b.unit));
+    const sortedLinks = [...validLinks].sort((a, b) => getBytes(a.size, a.unit) - getBytes(b.size, b.unit));
 
     return (
       <div className="flex flex-wrap gap-3">
-        {sortedLinks.map((link) => {
-          if (!link || !link.url) return null;
-          return (
-            <div key={link.id} className="flex flex-col sm:flex-row items-stretch sm:items-center bg-zinc-800 rounded-xl overflow-hidden border border-zinc-700 flex-1 min-w-[200px] max-w-sm">
-              <button
-                onClick={() => handlePlayClick(link.url, link.name, link.id, isZip)}
-                className="flex-1 flex items-center justify-center gap-2 hover:bg-zinc-700 text-white px-4 py-3 sm:py-2 text-sm font-medium transition-colors border-b sm:border-b-0 sm:border-r border-zinc-700"
-                title="Play"
-              >
-                <Play className="w-4 h-4 shrink-0" />
-                <span className="truncate">Play {link.name}</span>
-              </button>
-              <button
-                onClick={() => handlePlayClick(link.url, link.name, link.id, isZip)}
-                className="flex items-center justify-center gap-2 hover:bg-zinc-700 text-white px-4 py-3 sm:py-2 text-sm font-medium transition-colors shrink-0"
-                title="Download"
-              >
-                <Download className="w-4 h-4 shrink-0" />
-                <span className="text-zinc-400">({link.size} {link.unit})</span>
-              </button>
-            </div>
-          );
-        })}
+        {sortedLinks.map((link) => (
+          <div key={link.id} className="flex flex-col sm:flex-row items-stretch sm:items-center bg-zinc-800 rounded-xl overflow-hidden border border-zinc-700 flex-1 min-w-[200px] max-w-sm">
+            <button
+              onClick={() => handlePlayClick(link.url, link.name, link.id, isZip)}
+              className="flex-1 flex items-center justify-center gap-2 hover:bg-zinc-700 text-white px-4 py-3 sm:py-2 text-sm font-medium transition-colors border-b sm:border-b-0 sm:border-r border-zinc-700"
+              title="Play"
+            >
+              <Play className="w-4 h-4 shrink-0" />
+              <span className="truncate">Play {link.name}</span>
+            </button>
+            <button
+              onClick={() => handlePlayClick(link.url, link.name, link.id, isZip)}
+              className="flex items-center justify-center gap-2 hover:bg-zinc-700 text-white px-4 py-3 sm:py-2 text-sm font-medium transition-colors shrink-0"
+              title="Download"
+            >
+              <Download className="w-4 h-4 shrink-0" />
+              <span className="text-zinc-400">({link.size} {link.unit})</span>
+            </button>
+          </div>
+        ))}
       </div>
     );
   };
@@ -802,32 +810,34 @@ export default function MovieDetails() {
                   </a>
                 )}
                 
-                <button
-                  onClick={toggleWatchLater}
-                  disabled={isWatchLaterLoading}
-                  className={`p-4 rounded-xl border transition-colors ${profile?.watchLater?.includes(mergedContent.id) ? 'bg-emerald-500/20 border-emerald-500 text-emerald-500' : 'bg-zinc-900 border-zinc-800 hover:bg-zinc-800 text-zinc-300'} ${isWatchLaterLoading ? 'opacity-50 cursor-not-allowed' : ''}`}
-                  title="Watch Later"
-                >
-                  {isWatchLaterLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Clock className="w-5 h-5" />}
-                </button>
-                
-                <button
-                  onClick={toggleFavorite}
-                  disabled={isFavoriteLoading}
-                  className={`p-4 rounded-xl border transition-colors ${profile?.favorites?.includes(mergedContent.id) ? 'bg-red-500/20 border-red-500 text-red-500' : 'bg-zinc-900 border-zinc-800 hover:bg-zinc-800 text-zinc-300'} ${isFavoriteLoading ? 'opacity-50 cursor-not-allowed' : ''}`}
-                  title="Favorite"
-                >
-                  {isFavoriteLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Heart className={`w-5 h-5 ${profile?.favorites?.includes(mergedContent.id) ? 'fill-current' : ''}`} />}
-                </button>
+                <div className="flex items-center gap-4">
+                  <button
+                    onClick={toggleWatchLater}
+                    disabled={isWatchLaterLoading}
+                    className={`p-4 rounded-xl border transition-colors ${profile?.watchLater?.includes(mergedContent.id) ? 'bg-emerald-500/20 border-emerald-500 text-emerald-500' : 'bg-zinc-900 border-zinc-800 hover:bg-zinc-800 text-zinc-300'} ${isWatchLaterLoading ? 'opacity-50 cursor-not-allowed' : ''}`}
+                    title="Watch Later"
+                  >
+                    {isWatchLaterLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Clock className="w-5 h-5" />}
+                  </button>
+                  
+                  <button
+                    onClick={toggleFavorite}
+                    disabled={isFavoriteLoading}
+                    className={`p-4 rounded-xl border transition-colors ${profile?.favorites?.includes(mergedContent.id) ? 'bg-red-500/20 border-red-500 text-red-500' : 'bg-zinc-900 border-zinc-800 hover:bg-zinc-800 text-zinc-300'} ${isFavoriteLoading ? 'opacity-50 cursor-not-allowed' : ''}`}
+                    title="Favorite"
+                  >
+                    {isFavoriteLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Heart className={`w-5 h-5 ${profile?.favorites?.includes(mergedContent.id) ? 'fill-current' : ''}`} />}
+                  </button>
 
-                <button
-                  onClick={handleShare}
-                  disabled={isShareLoading}
-                  className={`p-4 rounded-xl border bg-zinc-900 border-zinc-800 hover:bg-zinc-800 text-zinc-300 transition-colors ${isShareLoading ? 'opacity-50 cursor-not-allowed' : ''}`}
-                  title="Share"
-                >
-                  {isShareLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Share2 className="w-5 h-5" />}
-                </button>
+                  <button
+                    onClick={handleShare}
+                    disabled={isShareLoading}
+                    className={`p-4 rounded-xl border bg-zinc-900 border-zinc-800 hover:bg-zinc-800 text-zinc-300 transition-colors ${isShareLoading ? 'opacity-50 cursor-not-allowed' : ''}`}
+                    title="Share"
+                  >
+                    {isShareLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Share2 className="w-5 h-5" />}
+                  </button>
+                </div>
 
                 {(profile?.role === 'admin' || profile?.role === 'data_editor') && (
                   <div className="flex gap-4">
@@ -913,21 +923,19 @@ export default function MovieDetails() {
                     <div className="absolute top-4 right-4 animate-spin rounded-full h-4 w-4 border-t-2 border-b-2 border-cyan-500"></div>
                   )}
                   <div className="flex-1 space-y-4">
-                    <div className="flex justify-between items-start gap-4">
-                      <h3 className="text-3xl font-bold text-cyan-400 flex-1">
+                    <div className="relative">
+                      {imdbData.rating && (
+                        <div className="float-right ml-4 mb-2 bg-[#f5c518] text-black px-2 py-1 rounded flex items-center gap-1.5 font-black text-xs shadow-[0_0_15px_rgba(245,197,24,0.3)] whitespace-nowrap">
+                          <span className="bg-black text-[#f5c518] px-1 rounded-sm text-[10px] tracking-tighter">IMDb</span>
+                          <div className="flex items-center gap-0.5">
+                            <span className="text-[10px]">⭐</span>
+                            <span>{imdbData.rating.replace('/10', '')}</span>
+                          </div>
+                        </div>
+                      )}
+                      <h3 className="text-3xl font-bold text-cyan-400 leading-tight">
                         {imdbData.title} {imdbData.year ? `(${imdbData.year})` : ''}
                       </h3>
-                      <div className="flex flex-col items-end gap-2 shrink-0 mr-8 md:mr-12">
-                        {imdbData.rating && (
-                          <div className="bg-[#f5c518] text-black px-2 py-1 rounded flex items-center gap-1.5 font-black text-xs shadow-[0_0_15px_rgba(245,197,24,0.3)] whitespace-nowrap">
-                            <span className="bg-black text-[#f5c518] px-1 rounded-sm text-[10px] tracking-tighter">IMDb</span>
-                            <div className="flex items-center gap-0.5">
-                              <span className="text-[10px]">⭐</span>
-                              <span>{imdbData.rating.replace('/10', '')}</span>
-                            </div>
-                          </div>
-                        )}
-                      </div>
                     </div>
                     
                     <div className="grid grid-cols-2 md:grid-cols-3 gap-4 text-sm font-medium text-cyan-400/80">
@@ -984,15 +992,24 @@ export default function MovieDetails() {
               ) : (
                 <div className="space-y-12">
                   <section className="bg-cyan-500/5 border border-cyan-500/20 rounded-2xl p-8 relative group">
+                    <div className="relative mb-6">
+                      {mergedContent.imdbRating && (
+                        <div className="float-right ml-4 mb-2 bg-[#f5c518] text-black px-2 py-1 rounded flex items-center gap-1.5 font-black text-xs shadow-[0_0_15px_rgba(245,197,24,0.3)] whitespace-nowrap">
+                          <span className="bg-black text-[#f5c518] px-1 rounded-sm text-[10px] tracking-tighter">IMDb</span>
+                          <div className="flex items-center gap-0.5">
+                            <span className="text-[10px]">⭐</span>
+                            <span>{mergedContent.imdbRating.replace('/10', '')}</span>
+                          </div>
+                        </div>
+                      )}
+                      <h3 className="text-3xl font-bold text-cyan-400 leading-tight">
+                        {formatContentTitle(mergedContent)}
+                      </h3>
+                    </div>
+
                     <div className="flex flex-wrap gap-6 mb-8 text-sm font-medium text-cyan-400/80">
                       {mergedContent.year && <span className="flex items-center gap-2 bg-cyan-500/10 px-3 py-1.5 rounded-lg"><Clock className="w-4 h-4 text-cyan-500" /> {mergedContent.year}</span>}
-                      {mergedContent.imdbRating && (
-                        <span className="flex items-center gap-2 bg-[#f5c518]/10 px-3 py-1.5 rounded-lg border border-[#f5c518]/20">
-                          <span className="bg-[#f5c518] text-black px-1 rounded-sm text-[10px] font-black tracking-tighter">IMDb</span>
-                          <span className="text-[#f5c518] font-bold">{mergedContent.imdbRating.replace('/10', '')}</span>
-                        </span>
-                      )}
-                      {mergedContent.runtime && mergedContent.type !== 'series' && <span className="flex items-center gap-2 bg-cyan-500/10 px-3 py-1.5 rounded-lg"><Clock className="w-4 h-4 text-cyan-500" /> {mergedContent.runtime}</span>}
+                      {mergedContent.runtime && mergedContent.type !== 'series' && <span className="flex items-center gap-2 bg-cyan-500/10 px-3 py-1.5 rounded-lg"><Clock className="w-4 h-4 text-cyan-500" /> {formatRuntime(mergedContent.runtime)}</span>}
                       {mergedContent.releaseDate && <span className="flex items-center gap-2 bg-cyan-500/10 px-3 py-1.5 rounded-lg"><Film className="w-4 h-4 text-cyan-500" /> {formatReleaseDate(mergedContent.releaseDate)}</span>}
                       {contentGenres && <span className="flex items-center gap-2 bg-cyan-500/10 px-3 py-1.5 rounded-lg">Genre: {contentGenres}</span>}
                       {contentLangs && <span className="flex items-center gap-2 bg-cyan-500/10 px-3 py-1.5 rounded-lg">Language: {contentLangs}</span>}
@@ -1035,17 +1052,22 @@ export default function MovieDetails() {
               <h2 className="text-2xl font-bold mb-6">Download & Play</h2>
               
               {mergedContent.type === 'movie' && mergedContent.movieLinks && (
-                <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6">
-                  <h3 className="font-bold mb-4 text-zinc-400">Movie Links</h3>
-                  {(() => {
-                    try {
-                      return renderLinks(JSON.parse(mergedContent.movieLinks));
-                    } catch (e) {
-                      console.error("Error parsing movie links:", e);
-                      return <p className="text-red-500">Error loading links</p>;
-                    }
-                  })()}
-                </div>
+                (() => {
+                  try {
+                    const links = JSON.parse(mergedContent.movieLinks);
+                    const rendered = renderLinks(links);
+                    if (!rendered) return null;
+                    return (
+                      <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6">
+                        <h3 className="font-bold mb-4 text-zinc-400">Movie Links</h3>
+                        {rendered}
+                      </div>
+                    );
+                  } catch (e) {
+                    console.error("Error parsing movie links:", e);
+                    return null;
+                  }
+                })()
               )}
 
               {mergedContent.type === 'series' && mergedContent.seasons && (
@@ -1065,84 +1087,84 @@ export default function MovieDetails() {
                         const isAccessible = hasFullAccess || allowedSeasons.includes(season.id);
                         
                         return (
-                        <div key={season.id} className={`bg-zinc-900 border border-zinc-800 rounded-2xl overflow-hidden ${!isAccessible ? 'opacity-75' : ''}`}>
+                        <div key={season.id} className={`bg-zinc-900 border border-zinc-800 rounded-2xl overflow-hidden ${(!isAccessible && profile) ? 'opacity-75' : ''}`}>
                           <div className="bg-zinc-950/50 p-6 border-b border-zinc-800 flex justify-between items-center">
                             <h3 className="text-xl font-bold">Season {season.seasonNumber}</h3>
-                            {!isAccessible && (
+                            {(!isAccessible && profile) && (
                               <span className="bg-red-500/10 text-red-500 px-3 py-1 rounded-full text-sm font-bold flex items-center gap-2">
                                 <Lock className="w-4 h-4" /> Restricted
+                              </span>
+                            )}
+                            {!profile && (
+                              <span className="bg-emerald-500/10 text-emerald-500 px-3 py-1 rounded-full text-sm font-bold flex items-center gap-2">
+                                <Lock className="w-4 h-4" /> Sign in to watch
                               </span>
                             )}
                           </div>
                           
                           <div className="p-6 space-y-8">
-                            {isAccessible ? (
-                              <>
-                                {(() => {
-                                  const zipLinks = season.zipLinks || [];
-                                  const mkvLinks = season.mkvLinks || [];
-                                  
-                                  return (
-                                    <>
-                                      {zipLinks.length > 0 && (
-                                        <div>
-                                          <h4 className="font-semibold text-zinc-400 mb-3 text-sm uppercase tracking-wider">Full Season Zip</h4>
-                                          {renderLinks(zipLinks, true)}
-                                        </div>
-                                      )}
-                                      {mkvLinks.length > 0 && (
-                                        <div>
-                                          <h4 className="font-semibold text-zinc-400 mb-3 text-sm uppercase tracking-wider">Full Season MKV</h4>
-                                          {renderLinks(mkvLinks)}
-                                        </div>
-                                      )}
-                                    </>
-                                  );
-                                })()}
-
-                                {season.episodes && season.episodes.length > 0 && (
-                                  <div>
-                                    <h4 className="font-semibold text-zinc-400 mb-4 text-sm uppercase tracking-wider">Episodes</h4>
-                                    <div className="space-y-4">
-                                      {season.episodes.map(ep => (
-                                        <div key={ep.id} className="bg-zinc-950 border border-zinc-800 rounded-xl p-4 flex flex-col gap-4">
-                                          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                                            <div className="flex items-center flex-wrap gap-2">
-                                              <span className="text-emerald-500 font-bold">E{ep.episodeNumber}</span>
-                                              <span className="font-medium">{ep.title}</span>
-                                              {ep.description && (
-                                                <button
-                                                  onClick={() => setExpandedEpisodes(prev => ({ ...prev, [ep.id]: !prev[ep.id] }))}
-                                                  className="text-xs text-zinc-400 hover:text-emerald-500 transition-colors"
-                                                >
-                                                  {expandedEpisodes[ep.id] ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-                                                </button>
-                                              )}
-                                              {ep.duration && (
-                                                <span className="text-xs text-zinc-500 bg-zinc-800 px-2 py-0.5 rounded whitespace-nowrap">
-                                                  {ep.duration}
-                                                </span>
-                                              )}
-                                            </div>
-                                            {renderLinks(ep.links)}
-                                          </div>
-                                          {ep.description && expandedEpisodes[ep.id] && (
-                                            <div className="text-sm text-zinc-400 mt-2 bg-zinc-900/50 p-3 rounded-lg">
-                                              {ep.description}
-                                            </div>
-                                          )}
-                                        </div>
-                                      ))}
+                            {(() => {
+                              const zipLinks = (season.zipLinks || []).filter(l => l && l.url);
+                              const mkvLinks = (season.mkvLinks || []).filter(l => l && l.url);
+                              
+                              return (
+                                <>
+                                  {zipLinks.length > 0 && (
+                                    <div>
+                                      <h4 className="font-semibold text-zinc-400 mb-3 text-sm uppercase tracking-wider">Full Season Zip</h4>
+                                      {renderLinks(zipLinks, true)}
                                     </div>
-                                  </div>
-                                )}
-                              </>
-                            ) : (
-                              <div className="text-center py-8 text-zinc-500">
-                                <Lock className="w-12 h-12 mx-auto mb-4 opacity-20" />
-                                <p>You do not have access to this season.</p>
-                              </div>
-                            )}
+                                  )}
+                                  {mkvLinks.length > 0 && (
+                                    <div>
+                                      <h4 className="font-semibold text-zinc-400 mb-3 text-sm uppercase tracking-wider">Full Season MKV</h4>
+                                      {renderLinks(mkvLinks)}
+                                    </div>
+                                  )}
+                                  
+                                  {season.episodes && season.episodes.length > 0 && (
+                                    <div>
+                                      <h4 className="font-semibold text-zinc-400 mb-4 text-sm uppercase tracking-wider">Episodes</h4>
+                                      <div className="space-y-4">
+                                        {season.episodes.map(ep => (
+                                          <div key={ep.id} className="bg-zinc-950 border border-zinc-800 rounded-xl p-4 flex flex-col gap-4">
+                                            <div className="flex flex-col gap-2">
+                                              <div className="flex items-center flex-wrap gap-2">
+                                                <span className="text-emerald-500 font-bold">E{ep.episodeNumber}</span>
+                                                <span className="font-medium">{ep.title}</span>
+                                                {ep.description && (
+                                                  <button
+                                                    onClick={() => setExpandedEpisodes(prev => ({ ...prev, [ep.id]: !prev[ep.id] }))}
+                                                    className="text-xs text-zinc-400 hover:text-emerald-500 transition-colors"
+                                                  >
+                                                    {expandedEpisodes[ep.id] ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                                                  </button>
+                                                )}
+                                                {ep.duration && (
+                                                  <span className="text-xs text-zinc-500 bg-zinc-800 px-2 py-0.5 rounded whitespace-nowrap">
+                                                    {ep.duration}
+                                                  </span>
+                                                )}
+                                              </div>
+                                              
+                                              {ep.description && expandedEpisodes[ep.id] && (
+                                                <div className="text-sm text-zinc-400 bg-zinc-900/50 p-3 rounded-lg">
+                                                  {ep.description}
+                                                </div>
+                                              )}
+                                            </div>
+                                            
+                                            <div className="flex justify-end">
+                                              {renderLinks(ep.links)}
+                                            </div>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    </div>
+                                  )}
+                                </>
+                              );
+                            })()}
                           </div>
                         </div>
                       )});

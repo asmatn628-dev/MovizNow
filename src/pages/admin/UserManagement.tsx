@@ -2,12 +2,13 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { db } from '../../firebase';
 import { collection, doc, updateDoc, onSnapshot, query, where, getDocs, writeBatch, deleteDoc } from 'firebase/firestore';
 import { UserProfile, Role, Status, AnalyticsEvent } from '../../types';
-import { Edit2, MessageCircle, X, Check, Search, ArrowUp, ArrowDown, Clock, MousePointerClick, Film, Trash2, Tv, Plus } from 'lucide-react';
+import { Edit2, MessageCircle, X, Check, Search, ArrowUp, ArrowDown, Clock, MousePointerClick, Film, Trash2, Tv, Plus, Loader2, ArrowRight } from 'lucide-react';
 import { format } from 'date-fns';
 import clsx from 'clsx';
 import AlertModal from '../../components/AlertModal';
 import ConfirmModal from '../../components/ConfirmModal';
 import { handleFirestoreError, OperationType } from '../../utils/firestoreErrorHandler';
+import { formatDateToMonthDDYYYY } from '../../utils/contentUtils';
 
 type SortField = 'createdAt' | 'displayName' | 'phone' | 'expiryDate';
 type SortOrder = 'asc' | 'desc';
@@ -27,6 +28,7 @@ export default function UserManagement() {
 
   const [selectedUser, setSelectedUser] = useState<UserProfile | null>(null);
   const [isEditingOverlay, setIsEditingOverlay] = useState(false);
+  const [isAnalyticsLoading, setIsAnalyticsLoading] = useState(false);
   const [userAnalytics, setUserAnalytics] = useState<{ moviesClicked: number, linksClicked: number, viewedMovies: string[], clickedLinks: string[] }>({ moviesClicked: 0, linksClicked: 0, viewedMovies: [], clickedLinks: [] });
   const [userRequests, setUserRequests] = useState<any[]>([]);
   const [assignedContentTitles, setAssignedContentTitles] = useState<string[]>([]);
@@ -73,6 +75,10 @@ export default function UserManagement() {
   }, []);
 
   const fetchUserAnalytics = async (user: UserProfile) => {
+    setIsAnalyticsLoading(true);
+    setUserAnalytics({ moviesClicked: 0, linksClicked: 0, viewedMovies: [], clickedLinks: [] });
+    setUserRequests([]);
+    setAssignedContentTitles([]);
     try {
       // Fetch Movie Requests
       const requestsQ = query(
@@ -141,6 +147,8 @@ export default function UserManagement() {
     } catch (error) {
       console.error("Error fetching user analytics:", error);
       handleFirestoreError(error, OperationType.LIST, 'analytics/content');
+    } finally {
+      setIsAnalyticsLoading(false);
     }
   };
 
@@ -223,8 +231,30 @@ export default function UserManagement() {
       return;
     }
     
-    const expiryStr = user.expiryDate ? format(new Date(user.expiryDate), 'MMM dd, yyyy') : 'soon';
-    const message = `Hello ${user.displayName || 'there'},\n\nThis is a friendly reminder from MovizNow that your membership will expire on ${expiryStr}. Please renew to continue enjoying our movies and series!`;
+    let message = '';
+    const name = user.displayName || 'there';
+    const now = new Date();
+    
+    // Check if today is the joining date
+    const isJoiningDate = user.createdAt && new Date(user.createdAt).toDateString() === now.toDateString();
+    const welcomeText = isJoiningDate ? 'Welcome to MovizNow App. ' : '';
+    const membershipType = user.role === 'trial' ? 'Trial' : 'membership';
+    
+    if (user.expiryDate) {
+      const expiryDate = new Date(user.expiryDate);
+      const diffTime = expiryDate.getTime() - now.getTime();
+      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+      const expiryStr = formatDateToMonthDDYYYY(user.expiryDate);
+
+      if (diffDays > 3) {
+        message = `Hello ${name},\n\n${welcomeText}Your ${membershipType} for MovizNow app will expire on ${expiryStr}.\n\nThank You`;
+      } else {
+        message = `Hello ${name},\n\n${welcomeText}Your ${membershipType} for MovizNow app is expiring very soon on ${expiryStr}. Please renew to continue enjoying our services.\n\nThank You`;
+      }
+    } else {
+      message = `Hello ${name},\n\n${welcomeText}This is a friendly reminder regarding your MovizNow ${membershipType}.\n\nThank You`;
+    }
+
     const encodedMessage = encodeURIComponent(message);
     const phone = user.phone.replace(/\D/g, ''); // Remove non-digits
     
@@ -693,62 +723,48 @@ export default function UserManagement() {
                       className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-2 focus:outline-none focus:border-emerald-500"
                     />
                   </div>
-                  <div>
-                    <label className="block text-sm font-medium text-zinc-400 mb-1">Role</label>
-                    <select
-                      value={editForm.role}
-                      onChange={(e) => setEditForm({ ...editForm, role: e.target.value as Role })}
-                      className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-2 focus:outline-none focus:border-emerald-500"
-                    >
-                      <option value="user">User</option>
-                      <option value="temporary">Temporary</option>
-                      <option value="selected_content">Selected Content</option>
-                      <option value="trial">Trial</option>
-                      <option value="data_editor">Data Editor</option>
-                      <option value="admin">Admin</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-zinc-400 mb-1">Status</label>
-                    <select
-                      value={editForm.status}
-                      onChange={(e) => setEditForm({ ...editForm, status: e.target.value as Status })}
-                      className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-2 focus:outline-none focus:border-emerald-500"
-                    >
-                      <option value="active">Active</option>
-                      <option value="pending">Pending</option>
-                      <option value="expired">Expired</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-zinc-400 mb-1">Expiry Date</label>
-                    <input
-                      type="date"
-                      value={editForm.expiryDate || ''}
-                      onChange={(e) => setEditForm({ ...editForm, expiryDate: e.target.value })}
-                      className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-2 focus:outline-none focus:border-emerald-500"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-zinc-400 mb-2">Management Access</label>
-                    <div className="grid grid-cols-2 gap-2">
-                      {['content', 'users', 'analytics', 'notifications', 'income'].map((perm) => (
-                        <label key={perm} className="flex items-center gap-2 bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 cursor-pointer hover:border-zinc-700 transition-colors">
-                          <input
-                            type="checkbox"
-                            checked={editForm.permissions?.includes(perm)}
-                            onChange={(e) => {
-                              const current = editForm.permissions || [];
-                              const next = e.target.checked 
-                                ? [...current, perm]
-                                : current.filter(p => p !== perm);
-                              setEditForm({ ...editForm, permissions: next });
-                            }}
-                            className="w-4 h-4 rounded border-zinc-700 bg-zinc-900 text-emerald-500 focus:ring-emerald-500 focus:ring-offset-zinc-950"
-                          />
-                          <span className="text-xs font-medium text-zinc-300 capitalize">{perm}</span>
-                        </label>
-                      ))}
+                  <div className="flex items-center gap-2">
+                    <div className="flex-1">
+                      <label className="block text-[10px] font-bold text-zinc-500 uppercase mb-1">Role</label>
+                      <select
+                        value={editForm.role}
+                        onChange={(e) => setEditForm({ ...editForm, role: e.target.value as Role })}
+                        className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-emerald-500"
+                      >
+                        <option value="user">User</option>
+                        <option value="temporary">Temporary</option>
+                        <option value="selected_content">Selected Content</option>
+                        <option value="trial">Trial</option>
+                        <option value="data_editor">Data Editor</option>
+                        <option value="admin">Admin</option>
+                      </select>
+                    </div>
+                    
+                    <ArrowRight className="w-4 h-4 text-zinc-600 shrink-0 mt-5" />
+                    
+                    <div className="flex-1">
+                      <label className="block text-[10px] font-bold text-zinc-500 uppercase mb-1">Status</label>
+                      <select
+                        value={editForm.status}
+                        onChange={(e) => setEditForm({ ...editForm, status: e.target.value as Status })}
+                        className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-emerald-500"
+                      >
+                        <option value="active">Active</option>
+                        <option value="pending">Pending</option>
+                        <option value="expired">Expired</option>
+                      </select>
+                    </div>
+
+                    <ArrowRight className="w-4 h-4 text-zinc-600 shrink-0 mt-5" />
+
+                    <div className="flex-1">
+                      <label className="block text-[10px] font-bold text-zinc-500 uppercase mb-1">Expiry</label>
+                      <input
+                        type="date"
+                        value={editForm.expiryDate || ''}
+                        onChange={(e) => setEditForm({ ...editForm, expiryDate: e.target.value })}
+                        className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-emerald-500"
+                      />
                     </div>
                   </div>
                 </div>
@@ -769,38 +785,31 @@ export default function UserManagement() {
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="bg-zinc-950 p-3 rounded-xl border border-zinc-800">
-                      <div className="text-zinc-500 text-[10px] uppercase font-bold mb-0.5">Role</div>
-                      <div className="capitalize font-bold text-emerald-400 text-sm">{selectedUser.role.replace('_', ' ')}</div>
-                    </div>
-                    <div className="bg-zinc-950 p-3 rounded-xl border border-zinc-800">
-                      <div className="text-zinc-500 text-[10px] uppercase font-bold mb-0.5">Status</div>
-                      <div className="capitalize font-bold text-white text-sm">{selectedUser.status}</div>
-                    </div>
-                    <div className="bg-zinc-950 p-3 rounded-xl border border-zinc-800 col-span-2">
-                      <div className="text-zinc-500 text-[10px] uppercase font-bold mb-0.5">Accessible Movies</div>
-                      <div className="capitalize font-bold text-white text-sm">
-                        {selectedUser.role === 'admin' || selectedUser.role === 'data_editor' ? 'All' :
-                         selectedUser.role === 'user' || selectedUser.role === 'trial' ? (selectedUser.status === 'active' ? 'All' : 'None') :
-                         (selectedUser.assignedContent?.length || 0)}
+                  <div className="grid grid-cols-1 gap-3">
+                    <div className="bg-zinc-950 p-3 rounded-xl border border-zinc-800 flex justify-between items-center">
+                      <div>
+                        <div className="text-zinc-500 text-[10px] uppercase font-bold mb-0.5">Role</div>
+                        <div className="capitalize font-bold text-emerald-400 text-sm">{selectedUser.role.replace('_', ' ')}</div>
                       </div>
-                      {selectedUser.role === 'selected_content' && assignedContentTitles.length > 0 && (
-                        <div className="mt-1 text-xs text-zinc-400">
-                          {assignedContentTitles.join(', ')}
-                        </div>
-                      )}
+                      <div className="text-right">
+                        <div className="text-zinc-500 text-[10px] uppercase font-bold mb-0.5">Status</div>
+                        <div className="capitalize font-bold text-white text-sm">{selectedUser.status}</div>
+                      </div>
                     </div>
-                    <div className="bg-zinc-950 p-3 rounded-xl border border-zinc-800">
-                      <div className="text-zinc-500 text-[10px] uppercase font-bold mb-0.5">Joined</div>
-                      <div className="font-bold text-white text-sm">{format(new Date(selectedUser.createdAt), 'MMM dd, yyyy')}</div>
+                    
+                    <div className="bg-zinc-950 p-3 rounded-xl border border-zinc-800 flex justify-between items-center">
+                      <div>
+                        <div className="text-zinc-500 text-[10px] uppercase font-bold mb-0.5">Joined</div>
+                        <div className="font-bold text-white text-sm">{format(new Date(selectedUser.createdAt), 'MMM dd, yyyy')}</div>
+                      </div>
+                      <div className="text-right">
+                        <div className="text-zinc-500 text-[10px] uppercase font-bold mb-0.5">Expiry Date</div>
+                        <div className="font-bold text-white text-sm">{selectedUser.expiryDate ? format(new Date(selectedUser.expiryDate), 'MMM dd, yyyy') : 'N/A'}</div>
+                      </div>
                     </div>
-                    <div className="bg-zinc-950 p-3 rounded-xl border border-zinc-800">
-                      <div className="text-zinc-500 text-[10px] uppercase font-bold mb-0.5">Expiry Date</div>
-                      <div className="font-bold text-white text-sm">{selectedUser.expiryDate ? format(new Date(selectedUser.expiryDate), 'MMM dd, yyyy') : 'N/A'}</div>
-                    </div>
+
                     {selectedUser.permissions && selectedUser.permissions.length > 0 && (
-                      <div className="bg-zinc-950 p-3 rounded-xl border border-zinc-800 col-span-2">
+                      <div className="bg-zinc-950 p-3 rounded-xl border border-zinc-800">
                         <div className="text-zinc-500 text-[10px] uppercase font-bold mb-1">Management Access</div>
                         <div className="flex flex-wrap gap-1.5">
                           {selectedUser.permissions.map(perm => (
@@ -921,7 +930,15 @@ export default function UserManagement() {
                   </div>
 
                   <div className="border-t border-zinc-800 pt-6">
-                    <h4 className="text-xs font-bold text-zinc-500 uppercase tracking-wider mb-4">Activity Overview</h4>
+                    <div className="flex items-center justify-between mb-4">
+                      <h4 className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Activity Overview</h4>
+                      {isAnalyticsLoading && (
+                        <div className="flex items-center gap-2 text-emerald-500">
+                          <Loader2 className="w-3 h-3 animate-spin" />
+                          <span className="text-[10px] font-bold uppercase tracking-wider">Scanning</span>
+                        </div>
+                      )}
+                    </div>
                     <div className="space-y-2">
                       <div className="flex items-center justify-between bg-zinc-950 p-3 rounded-xl border border-zinc-800">
                         <div className="flex items-center gap-3 text-zinc-300">
