@@ -22,6 +22,12 @@ export default class ErrorBoundary extends React.Component<Props, State> {
 
   componentDidCatch(error: Error, errorInfo: ErrorInfo) {
     console.error('Uncaught error:', error, errorInfo);
+    
+    // Auto-reload on dynamic import failures (common after new deployments)
+    if (error.message?.includes('Failed to fetch dynamically imported module')) {
+      console.log('Dynamic import failure detected, reloading page...');
+      window.location.reload();
+    }
   }
 
   private handleReset = () => {

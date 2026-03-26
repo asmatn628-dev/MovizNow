@@ -13,6 +13,7 @@ import ConfirmModal from '../../components/ConfirmModal';
 import { motion, AnimatePresence } from 'motion/react';
 import { formatContentTitle, formatReleaseDate, formatRuntime } from '../../utils/contentUtils';
 import { MediaModal } from '../../components/MediaModal';
+import { LazyLoadImage } from 'react-lazy-load-image-component';
 
 export default function MovieDetails() {
   const { id } = useParams<{ id: string }>();
@@ -745,7 +746,13 @@ export default function MovieDetails() {
       {/* Hero Section */}
       <div className="relative h-[60vh] md:h-[70vh] w-full">
         <div className="absolute inset-0">
-          <img src={mergedContent.posterUrl || 'https://picsum.photos/seed/movie/1920/1080'} alt={mergedContent.title} className="w-full h-full object-cover opacity-30" referrerPolicy="no-referrer" />
+          <LazyLoadImage
+            src={mergedContent.posterUrl || 'https://picsum.photos/seed/movie/1920/1080'}
+            alt={mergedContent.title}
+            className="w-full h-full object-cover opacity-30"
+            referrerPolicy="no-referrer"
+            wrapperClassName="w-full h-full"
+          />
           <div className="absolute inset-0 bg-gradient-to-t from-zinc-950 via-zinc-950/60 to-transparent" />
         </div>
         
@@ -762,12 +769,13 @@ export default function MovieDetails() {
 
         <div className="absolute inset-0 flex items-center justify-center p-8 z-10 pt-20">
           <div className="max-w-7xl mx-auto flex flex-col items-center gap-8 text-center">
-            <img 
+            <LazyLoadImage 
               src={mergedContent.posterUrl || 'https://picsum.photos/seed/movie/400/600'} 
               alt={mergedContent.title} 
               className="w-32 md:w-64 rounded-2xl shadow-2xl cursor-pointer hover:scale-105 transition-transform" 
               referrerPolicy="no-referrer" 
               onClick={() => setIsPosterExpanded(true)}
+              wrapperClassName="w-32 md:w-64"
             />
             
             <div className="flex-1">
@@ -1283,12 +1291,13 @@ export default function MovieDetails() {
             >
               <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
             </button>
-            <img 
+            <LazyLoadImage 
               src={mergedContent.posterUrl || 'https://picsum.photos/seed/movie/400/600'} 
               alt={mergedContent.title} 
               className="max-w-full max-h-[90vh] object-contain rounded-lg shadow-2xl" 
-              referrerPolicy="no-referrer"
+              referrerPolicy="no-referrer" 
               onClick={(e) => e.stopPropagation()}
+              wrapperClassName="max-w-full max-h-[90vh]"
             />
           </div>
         </div>

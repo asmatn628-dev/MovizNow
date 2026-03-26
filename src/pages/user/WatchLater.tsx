@@ -8,6 +8,7 @@ import { Film, Clock, ArrowLeft } from 'lucide-react';
 import { handleFirestoreError, OperationType } from '../../utils/firestoreErrorHandler';
 import { formatContentTitle } from '../../utils/contentUtils';
 import { NotificationMenu } from '../../components/NotificationMenu';
+import { LazyLoadImage } from 'react-lazy-load-image-component';
 
 // Force rebuild
 export default function WatchLater() {
@@ -65,7 +66,7 @@ export default function WatchLater() {
 
   return (
     <div className="min-h-screen bg-zinc-950 text-white flex flex-col">
-      <header className="sticky top-0 z-40 bg-zinc-950/80 backdrop-blur-xl border-b border-zinc-800">
+      <header className="sticky top-0 z-40 bg-zinc-950 border-b border-zinc-800">
         <div className="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between">
           <div className="flex items-center gap-4">
             <Link to="/" className="text-zinc-400 hover:text-white transition-colors">
@@ -96,19 +97,19 @@ export default function WatchLater() {
                 to={`/movie/${content.id}`}
                 className={`group relative flex flex-col bg-zinc-900 border border-zinc-800 rounded-2xl overflow-hidden transition-transform hover:scale-105 hover:border-emerald-500/50`}
               >
-                <div className="relative aspect-[2/3] w-full">
-                  <img
+                <div className="relative aspect-[2/3] w-full bg-zinc-800">
+                  <LazyLoadImage
                     src={content.posterUrl || 'https://picsum.photos/seed/movie/400/600'}
                     alt={content.title}
                     className="w-full h-full object-cover"
                     referrerPolicy="no-referrer"
-                    loading="lazy"
+                    wrapperClassName="w-full h-full"
                   />
-                  <div className={`absolute top-2 right-2 backdrop-blur-md px-2 py-1 rounded text-xs font-bold uppercase tracking-wider text-white ${content.type === 'movie' ? 'bg-blue-500/80' : 'bg-purple-500/80'}`}>
+                  <div className={`absolute top-2 right-2 px-2 py-1 rounded text-xs font-bold uppercase tracking-wider text-white ${content.type === 'movie' ? 'bg-blue-500/90' : 'bg-purple-500/90'}`}>
                     {content.type}
                   </div>
                   {isLocked && (
-                    <div className="absolute top-2 left-2 bg-red-500/90 backdrop-blur-md px-2 py-1 rounded text-xs font-bold uppercase tracking-wider flex items-center gap-1 shadow-lg text-white z-20">
+                    <div className="absolute top-2 left-2 bg-red-500 px-2 py-1 rounded text-xs font-bold uppercase tracking-wider flex items-center gap-1 shadow-lg text-white z-20">
                       <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
                       Locked
                     </div>

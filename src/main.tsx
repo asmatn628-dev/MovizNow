@@ -18,6 +18,12 @@ if ('serviceWorker' in navigator) {
   });
 }
 
+// Handle Vite preload errors (dynamic import failures)
+window.addEventListener('vite:preloadError', (event) => {
+  console.error('Vite preload error:', event);
+  window.location.reload();
+});
+
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <HelmetProvider>

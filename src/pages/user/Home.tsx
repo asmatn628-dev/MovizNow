@@ -10,6 +10,7 @@ import { handleFirestoreError, OperationType } from '../../utils/firestoreErrorH
 import { format } from 'date-fns';
 import ConfirmModal from '../../components/ConfirmModal';
 import { formatContentTitle } from '../../utils/contentUtils';
+import { LazyLoadImage } from 'react-lazy-load-image-component';
 
 import { NotificationMenu } from '../../components/NotificationMenu';
 
@@ -211,10 +212,10 @@ export default function Home({ onOpenMediaModal }: { onOpenMediaModal: () => voi
   return (
     <div className="min-h-screen bg-zinc-950 text-white flex flex-col">
       {/* Header */}
-      <header className="sticky top-0 z-40 bg-zinc-950/80 backdrop-blur-xl border-b border-zinc-800">
+      <header className="sticky top-0 z-40 bg-zinc-950 border-b border-zinc-800">
         <div className="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between">
           <Link to="/" className="text-2xl font-bold text-emerald-500 flex items-center gap-3">
-            <img src="/logo.svg?v=2" alt="MovizNow Logo" className="w-8 h-8" />
+            <LazyLoadImage src="/logo.svg?v=2" alt="MovizNow Logo" className="w-8 h-8" />
             <span className="tracking-tight">MovizNow</span>
           </Link>
 
@@ -401,16 +402,22 @@ export default function Home({ onOpenMediaModal }: { onOpenMediaModal: () => voi
                     to={`/movie/${content.id}`}
                     className={`snap-start shrink-0 w-28 sm:w-36 group relative flex flex-col bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden transition-transform hover:scale-105 hover:border-emerald-500/50`}
                   >
-                    <div className="relative aspect-[2/3] w-full">
-                      <img src={content.posterUrl || 'https://picsum.photos/seed/movie/400/600'} alt={content.title} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                    <div className="relative aspect-[2/3] w-full bg-zinc-800">
+                      <LazyLoadImage
+                        src={content.posterUrl || 'https://picsum.photos/seed/movie/400/600'}
+                        alt={content.title}
+                        className="w-full h-full object-cover"
+                        referrerPolicy="no-referrer"
+                        wrapperClassName="w-full h-full"
+                      />
                       <div className="absolute inset-0 bg-gradient-to-t from-zinc-900 via-zinc-900/20 to-transparent opacity-60 group-hover:opacity-80 transition-opacity" />
                       
                       <div className="absolute top-2 right-2 flex flex-col gap-1 items-end z-10">
-                        <div className="bg-black/80 backdrop-blur-md px-1.5 py-0.5 rounded text-[8px] font-bold uppercase tracking-wider">
+                        <div className="bg-black/90 px-1.5 py-0.5 rounded text-[8px] font-bold uppercase tracking-wider">
                           {content.type}
                         </div>
                         {contentQuality && (
-                          <div className="bg-emerald-500/90 text-black backdrop-blur-md px-1.5 py-0.5 rounded text-[8px] font-bold uppercase tracking-wider">
+                          <div className="bg-emerald-500 text-black px-1.5 py-0.5 rounded text-[8px] font-bold uppercase tracking-wider">
                             {contentQuality}
                           </div>
                         )}
@@ -567,19 +574,19 @@ export default function Home({ onOpenMediaModal }: { onOpenMediaModal: () => voi
                     to={`/movie/${content.id}`}
                     className={`group relative flex flex-col bg-zinc-900 border border-zinc-800 rounded-2xl overflow-hidden transition-transform hover:scale-105 hover:border-emerald-500/50`}
                   >
-                    <div className="relative aspect-[2/3] w-full">
-                      <img
+                    <div className="relative aspect-[2/3] w-full bg-zinc-800">
+                      <LazyLoadImage
                         src={content.posterUrl || 'https://picsum.photos/seed/movie/400/600'}
                         alt={content.title}
                         className="w-full h-full object-cover"
                         referrerPolicy="no-referrer"
-                        loading="lazy"
+                        wrapperClassName="w-full h-full"
                       />
-                      <div className={`absolute top-2 right-2 backdrop-blur-md px-2 py-1 rounded text-xs font-bold uppercase tracking-wider text-white ${content.type === 'movie' ? 'bg-blue-500/80' : 'bg-purple-500/80'}`}>
+                      <div className={`absolute top-2 right-2 px-2 py-1 rounded text-xs font-bold uppercase tracking-wider text-white ${content.type === 'movie' ? 'bg-blue-500/90' : 'bg-purple-500/90'}`}>
                         {content.type}
                       </div>
                       {contentQuality && (
-                        <div className={`absolute top-9 right-2 backdrop-blur-md px-2 py-1 rounded text-[10px] font-bold uppercase tracking-wider ${
+                        <div className={`absolute top-9 right-2 px-2 py-1 rounded text-[10px] font-bold uppercase tracking-wider ${
                           ['WEB-DL', 'WebRip', 'HDRip', 'BluRay'].some(hq => contentQuality.toUpperCase().includes(hq.toUpperCase()))
                             ? 'bg-cyan-500 text-black shadow-[0_0_10px_rgba(6,182,212,0.5)]'
                             : 'bg-amber-500 text-black shadow-[0_0_10px_rgba(245,158,11,0.5)]'
@@ -588,7 +595,7 @@ export default function Home({ onOpenMediaModal }: { onOpenMediaModal: () => voi
                         </div>
                       )}
                       {isLocked && (
-                        <div className="absolute top-2 left-2 bg-red-500/90 backdrop-blur-md px-2 py-1 rounded text-xs font-bold uppercase tracking-wider flex items-center gap-1 shadow-lg text-white z-20">
+                        <div className="absolute top-2 left-2 bg-red-500 px-2 py-1 rounded text-xs font-bold uppercase tracking-wider flex items-center gap-1 shadow-lg text-white z-20">
                           <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
                           Locked
                         </div>
@@ -705,7 +712,7 @@ export default function Home({ onOpenMediaModal }: { onOpenMediaModal: () => voi
       />
 
       {showWhatsappPrompt && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
           <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 max-w-md w-full relative">
             <div className="flex justify-center mb-4">
               <div className="w-16 h-16 bg-emerald-500/20 rounded-full flex items-center justify-center">
