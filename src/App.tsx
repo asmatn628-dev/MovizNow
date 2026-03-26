@@ -1,5 +1,5 @@
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
-import { Suspense, lazy, useState } from 'react';
+import { BrowserRouter, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
+import { Suspense, lazy, useState, useEffect } from 'react';
 import { AuthProvider } from './contexts/AuthContext';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import { Loader2 } from 'lucide-react';
@@ -33,14 +33,25 @@ const LoadingFallback = () => (
   <div className="min-h-screen bg-zinc-950" />
 );
 
+function MediaModalController({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {
+  const navigate = useNavigate();
+
+  const handleApply = (data: any) => {
+    navigate('/admin/content', { state: { prefilledData: data } });
+    onClose();
+  };
+
+  return <MediaModal isOpen={isOpen} onClose={onClose} onApply={handleApply} />;
+}
+
 export default function App() {
   const [isMediaModalOpen, setIsMediaModalOpen] = useState(false);
 
   return (
     <AuthProvider>
       <SystemNotificationWrapper />
-      <MediaModal isOpen={isMediaModalOpen} onClose={() => setIsMediaModalOpen(false)} />
       <BrowserRouter>
+        <MediaModalController isOpen={isMediaModalOpen} onClose={() => setIsMediaModalOpen(false)} />
         <Suspense fallback={<LoadingFallback />}>
           <Routes>
             <Route path="/login" element={<Login />} />

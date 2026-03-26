@@ -277,9 +277,11 @@ export default function Home({ onOpenMediaModal }: { onOpenMediaModal: () => voi
             <Link to="/watch-later" className="text-zinc-400 hover:text-white transition-colors" title="Watch Later">
               <Clock className="w-5 h-5" />
             </Link>
-            <button onClick={onOpenMediaModal} className="text-zinc-400 hover:text-white transition-colors" title="Search Media">
-              <Search className="w-5 h-5" />
-            </button>
+            {(profile?.role === 'admin' || profile?.role === 'data_editor') && (
+              <button onClick={onOpenMediaModal} className="text-zinc-400 hover:text-white transition-colors" title="Search Media">
+                <Search className="w-5 h-5" />
+              </button>
+            )}
             <Link to="/favorites" className="text-zinc-400 hover:text-white transition-colors" title="Favorites">
               <Heart className="w-5 h-5" />
             </Link>

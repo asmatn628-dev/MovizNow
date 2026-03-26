@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { X, Search, Loader2 } from 'lucide-react';
+import React, { useState, useMemo } from 'react';
+import { X, Search, Loader2, Film, Save } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
 interface MediaModalProps {
@@ -30,17 +30,21 @@ export async function searchTMDBByTitle(searchTitle: string, searchYear: string)
   if (searchYear) movieUrl += `&year=${searchYear}`;
   let movieRes = await fetch(movieUrl);
   let movieData = await movieRes.json();
-  if (movieData.results && movieData.results.length > 0) {
-    return { item: movieData.results[0], type: 'movie' };
-  }
+  
   let tvUrl = `${TMDB_BASE}/search/tv?api_key=${TMDB_API_KEY}&query=${encodeURIComponent(searchTitle)}`;
   if (searchYear) tvUrl += `&first_air_date_year=${searchYear}`;
   let tvRes = await fetch(tvUrl);
   let tvData = await tvRes.json();
-  if (tvData.results && tvData.results.length > 0) {
-    return { item: tvData.results[0], type: 'tv' };
+
+  const results: any[] = [];
+  if (movieData.results) {
+    movieData.results.forEach((item: any) => results.push({ item, type: 'movie' }));
   }
-  return null;
+  if (tvData.results) {
+    tvData.results.forEach((item: any) => results.push({ item, type: 'tv' }));
+  }
+  
+  return results;
 }
 
 export async function fetchTMDBDetails(tmdbId: string, type: string) {
@@ -93,6 +97,8 @@ export const MediaModal: React.FC<MediaModalProps> = ({ isOpen, onClose, initial
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [fetchedData, setFetchedData] = useState<any>(null);
+  const [searchResults, setSearchResults] = useState<any[] | null>(null);
+  const [filterType, setFilterType] = useState<'all' | 'movie' | 'tv'>('all');
   const [selectedFields, setSelectedFields] = useState<Record<string, boolean>>(() => {
     const saved = localStorage.getItem('mediaModal_selectedFields');
     return saved ? JSON.parse(saved) : {};
@@ -128,6 +134,8 @@ export const MediaModal: React.FC<MediaModalProps> = ({ isOpen, onClose, initial
       setTitle(initialTitle);
       setYear(initialYear);
       setFetchedData(null);
+      setSearchResults(null);
+      setFilterType('all');
       setError(null);
       
       if (initialImdbId || initialTitle) {
@@ -152,17 +160,21 @@ export const MediaModal: React.FC<MediaModalProps> = ({ isOpen, onClose, initial
     if (searchYear) movieUrl += `&year=${searchYear}`;
     let movieRes = await fetch(movieUrl);
     let movieData = await movieRes.json();
-    if (movieData.results && movieData.results.length > 0) {
-      return { item: movieData.results[0], type: 'movie' };
-    }
+    
     let tvUrl = `${TMDB_BASE}/search/tv?api_key=${TMDB_API_KEY}&query=${encodeURIComponent(searchTitle)}`;
     if (searchYear) tvUrl += `&first_air_date_year=${searchYear}`;
     let tvRes = await fetch(tvUrl);
     let tvData = await tvRes.json();
-    if (tvData.results && tvData.results.length > 0) {
-      return { item: tvData.results[0], type: 'tv' };
+
+    const results: any[] = [];
+    if (movieData.results) {
+      movieData.results.forEach((item: any) => results.push({ item, type: 'movie' }));
     }
-    return null;
+    if (tvData.results) {
+      tvData.results.forEach((item: any) => results.push({ item, type: 'tv' }));
+    }
+    
+    return results;
   }
 
   async function fetchTMDBDetails(tmdbId: string, type: string) {
@@ -212,34 +224,58 @@ export const MediaModal: React.FC<MediaModalProps> = ({ isOpen, onClose, initial
     setLoading(true);
     setError(null);
     setFetchedData(null);
+    setSearchResults(null);
+    setFilterType('all');
 
     try {
-      let tmdbItem = null;
-      let type = null;
-
       if (searchImdbId.trim()) {
         const match = searchImdbId.trim().match(/tt\d+/);
         const imdbID = match ? match[0] : searchImdbId.trim();
         const found = await findTMDBByImdb(imdbID);
         if (found) {
-          tmdbItem = found.item;
-          type = found.type;
+          await fetchFullDetails(found.item.id, found.type);
         } else {
           throw new Error(`No TMDB entry found for IMDb ID: ${imdbID}`);
         }
       } else if (searchTitle.trim()) {
-        const found = await searchTMDBByTitle(searchTitle.trim(), searchYear.trim());
-        if (found) {
-          tmdbItem = found.item;
-          type = found.type;
+        const results = await searchTMDBByTitle(searchTitle.trim(), searchYear.trim());
+        if (results && results.length > 1) {
+          setSearchResults(results);
+        } else if (results && results.length === 1) {
+          await fetchFullDetails(results[0].item.id, results[0].type);
         } else {
           throw new Error('No movie or series found with that title/year.');
         }
       } else {
         throw new Error('Please provide either an IMDb ID or a title.');
       }
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
 
-      const details = await fetchTMDBDetails(tmdbItem.id, type);
+  const sortedAndFilteredResults = useMemo(() => {
+    if (!searchResults) return [];
+    let results = [...searchResults];
+    
+    if (filterType !== 'all') {
+      results = results.filter(r => r.type === filterType);
+    }
+    
+    return results.sort((a, b) => {
+      const yearA = parseInt((a.item.release_date || a.item.first_air_date || '0').split('-')[0]) || 0;
+      const yearB = parseInt((b.item.release_date || b.item.first_air_date || '0').split('-')[0]) || 0;
+      return yearB - yearA;
+    });
+  }, [searchResults, filterType]);
+
+  const fetchFullDetails = async (tmdbId: string, type: string) => {
+    setLoading(true);
+    setSearchResults(null);
+    try {
+      const details = await fetchTMDBDetails(tmdbId, type);
       let imdbRatingData = null;
       if (details.external_ids && details.external_ids.imdb_id) {
         imdbRatingData = await fetchIMDbRating(details.external_ids.imdb_id);
@@ -247,7 +283,7 @@ export const MediaModal: React.FC<MediaModalProps> = ({ isOpen, onClose, initial
 
       let seasonsData: any = null;
       if (type === 'tv') {
-        seasonsData = await fetchSeriesSeasons(tmdbItem.id);
+        seasonsData = await fetchSeriesSeasons(tmdbId);
       }
 
       const parsedData: any = {
@@ -304,7 +340,6 @@ export const MediaModal: React.FC<MediaModalProps> = ({ isOpen, onClose, initial
           return prev;
         });
       }
-
     } catch (err: any) {
       setError(err.message);
     } finally {
@@ -372,14 +407,26 @@ export const MediaModal: React.FC<MediaModalProps> = ({ isOpen, onClose, initial
             <span className="text-zinc-500 font-medium text-sm">OR</span>
             <input type="text" value={title} onChange={e => setTitle(e.target.value)} placeholder="Movie/Series title" className="flex-1 min-w-[140px] p-2 bg-zinc-900 border border-zinc-700 rounded-lg text-sm text-white" />
             <input type="text" value={year} onChange={e => setYear(e.target.value)} placeholder="Year" className="w-24 p-2 bg-zinc-900 border border-zinc-700 rounded-lg text-sm text-white" />
-            <button 
-              onClick={() => handleFetchWithParams(imdbId, title, year)} 
-              disabled={loading}
-              className="bg-emerald-600 text-white px-4 py-2 rounded-lg font-bold hover:bg-emerald-700 flex items-center gap-2 disabled:opacity-50"
-            >
-              {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
-              Fetch
-            </button>
+            <div className="flex gap-2">
+              <button 
+                onClick={() => handleFetchWithParams(imdbId, title, year)} 
+                disabled={loading}
+                className="bg-emerald-600 text-white px-4 py-2 rounded-lg font-bold hover:bg-emerald-700 flex items-center gap-2 disabled:opacity-50"
+              >
+                {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
+                Fetch
+              </button>
+
+              {fetchedData && onApply && (
+                <button 
+                  onClick={handleApply}
+                  className="bg-cyan-600 text-white px-4 py-2 rounded-lg font-bold hover:bg-cyan-700 flex items-center gap-2"
+                >
+                  <Save className="w-4 h-4" />
+                  Apply
+                </button>
+              )}
+            </div>
           </div>
         </div>
 
@@ -393,6 +440,59 @@ export const MediaModal: React.FC<MediaModalProps> = ({ isOpen, onClose, initial
           {!fetchedData && !loading && !error && (
             <div className="text-center text-zinc-500 py-10">
               Enter an IMDb ID or Title + Year to fetch data.
+            </div>
+          )}
+
+          {searchResults && (
+            <div className="space-y-4">
+              <div className="flex items-center justify-between gap-2">
+                <h3 className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider truncate">Search Results ({sortedAndFilteredResults.length})</h3>
+                <div className="flex gap-1 shrink-0">
+                  {(['all', 'movie', 'tv'] as const).map((t) => (
+                    <button
+                      key={t}
+                      onClick={() => setFilterType(t)}
+                      className={`px-2 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider transition-all ${
+                        filterType === t 
+                          ? 'bg-emerald-500 text-white' 
+                          : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'
+                      }`}
+                    >
+                      {t === 'tv' ? 'Series' : t}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div className="grid grid-cols-1 gap-2">
+                {sortedAndFilteredResults.map((res, idx) => (
+                  <button
+                    key={`${res.item.id}-${idx}`}
+                    onClick={() => fetchFullDetails(res.item.id, res.type)}
+                    className="flex items-center gap-4 p-3 bg-zinc-800/50 border border-zinc-700 rounded-xl hover:bg-zinc-800 hover:border-emerald-500/50 transition-all text-left group"
+                  >
+                    <div className="w-12 h-18 bg-zinc-700 rounded overflow-hidden shrink-0">
+                      {res.item.poster_path ? (
+                        <img src={`https://image.tmdb.org/t/p/w92${res.item.poster_path}`} alt="" className="w-full h-full object-cover" />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center text-zinc-500">
+                          <Film className="w-6 h-6" />
+                        </div>
+                      )}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="font-bold text-white group-hover:text-emerald-500 transition-colors truncate">
+                        {res.item.title || res.item.name}
+                      </div>
+                      <div className="text-xs text-zinc-400 flex items-center gap-2 mt-1">
+                        <span className="capitalize px-1.5 py-0.5 bg-zinc-700 rounded text-[10px] font-bold">
+                          {res.type === 'movie' ? 'Movie' : 'Series'}
+                        </span>
+                        <span>{(res.item.release_date || res.item.first_air_date || '').split('-')[0]}</span>
+                      </div>
+                    </div>
+                  </button>
+                ))}
+              </div>
             </div>
           )}
 
@@ -543,21 +643,9 @@ export const MediaModal: React.FC<MediaModalProps> = ({ isOpen, onClose, initial
             </div>
           )}
         </div>
-
-        {fetchedData && onApply && (
-          <div className="p-4 border-t border-zinc-800 flex justify-end gap-3 bg-zinc-950/50">
-            <button onClick={onClose} className="px-4 py-2 text-zinc-400 hover:text-white text-sm font-medium">Cancel</button>
-            <button 
-              onClick={handleApply}
-              className="px-6 py-2 bg-emerald-600 text-white rounded-lg text-sm font-bold hover:bg-emerald-700"
-            >
-              Apply Selected Data
-            </button>
-          </div>
-        )}
-          </div>
-        </motion.div>
-      )}
-    </AnimatePresence>
+      </div>
+    </motion.div>
+  )}
+</AnimatePresence>
   );
 };

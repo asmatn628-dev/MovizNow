@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import { useSearchParams, Link } from 'react-router-dom';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { useSearchParams, Link, useLocation } from 'react-router-dom';
 import { db } from '../../firebase';
 import { aiService } from '../../services/aiService';
 import { collection, addDoc, deleteDoc, doc, updateDoc, onSnapshot, writeBatch } from 'firebase/firestore';
@@ -80,6 +80,41 @@ export default function ContentManagement() {
   const [shareSeasonModal, setShareSeasonModal] = useState<{ isOpen: boolean; content: Content | null; seasons: Season[] }>({ isOpen: false, content: null, seasons: [] });
   const [notificationModal, setNotificationModal] = useState<{ isOpen: boolean; content: Content | null; status: 'idle' | 'sending' | 'success' | 'error' }>({ isOpen: false, content: null, status: 'idle' });
   const [selectedShareSeasons, setSelectedShareSeasons] = useState<number[]>([]);
+  const location = useLocation();
+
+  const prefilledDataApplied = useRef(false);
+
+  useEffect(() => {
+    if (location.state?.prefilledData && !prefilledDataApplied.current && genres.length > 0) {
+      const data = location.state.prefilledData;
+      
+      // Reset form first
+      setEditingId(null);
+      setTitle('');
+      setDescription('');
+      setPosterUrl('');
+      setTrailerUrl('');
+      setImdbLink('');
+      setImdbRating('');
+      setYear(new Date().getFullYear());
+      setReleaseDate('');
+      setRuntime('');
+      setCast('');
+      setType('movie');
+      setSelectedGenres([]);
+      setSeasons([]);
+      setMovieLinks([]);
+      
+      // Apply prefilled data using the standard apply function
+      applyAIFetchedData(data);
+      
+      setIsModalOpen(true);
+      prefilledDataApplied.current = true;
+      
+      // Clear state so it doesn't re-open on refresh
+      window.history.replaceState({}, document.title);
+    }
+  }, [location.state, genres]); // Added genres as dependency to ensure applyAIFetchedData can match genres
 
   useEffect(() => {
     const unsubContent = onSnapshot(collection(db, 'content'), (snapshot) => {
@@ -695,10 +730,10 @@ export default function ContentManagement() {
         }
         
         if (!tmdbItem) {
-            const found = await searchTMDBByTitle(content.title, content.year?.toString() || '');
-            if (found) {
-                tmdbItem = found.item;
-                type = found.type === 'tv' ? 'series' : 'movie';
+            const results = await searchTMDBByTitle(content.title, content.year?.toString() || '');
+            if (results && results.length > 0) {
+                tmdbItem = results[0].item;
+                type = results[0].type === 'tv' ? 'series' : 'movie';
             }
         }
         
