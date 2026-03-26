@@ -32,10 +32,16 @@ export default function MovieRequests() {
   const [loading, setLoading] = useState(true);
   const [userRequestCount, setUserRequestCount] = useState(0);
 
-  const MAX_REQUESTS_PER_USER = 5;
+  const MAX_REQUESTS_PER_USER = 3;
 
   useEffect(() => {
-    const q = query(collection(db, 'movie_requests'), orderBy('requestCount', 'desc'), orderBy('createdAt', 'desc'));
+    if (!profile) return;
+
+    const q = query(
+      collection(db, 'movie_requests'), 
+      where('userId', '==', profile.uid),
+      orderBy('createdAt', 'desc')
+    );
     const unsub = onSnapshot(q, (snapshot) => {
       const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as MovieRequest));
       setRequests(data);
@@ -204,36 +210,40 @@ export default function MovieRequests() {
                 key={request.id}
                 className="bg-zinc-900 border border-zinc-800 rounded-2xl p-4 flex items-center justify-between group hover:border-zinc-700 transition-colors"
               >
-                <div className="flex items-center gap-4">
-                  <div className={clsx(
-                    "w-12 h-12 rounded-xl flex items-center justify-center shrink-0",
-                    request.type === 'movie' ? "bg-blue-500/10 text-blue-500" : "bg-purple-500/10 text-purple-500"
-                  )}>
-                    {request.type === 'movie' ? <Film className="w-6 h-6" /> : <Tv className="w-6 h-6" />}
-                  </div>
-                  <div>
-                    <h3 className="font-bold text-zinc-100 flex items-center gap-2">
-                      {request.title}
-                      {request.status === 'completed' && (
-                        <span className="bg-emerald-500/10 text-emerald-500 text-[10px] px-2 py-0.5 rounded-full border border-emerald-500/20 flex items-center gap-1">
-                          <CheckCircle2 className="w-3 h-3" /> Available
-                        </span>
-                      )}
-                      {request.status === 'rejected' && (
-                        <span className="bg-red-500/10 text-red-500 text-[10px] px-2 py-0.5 rounded-full border border-red-500/20 flex items-center gap-1">
-                          <XCircle className="w-3 h-3" /> Rejected
-                        </span>
-                      )}
-                    </h3>
-                    <div className="flex items-center gap-3 mt-1 text-xs text-zinc-500">
-                      <span className="capitalize">{request.type}</span>
-                      <span>•</span>
-                      <span>Requested by {request.requestCount} user{request.requestCount !== 1 ? 's' : ''}</span>
-                      <span>•</span>
-                      <span>{format(new Date(request.createdAt), 'MMM dd, yyyy')}</span>
-                    </div>
-                  </div>
+            <div className="flex items-center gap-4">
+              <div className={clsx(
+                "w-12 h-12 rounded-xl flex items-center justify-center shrink-0",
+                request.type === 'movie' ? "bg-blue-500/10 text-blue-500" : "bg-purple-500/10 text-purple-500"
+              )}>
+                {request.type === 'movie' ? <Film className="w-6 h-6" /> : <Tv className="w-6 h-6" />}
+              </div>
+              <div className="flex-1 min-w-0">
+                <h3 className="font-bold text-zinc-100 flex items-center gap-2 flex-wrap">
+                  {request.title}
+                  {request.status === 'completed' && (
+                    <span className="bg-emerald-500/10 text-emerald-500 text-[10px] px-2 py-0.5 rounded-full border border-emerald-500/20 flex items-center gap-1">
+                      <CheckCircle2 className="w-3 h-3" /> Available
+                    </span>
+                  )}
+                  {request.status === 'rejected' && (
+                    <span className="bg-red-500/10 text-red-500 text-[10px] px-2 py-0.5 rounded-full border border-red-500/20 flex items-center gap-1">
+                      <XCircle className="w-3 h-3" /> Rejected
+                    </span>
+                  )}
+                </h3>
+                <div className="flex items-center gap-3 mt-1 text-xs text-zinc-500">
+                  <span className="capitalize">{request.type}</span>
+                  <span>•</span>
+                  <span>{format(new Date(request.createdAt), 'MMM dd, yyyy')}</span>
                 </div>
+                {(request as any).adminComment && (
+                  <div className="mt-2 p-2 bg-zinc-950/50 border border-zinc-800 rounded-lg text-xs text-zinc-400 italic">
+                    <span className="text-zinc-500 font-bold not-italic mr-1">Admin:</span>
+                    {(request as any).adminComment}
+                  </div>
+                )}
+              </div>
+            </div>
 
                 <div className="flex items-center gap-3">
                   {request.status === 'completed' && request.linkedContentId && (
