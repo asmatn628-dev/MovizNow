@@ -210,7 +210,25 @@ class ScannerService {
     return obj;
   }
 
+  public async stopScan() {
+    console.log("stopScan called, current isScanning:", this.isScanning);
+    this.isScanning = false;
+    
+    // Immediately update Firestore to idle to reflect in UI
+    try {
+      const scanDocRef = doc(db, 'scans', 'current');
+      await updateDoc(scanDocRef, {
+        status: 'idle',
+        lastUpdated: serverTimestamp()
+      });
+      console.log("Firestore status updated to idle");
+    } catch (e) {
+      console.error("Error updating Firestore status to idle", e);
+    }
+  }
+
   public async startScan(allLinksToScan: { info: ErrorLinkInfo, url: string }[]) {
+    console.log("startScan called, current isScanning:", this.isScanning);
     if (this.isScanning) return;
     
     const scanDocRef = doc(db, 'scans', 'current');
@@ -235,6 +253,7 @@ class ScannerService {
     }
 
     this.isScanning = true;
+    console.log("isScanning set to true");
 
     await setDoc(scanDocRef, this.sanitizeForFirestore({
       id: 'current',
@@ -251,6 +270,15 @@ class ScannerService {
 
     try {
       for (let i = 0; i < allLinksToScan.length; i += batchSize) {
+        if (!this.isScanning) {
+          console.log("Scan stopped by user.");
+          await updateDoc(scanDocRef, {
+            status: 'idle',
+            lastUpdated: serverTimestamp()
+          });
+          return;
+        }
+
         const batch = allLinksToScan.slice(i, i + batchSize);
         const results = await Promise.all(
           batch.map(async (item) => {
@@ -306,6 +334,7 @@ class ScannerService {
       });
     } finally {
       this.isScanning = false;
+      console.log("isScanning set to false in finally");
     }
   }
 }

@@ -2,9 +2,10 @@ import React, { useState, useEffect } from 'react';
 import { db } from '../../firebase';
 import { collection, onSnapshot, doc, updateDoc, getDoc } from 'firebase/firestore';
 import { Content, Season, QualityLinks, LinkDef } from '../../types';
-import { AlertTriangle, Edit2, ExternalLink, RefreshCw, X, Save, CheckCircle2, Filter, ArrowUpDown } from 'lucide-react';
+import { AlertTriangle, Edit2, ExternalLink, RefreshCw, X, Save, CheckCircle2, Filter, ArrowUpDown, Search } from 'lucide-react';
 import { handleFirestoreError, OperationType } from '../../utils/firestoreErrorHandler';
 import { scannerService, ErrorLinkInfo, ScanState } from '../../services/ScannerService';
+import { PixelDrainModal } from '../../components/PixelDrainModal';
 
 export default function ErrorLinks() {
   const [contentList, setContentList] = useState<Content[]>([]);
@@ -14,6 +15,7 @@ export default function ErrorLinks() {
   const [errorLinks, setErrorLinks] = useState<ErrorLinkInfo[]>([]);
   const [scannedCount, setScannedCount] = useState(0);
   const [totalLinks, setTotalLinks] = useState(0);
+  const [isPixelDrainModalOpen, setIsPixelDrainModalOpen] = useState(false);
 
   const [editingLink, setEditingLink] = useState<ErrorLinkInfo | null>(null);
   const [editUrl, setEditUrl] = useState('');
@@ -356,8 +358,29 @@ export default function ErrorLinks() {
               </>
             )}
           </button>
+          {scanning && (
+            <button
+              onClick={() => {
+                console.log("Stop button clicked");
+                scannerService.stopScan();
+              }}
+              className="bg-red-500 hover:bg-red-600 text-white px-6 py-3 rounded-xl font-medium flex items-center justify-center gap-2 transition-colors whitespace-nowrap"
+            >
+              <X className="w-5 h-5" />
+              Stop Scan
+            </button>
+          )}
+          <button
+            onClick={() => setIsPixelDrainModalOpen(true)}
+            className="bg-sky-500 hover:bg-sky-600 text-white px-6 py-3 rounded-xl font-medium flex items-center justify-center gap-2 transition-colors whitespace-nowrap"
+          >
+            <Search className="w-5 h-5" />
+            Manual Check
+          </button>
         </div>
       </div>
+
+      <PixelDrainModal isOpen={isPixelDrainModalOpen} onClose={() => setIsPixelDrainModalOpen(false)} />
 
       {loading ? (
         <div className="flex justify-center items-center py-20">
