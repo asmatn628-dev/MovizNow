@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import { Suspense, lazy, useState, useEffect } from 'react';
 import { AuthProvider } from './contexts/AuthContext';
+import { ContentProvider } from './contexts/ContentContext';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import { Loader2 } from 'lucide-react';
 import { SystemNotificationWrapper } from './components/SystemNotificationWrapper';
@@ -49,39 +50,41 @@ export default function App() {
 
   return (
     <AuthProvider>
-      <SystemNotificationWrapper />
-      <BrowserRouter>
-        <MediaModalController isOpen={isMediaModalOpen} onClose={() => setIsMediaModalOpen(false)} />
-        <Suspense fallback={<LoadingFallback />}>
-          <Routes>
-            <Route path="/login" element={<Login />} />
-            
-            {/* User Routes */}
-            <Route path="/" element={<ProtectedRoute><Home onOpenMediaModal={() => setIsMediaModalOpen(true)} /></ProtectedRoute>} />
-            <Route path="/movie/:id" element={<MovieDetails />} />
-            <Route path="/watch-later" element={<ProtectedRoute><WatchLater /></ProtectedRoute>} />
-            <Route path="/favorites" element={<ProtectedRoute><Favorites /></ProtectedRoute>} />
-            <Route path="/requests" element={<ProtectedRoute><MovieRequests /></ProtectedRoute>} />
-            
-            {/* Admin Routes */}
-            <Route path="/admin" element={<ProtectedRoute requireAdmin><AdminLayout /></ProtectedRoute>}>
-              <Route index element={<Navigate to="content" replace />} />
-              <Route path="analytics" element={<Analytics />} />
-              <Route path="content" element={<ContentManagement />} />
-              <Route path="genres" element={<GenreManagement />} />
-              <Route path="languages" element={<LanguageManagement />} />
-              <Route path="qualities" element={<QualityManagement />} />
-              <Route path="users" element={<UserManagement />} />
-              <Route path="temporary-users" element={<TemporaryUsers />} />
-              <Route path="selected-content" element={<SelectedContentUsers />} />
-              <Route path="income" element={<IncomeManagement />} />
-              <Route path="error-links" element={<ErrorLinks />} />
-              <Route path="notifications" element={<Notifications />} />
-              <Route path="requests" element={<MovieRequestsManagement />} />
-            </Route>
-          </Routes>
-        </Suspense>
-      </BrowserRouter>
+      <ContentProvider>
+        <SystemNotificationWrapper />
+        <BrowserRouter>
+          <MediaModalController isOpen={isMediaModalOpen} onClose={() => setIsMediaModalOpen(false)} />
+          <Suspense fallback={<LoadingFallback />}>
+            <Routes>
+              <Route path="/login" element={<Login />} />
+              
+              {/* User Routes */}
+              <Route path="/" element={<ProtectedRoute><Home onOpenMediaModal={() => setIsMediaModalOpen(true)} /></ProtectedRoute>} />
+              <Route path="/movie/:id" element={<MovieDetails />} />
+              <Route path="/watch-later" element={<ProtectedRoute><WatchLater /></ProtectedRoute>} />
+              <Route path="/favorites" element={<ProtectedRoute><Favorites /></ProtectedRoute>} />
+              <Route path="/requests" element={<ProtectedRoute><MovieRequests /></ProtectedRoute>} />
+              
+              {/* Admin Routes */}
+              <Route path="/admin" element={<ProtectedRoute requireAdmin><AdminLayout /></ProtectedRoute>}>
+                <Route index element={<Navigate to="content" replace />} />
+                <Route path="analytics" element={<Analytics />} />
+                <Route path="content" element={<ContentManagement />} />
+                <Route path="genres" element={<GenreManagement />} />
+                <Route path="languages" element={<LanguageManagement />} />
+                <Route path="qualities" element={<QualityManagement />} />
+                <Route path="users" element={<UserManagement />} />
+                <Route path="temporary-users" element={<TemporaryUsers />} />
+                <Route path="selected-content" element={<SelectedContentUsers />} />
+                <Route path="income" element={<IncomeManagement />} />
+                <Route path="error-links" element={<ErrorLinks />} />
+                <Route path="notifications" element={<Notifications />} />
+                <Route path="requests" element={<MovieRequestsManagement />} />
+              </Route>
+            </Routes>
+          </Suspense>
+        </BrowserRouter>
+      </ContentProvider>
     </AuthProvider>
   );
 }

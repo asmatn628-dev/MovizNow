@@ -1,11 +1,8 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { db } from '../../firebase';
-import { collection, onSnapshot } from 'firebase/firestore';
-import { Content, Quality, Language, Genre } from '../../types';
 import { useAuth } from '../../contexts/AuthContext';
+import { useContent } from '../../contexts/ContentContext';
 import { Film, Clock, ArrowLeft } from 'lucide-react';
-import { handleFirestoreError, OperationType } from '../../utils/firestoreErrorHandler';
 import { formatContentTitle } from '../../utils/contentUtils';
 import { NotificationMenu } from '../../components/NotificationMenu';
 import { LazyLoadImage } from 'react-lazy-load-image-component';
@@ -13,51 +10,7 @@ import { LazyLoadImage } from 'react-lazy-load-image-component';
 // Force rebuild
 export default function WatchLater() {
   const { profile } = useAuth();
-  const [contentList, setContentList] = useState<Content[]>([]);
-  const [qualities, setQualities] = useState<Quality[]>([]);
-  const [languages, setLanguages] = useState<Language[]>([]);
-  const [genres, setGenres] = useState<Genre[]>([]);
-
-  useEffect(() => {
-    window.scrollTo(0, 0);
-    const unsubContent = onSnapshot(collection(db, 'content'), (snapshot) => {
-      setContentList(snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() } as Content)));
-    }, (error) => {
-      console.error("Content snapshot error:", error);
-      handleFirestoreError(error, OperationType.LIST, 'content');
-    });
-    const unsubQualities = onSnapshot(collection(db, 'qualities'), (snapshot) => {
-      setQualities(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Quality)));
-    }, (error) => {
-      console.error("Qualities snapshot error:", error);
-      handleFirestoreError(error, OperationType.LIST, 'qualities');
-    });
-    const unsubLangs = onSnapshot(collection(db, 'languages'), (snapshot) => {
-      const data = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Language));
-      setLanguages(data.sort((a, b) => {
-        if (a.order !== undefined && b.order !== undefined) return a.order - b.order;
-        if (a.order !== undefined) return -1;
-        if (b.order !== undefined) return 1;
-        return a.name.localeCompare(b.name);
-      }));
-    }, (error) => {
-      console.error("Languages snapshot error:", error);
-      handleFirestoreError(error, OperationType.LIST, 'languages');
-    });
-    const unsubGenres = onSnapshot(collection(db, 'genres'), (snapshot) => {
-      const data = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Genre));
-      setGenres(data.sort((a, b) => {
-        if (a.order !== undefined && b.order !== undefined) return a.order - b.order;
-        if (a.order !== undefined) return -1;
-        if (b.order !== undefined) return 1;
-        return a.name.localeCompare(b.name);
-      }));
-    }, (error) => {
-      console.error("Genres snapshot error:", error);
-      handleFirestoreError(error, OperationType.LIST, 'genres');
-    });
-    return () => { unsubContent(); unsubQualities(); unsubLangs(); unsubGenres(); };
-  }, []);
+  const { contentList, genres, languages, qualities } = useContent();
 
   const watchLaterContent = contentList.filter(c => 
     profile?.watchLater?.includes(c.id) && 

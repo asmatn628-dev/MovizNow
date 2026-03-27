@@ -2,12 +2,12 @@ import { useState, useEffect, useRef, useMemo } from 'react';
 import { useParams, Link, useNavigate, useLocation } from 'react-router-dom';
 import { Helmet } from 'react-helmet-async';
 import { db } from '../../firebase';
-import { doc, onSnapshot, updateDoc, arrayUnion, arrayRemove, collection, deleteDoc } from 'firebase/firestore';
-import { Content, Genre, Language, QualityLinks, Season, Quality } from '../../types';
+import { doc, updateDoc, arrayUnion, arrayRemove, deleteDoc } from 'firebase/firestore';
+import { Content, QualityLinks, Season } from '../../types';
 import { useAuth } from '../../contexts/AuthContext';
+import { useContent } from '../../contexts/ContentContext';
 import { Film, ArrowLeft, Play, Clock, Heart, MessageCircle, AlertCircle, Download, Share2, Chrome, Copy, Youtube, X, Edit2, Trash2, Settings, Lock, ChevronDown, ChevronUp, Loader2, Search } from 'lucide-react';
 import { logEvent } from '../../services/analytics';
-import { handleFirestoreError, OperationType } from '../../utils/firestoreErrorHandler';
 import AlertModal from '../../components/AlertModal';
 import ConfirmModal from '../../components/ConfirmModal';
 import { motion, AnimatePresence } from 'motion/react';
@@ -18,10 +18,9 @@ import { LazyLoadImage } from 'react-lazy-load-image-component';
 export default function MovieDetails() {
   const { id } = useParams<{ id: string }>();
   const { profile, loading: profileLoading } = useAuth();
-  const [content, setContent] = useState<Content | null>(null);
-  const [genres, setGenres] = useState<Genre[]>([]);
-  const [languages, setLanguages] = useState<Language[]>([]);
-  const [qualities, setQualities] = useState<Quality[]>([]);
+  const { contentList, genres, languages, qualities } = useContent();
+  const content = useMemo(() => contentList.find(c => c.id === id) || null, [contentList, id]);
+  
   const [loading, setLoading] = useState(true);
   const [alertConfig, setAlertConfig] = useState<{ isOpen: boolean; title: string; message: string }>({ isOpen: false, title: '', message: '' });
   const [deleteId, setDeleteId] = useState<string | null>(null);
@@ -90,59 +89,17 @@ export default function MovieDetails() {
   }, [mergedContent, genres]);
 
   useEffect(() => {
-    window.scrollTo(0, 0);
-    if (!id) return;
-    const unsubContent = onSnapshot(doc(db, 'content', id), (docSnap) => {
-      if (docSnap.exists()) {
-        const data = { id: docSnap.id, ...docSnap.data() } as Content;
-        setContent(data);
-        
-        if (!hasLoggedView.current && profile?.uid) {
-          hasLoggedView.current = true;
-          logEvent('content_click', profile.uid, {
-            contentId: data.id,
-            contentTitle: data.title
-          });
-        }
+    if (content) {
+      setLoading(false);
+      if (!hasLoggedView.current && profile?.uid) {
+        hasLoggedView.current = true;
+        logEvent('content_click', profile.uid, {
+          contentId: content.id,
+          contentTitle: content.title
+        });
       }
-      setLoading(false);
-    }, (error) => {
-      console.error("Content snapshot error:", error);
-      setLoading(false);
-      handleFirestoreError(error, OperationType.GET, `content/${id}`);
-    });
-    const unsubGenres = onSnapshot(collection(db, 'genres'), (snapshot) => {
-      const data = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Genre));
-      setGenres(data.sort((a, b) => {
-        if (a.order !== undefined && b.order !== undefined) return a.order - b.order;
-        if (a.order !== undefined) return -1;
-        if (b.order !== undefined) return 1;
-        return a.name.localeCompare(b.name);
-      }));
-    }, (error) => {
-      console.error("Genres snapshot error:", error);
-      handleFirestoreError(error, OperationType.LIST, 'genres');
-    });
-    const unsubLangs = onSnapshot(collection(db, 'languages'), (snapshot) => {
-      const data = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Language));
-      setLanguages(data.sort((a, b) => {
-        if (a.order !== undefined && b.order !== undefined) return a.order - b.order;
-        if (a.order !== undefined) return -1;
-        if (b.order !== undefined) return 1;
-        return a.name.localeCompare(b.name);
-      }));
-    }, (error) => {
-      console.error("Languages snapshot error:", error);
-      handleFirestoreError(error, OperationType.LIST, 'languages');
-    });
-    const unsubQualities = onSnapshot(collection(db, 'qualities'), (snapshot) => {
-      setQualities(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Quality)));
-    }, (error) => {
-      console.error("Qualities snapshot error:", error);
-      handleFirestoreError(error, OperationType.LIST, 'qualities');
-    });
-    return () => { unsubContent(); unsubGenres(); unsubLangs(); unsubQualities(); };
-  }, [id, profile?.uid]);
+    }
+  }, [content, profile?.uid]);
 
   useEffect(() => {
     if (linkPopup) {

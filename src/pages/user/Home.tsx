@@ -1,12 +1,12 @@
 import { useState, useEffect, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { db } from '../../firebase';
-import { collection, onSnapshot, doc, updateDoc } from 'firebase/firestore';
-import { Content, Genre, Language, Quality } from '../../types';
+import { doc, updateDoc } from 'firebase/firestore';
+import { Content } from '../../types';
 import { useAuth } from '../../contexts/AuthContext';
+import { useContent } from '../../contexts/ContentContext';
 import { Film, Search, Filter, MessageCircle, Clock, Heart, LogOut, User, Lock } from 'lucide-react';
 import { clsx } from 'clsx';
-import { handleFirestoreError, OperationType } from '../../utils/firestoreErrorHandler';
 import { format } from 'date-fns';
 import ConfirmModal from '../../components/ConfirmModal';
 import { formatContentTitle } from '../../utils/contentUtils';
@@ -16,10 +16,7 @@ import { NotificationMenu } from '../../components/NotificationMenu';
 
 export default function Home({ onOpenMediaModal }: { onOpenMediaModal: () => void }) {
   const { profile, logout } = useAuth();
-  const [contentList, setContentList] = useState<Content[]>([]);
-  const [genres, setGenres] = useState<Genre[]>([]);
-  const [languages, setLanguages] = useState<Language[]>([]);
-  const [qualities, setQualities] = useState<Quality[]>([]);
+  const { contentList, genres, languages, qualities, loading } = useContent();
   
   const [search, setSearch] = useState('');
   const [sort, setSort] = useState<'newest' | 'year' | 'az'>('newest');
@@ -33,7 +30,6 @@ export default function Home({ onOpenMediaModal }: { onOpenMediaModal: () => voi
   const [isLogoutModalOpen, setIsLogoutModalOpen] = useState(false);
   const [showWhatsappPrompt, setShowWhatsappPrompt] = useState(false);
   const [whatsappNumber, setWhatsappNumber] = useState('');
-  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     if (profile && profile.phone === undefined && profile.role !== 'admin' && profile.role !== 'data_editor') {
@@ -63,48 +59,9 @@ export default function Home({ onOpenMediaModal }: { onOpenMediaModal: () => voi
     };
 
     window.addEventListener('scroll', handleScroll, { passive: true });
-
-    const unsubContent = onSnapshot(collection(db, 'content'), (snapshot) => {
-      setContentList(snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() } as Content)));
-      setLoading(false);
-    }, (error) => {
-      console.error("Content snapshot error:", error);
-      setLoading(false);
-      handleFirestoreError(error, OperationType.LIST, 'content');
-    });
-    const unsubGenres = onSnapshot(collection(db, 'genres'), (snapshot) => {
-      const data = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Genre));
-      setGenres(data.sort((a, b) => {
-        if (a.order !== undefined && b.order !== undefined) return a.order - b.order;
-        if (a.order !== undefined) return -1;
-        if (b.order !== undefined) return 1;
-        return a.name.localeCompare(b.name);
-      }));
-    }, (error) => {
-      console.error("Genres snapshot error:", error);
-      handleFirestoreError(error, OperationType.LIST, 'genres');
-    });
-    const unsubLangs = onSnapshot(collection(db, 'languages'), (snapshot) => {
-      const data = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Language));
-      setLanguages(data.sort((a, b) => {
-        if (a.order !== undefined && b.order !== undefined) return a.order - b.order;
-        if (a.order !== undefined) return -1;
-        if (b.order !== undefined) return 1;
-        return a.name.localeCompare(b.name);
-      }));
-    }, (error) => {
-      console.error("Languages snapshot error:", error);
-      handleFirestoreError(error, OperationType.LIST, 'languages');
-    });
-    const unsubQualities = onSnapshot(collection(db, 'qualities'), (snapshot) => {
-      setQualities(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Quality)));
-    }, (error) => {
-      console.error("Qualities snapshot error:", error);
-      handleFirestoreError(error, OperationType.LIST, 'qualities');
-    });
-    return () => { 
+    
+    return () => {
       window.removeEventListener('scroll', handleScroll);
-      unsubContent(); unsubGenres(); unsubLangs(); unsubQualities(); 
     };
   }, []);
 
