@@ -187,6 +187,17 @@ export default function ContentManagement() {
     };
   }, []);
 
+  const clearFilters = () => {
+    setFilterType('all');
+    setFilterGenre('all');
+    setFilterLanguage('all');
+    setFilterQuality('all');
+    setFilterYear('all');
+    setFilterStatus('all');
+    setFilterAddedBy('all');
+    setFilterDateAdded('newest');
+  };
+
   useEffect(() => {
     if (trailerUrl && trailerUrl.includes('youtube.com/watch')) {
       fetch(`https://www.youtube.com/oembed?url=${trailerUrl}&format=json`)
@@ -1681,15 +1692,19 @@ export default function ContentManagement() {
           </div>
         </div>
         
-        <div className="flex flex-col gap-2 bg-zinc-900 p-3 rounded-xl border border-zinc-800">
-          <div className="flex flex-wrap gap-2">
+        <div className="flex flex-col gap-1 bg-zinc-900 p-3 rounded-xl border border-zinc-800">
+          {/* Line 1 */}
+          <div className="flex flex-row flex-nowrap gap-1">
+            <button onClick={clearFilters} className="flex-none bg-zinc-800 hover:bg-zinc-700 text-white rounded-lg px-2 py-1 text-xs flex items-center gap-1">
+              <X className="w-3 h-3" />
+            </button>
             <select value={filterType} onChange={(e) => setFilterType(e.target.value as any)} className="bg-zinc-950 border border-zinc-800 rounded-lg px-2 py-1 text-xs focus:border-emerald-500">
-              <option value="all">All Types</option>
+              <option value="all">Types</option>
               <option value="movie">Movies</option>
               <option value="series">Series</option>
             </select>
             <select value={filterYear} onChange={(e) => setFilterYear(e.target.value)} className="bg-zinc-950 border border-zinc-800 rounded-lg px-2 py-1 text-xs focus:border-emerald-500">
-              <option value="all">All Years</option>
+              <option value="all">Years</option>
               {uniqueYears.map(y => <option key={y} value={y.toString()}>{y}</option>)}
             </select>
             <select value={filterDateAdded} onChange={(e) => setFilterDateAdded(e.target.value as any)} className="bg-zinc-950 border border-zinc-800 rounded-lg px-2 py-1 text-xs focus:border-emerald-500">
@@ -1697,23 +1712,25 @@ export default function ContentManagement() {
               <option value="oldest">Oldest Added</option>
             </select>
           </div>
-          <div className="flex flex-wrap gap-2">
+          {/* Line 2 */}
+          <div className="flex flex-row flex-nowrap gap-1">
             <select value={filterGenre} onChange={(e) => setFilterGenre(e.target.value)} className="bg-zinc-950 border border-zinc-800 rounded-lg px-2 py-1 text-xs focus:border-emerald-500">
-              <option value="all">All Genres</option>
+              <option value="all">Genres</option>
               {genres.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
             </select>
             <select value={filterLanguage} onChange={(e) => setFilterLanguage(e.target.value)} className="bg-zinc-950 border border-zinc-800 rounded-lg px-2 py-1 text-xs focus:border-emerald-500">
-              <option value="all">All Languages</option>
+              <option value="all">Languages</option>
               {languages.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
             </select>
             <select value={filterQuality} onChange={(e) => setFilterQuality(e.target.value)} className="bg-zinc-950 border border-zinc-800 rounded-lg px-2 py-1 text-xs focus:border-emerald-500">
-              <option value="all">All Qualities</option>
+              <option value="all">Qualities</option>
               {qualities.map(q => <option key={q.id} value={q.id}>{q.name}</option>)}
             </select>
           </div>
-          <div className="flex flex-wrap gap-2">
+          {/* Line 3 */}
+          <div className="flex flex-row flex-nowrap gap-1">
             <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value as any)} className="bg-zinc-950 border border-zinc-800 rounded-lg px-2 py-1 text-xs focus:border-emerald-500">
-              <option value="all">All Status</option>
+              <option value="all">Status</option>
               <option value="published">Published</option>
               <option value="draft">Draft</option>
             </select>

@@ -5,7 +5,7 @@ import { doc, updateDoc } from 'firebase/firestore';
 import { Content } from '../../types';
 import { useAuth } from '../../contexts/AuthContext';
 import { useContent } from '../../contexts/ContentContext';
-import { Film, Search, Filter, MessageCircle, Clock, Heart, LogOut, User, Users, Lock, LayoutDashboard } from 'lucide-react';
+import { Film, Search, Filter, MessageCircle, Clock, Heart, LogOut, User, Users, Lock, LayoutDashboard, X } from 'lucide-react';
 import { clsx } from 'clsx';
 import { format } from 'date-fns';
 import ConfirmModal from '../../components/ConfirmModal';
@@ -30,6 +30,16 @@ export default function Home({ onOpenMediaModal }: { onOpenMediaModal: () => voi
   const [isLogoutModalOpen, setIsLogoutModalOpen] = useState(false);
   const [showWhatsappPrompt, setShowWhatsappPrompt] = useState(false);
   const [whatsappNumber, setWhatsappNumber] = useState('');
+
+  const clearFilters = () => {
+    setSort('newest');
+    setSelectedType('');
+    setSelectedGenre('');
+    setSelectedLanguage('');
+    setSelectedQuality('');
+    setSelectedYear('');
+    setSearch('');
+  };
 
   useEffect(() => {
     if (profile && profile.phone === undefined && profile.role !== 'admin' && profile.role !== 'content_manager' && profile.role !== 'manager') {
@@ -458,10 +468,13 @@ export default function Home({ onOpenMediaModal }: { onOpenMediaModal: () => voi
           </div>
           
           <div className="flex gap-3 overflow-x-auto pb-2 md:pb-0 flex-nowrap">
+            <button onClick={clearFilters} className="bg-zinc-800 hover:bg-zinc-700 text-white rounded-lg px-2 py-1 text-xs flex items-center gap-1">
+              <X className="w-3 h-3" />
+            </button>
             <select
               value={sort}
               onChange={(e) => setSort(e.target.value as any)}
-              className="bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-2 focus:outline-none focus:border-emerald-500 min-w-[140px] text-sm"
+              className="bg-zinc-950 border border-zinc-800 rounded-lg px-2 py-1 text-xs focus:border-emerald-500"
             >
               <option value="newest">Recently Added</option>
               <option value="year">Release Year</option>
@@ -471,9 +484,9 @@ export default function Home({ onOpenMediaModal }: { onOpenMediaModal: () => voi
             <select
               value={selectedType}
               onChange={(e) => setSelectedType(e.target.value)}
-              className="bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-2 focus:outline-none focus:border-emerald-500 min-w-[120px] text-sm"
+              className="bg-zinc-950 border border-zinc-800 rounded-lg px-2 py-1 text-xs focus:border-emerald-500"
             >
-              <option value="">All Types</option>
+              <option value="">Types</option>
               <option value="movie">Movies</option>
               <option value="series">Series</option>
             </select>
@@ -481,57 +494,36 @@ export default function Home({ onOpenMediaModal }: { onOpenMediaModal: () => voi
             <select
               value={selectedGenre}
               onChange={(e) => setSelectedGenre(e.target.value)}
-              className="bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-2 focus:outline-none focus:border-emerald-500 min-w-[140px] text-sm"
+              className="bg-zinc-950 border border-zinc-800 rounded-lg px-2 py-1 text-xs focus:border-emerald-500"
             >
-              <option value="">All Genres</option>
+              <option value="">Genres</option>
               {genres.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
             </select>
 
             <select
               value={selectedLanguage}
               onChange={(e) => setSelectedLanguage(e.target.value)}
-              className="bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-2 focus:outline-none focus:border-emerald-500 min-w-[140px] text-sm"
+              className="bg-zinc-950 border border-zinc-800 rounded-lg px-2 py-1 text-xs focus:border-emerald-500"
             >
-              <option value="">All Languages</option>
+              <option value="">Languages</option>
               {languages.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
             </select>
 
-            <div className="flex gap-2 items-center min-w-fit">
-              <span className="text-xs text-zinc-500 uppercase tracking-wider font-bold whitespace-nowrap">Quality:</span>
-              <div className="flex gap-2">
-                <button
-                  onClick={() => setSelectedQuality('')}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap ${selectedQuality === '' ? 'bg-cyan-500 text-black shadow-[0_0_10px_rgba(6,182,212,0.4)]' : 'bg-zinc-900 text-zinc-400 border border-zinc-800 hover:border-zinc-700'}`}
-                >
-                  ALL
-                </button>
-                {qualities.map(q => {
-                  const isHighQuality = ['WEB-DL', 'WebRip', 'HDRip', 'BluRay'].some(hq => q.name.toUpperCase().includes(hq.toUpperCase()));
-                  return (
-                    <button
-                      key={q.id}
-                      onClick={() => setSelectedQuality(q.id)}
-                      className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap ${
-                        selectedQuality === q.id 
-                          ? isHighQuality 
-                            ? 'bg-cyan-500 text-black shadow-[0_0_10px_rgba(6,182,212,0.4)]' 
-                            : 'bg-amber-500 text-black shadow-[0_0_10px_rgba(245,158,11,0.4)]'
-                          : 'bg-zinc-900 text-zinc-400 border border-zinc-800 hover:border-zinc-700'
-                      }`}
-                    >
-                      {q.name}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
+            <select
+              value={selectedQuality}
+              onChange={(e) => setSelectedQuality(e.target.value)}
+              className="bg-zinc-950 border border-zinc-800 rounded-lg px-2 py-1 text-xs focus:border-emerald-500"
+            >
+              <option value="">Qualities</option>
+              {qualities.map(q => <option key={q.id} value={q.id}>{q.name}</option>)}
+            </select>
 
             <select
               value={selectedYear}
               onChange={(e) => setSelectedYear(e.target.value)}
-              className="bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-2 focus:outline-none focus:border-emerald-500 min-w-[120px] text-sm"
+              className="bg-zinc-950 border border-zinc-800 rounded-lg px-2 py-1 text-xs focus:border-emerald-500"
             >
-              <option value="">All Years</option>
+              <option value="">Years</option>
               {uniqueYears.map(y => <option key={y} value={y}>{y}</option>)}
             </select>
           </div>
