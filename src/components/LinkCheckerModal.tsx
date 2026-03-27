@@ -15,64 +15,100 @@ export const LinkCheckerModal: React.FC<LinkCheckerModalProps> = ({ isOpen, onCl
   const isPixelDrainLink = (url: string) => /pixeldrain\.(com|dev)/i.test(url);
 
   const extractPixelDrainId = (url: string) => {
+    // First, detect if it's a list or folder to return a special marker
+    if (/pixeldrain\.(com|dev)\/l\//i.test(url)) {
+      return { type: 'list', id: null };
+    }
+    if (/pixeldrain\.(com|dev)\/f\//i.test(url)) {
+      return { type: 'folder', id: null };
+    }
+    // Regular file patterns
     const patterns = [
       /pixeldrain\.(com|dev)\/u\/([a-zA-Z0-9]+)/,
       /pixeldrain\.(com|dev)\/api\/file\/([a-zA-Z0-9]+)/,
-      /pixeldrain\.(com|dev)\/l\/([a-zA-Z0-9]+)/,
-      /pixeldrain\.(com|dev)\/f\/([a-zA-Z0-9]+)/,
       /^([a-zA-Z0-9]+)$/
     ];
     for (let pattern of patterns) {
       const match = url.match(pattern);
-      if (match) return match[match.length - 1];
+      if (match) {
+        return { type: 'file', id: match[match.length - 1] };
+      }
     }
-    return null;
-  };
-
-  const interpretPixelDrainError = (data: any) => {
-    if (!data) return "Unknown error";
-    const error = data.error || data.message || "";
-    if (typeof error === 'string') {
-      const lowerError = error.toLowerCase();
-      if (lowerError.includes('file_removed') || lowerError.includes('deleted') || lowerError.includes('expired')) {
-        return "❌ File removed (deleted/expired).";
-      }
-      if (lowerError.includes('copyright') || lowerError.includes('dmca') || lowerError.includes('legal') || lowerError.includes('takedown')) {
-        return "⚠️ File removed for legal reasons (DMCA/Copyright).";
-      }
-      if (lowerError.includes('private')) {
-        return "🔒 File is private and cannot be accessed.";
-      }
-      if (lowerError.includes('not found')) {
-        return "❌ File not found (ID invalid or removed).";
-      }
-      return `❌ Error: ${error}`;
-    }
-    return "❌ File not available (no details).";
+    return { type: 'unknown', id: null };
   };
 
   const checkPixelDrainLink = async (url: string) => {
-    const id = extractPixelDrainId(url);
-    if (!id) return { url, status: 'error', reason: 'Invalid PixelDrain URL or ID' };
+    const { type, id } = extractPixelDrainId(url);
+    if (type === 'list') {
+      return { url, status: 'error', reason: '📋 This is a PixelDrain list – cannot check individual files. Open the list to see files.' };
+    }
+    if (type === 'folder') {
+      return { url, status: 'error', reason: '📁 This is a PixelDrain folder – cannot check individual files. Open the folder to see files.' };
+    }
+    if (!id) {
+      return { url, status: 'error', reason: 'Invalid PixelDrain URL or ID' };
+    }
+
+    const apiUrl = `https://pixeldrain.com/api/file/${id}/info`;
     try {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 10000);
-      const response = await fetch(`https://pixeldrain.com/api/file/${id}/info`, { signal: controller.signal });
+      const response = await fetch(apiUrl, { signal: controller.signal });
       clearTimeout(timeoutId);
+
       if (response.ok) {
-        const data = await response.json();
-        if (data.success === false || data.error) return { url, status: 'error', reason: interpretPixelDrainError(data) };
+        let data;
+        try {
+          data = await response.json();
+        } catch (e) {
+          return { url, status: 'error', reason: 'Invalid API response (not JSON)' };
+        }
+        // Check for API error object
+        if (data.success === false || data.error) {
+          const errorMsg = data.error || data.message || '';
+          const lowerError = errorMsg.toLowerCase();
+          if (lowerError.includes('file_removed') || lowerError.includes('deleted') || lowerError.includes('expired')) {
+            return { url, status: 'error', reason: '❌ File removed (deleted/expired).' };
+          }
+          if (lowerError.includes('copyright') || lowerError.includes('dmca') || lowerError.includes('legal') || lowerError.includes('takedown')) {
+            return { url, status: 'error', reason: '⚠️ File removed for legal reasons (DMCA/Copyright).' };
+          }
+          if (lowerError.includes('private')) {
+            return { url, status: 'error', reason: '🔒 File is private and cannot be accessed.' };
+          }
+          if (lowerError.includes('not found')) {
+            return { url, status: 'error', reason: '❌ File not found (ID invalid or removed).' };
+          }
+          return { url, status: 'error', reason: `❌ Error: ${errorMsg}` };
+        }
+        // If we have a file name, it's working
         if (data.name) {
           const sizeMB = data.size ? (data.size / 1024 / 1024).toFixed(2) : 'unknown';
           return { url, status: 'working', reason: `✅ Working – ${data.name} (${sizeMB} MB)` };
+        } else {
+          return { url, status: 'error', reason: 'File info missing (maybe private or deleted)' };
         }
-        return { url, status: 'error', reason: 'File info missing (maybe private or deleted)' };
+      } else if (response.status === 404) {
+        let errorText = "❌ File not found (404). The file ID does not exist or has been removed.";
+        // Try to see if response is JSON with more details
+        try {
+          const errorData = await response.json();
+          if (errorData.error) errorText = `❌ ${errorData.error}`;
+        } catch (e) {
+          // not JSON, ignore
+        }
+        return { url, status: 'error', reason: errorText };
+      } else if (response.status === 403) {
+        return { url, status: 'error', reason: '⛔ Access forbidden (403). The file may be private or you lack permissions.' };
+      } else if (response.status === 429) {
+        return { url, status: 'error', reason: '⚠️ Rate limited (429). Too many requests. Try again later.' };
+      } else {
+        return { url, status: 'error', reason: `HTTP ${response.status} – Unexpected server response.` };
       }
-      if (response.status === 404) return { url, status: 'error', reason: '❌ File not found (404).' };
-      if (response.status === 403) return { url, status: 'error', reason: '⛔ Access forbidden (403).' };
-      if (response.status === 429) return { url, status: 'error', reason: '⚠️ Rate limited (429).' };
-      return { url, status: 'error', reason: `HTTP ${response.status} – Unexpected server response.` };
     } catch (err: any) {
+      if (err.name === 'AbortError') {
+        return { url, status: 'error', reason: '⏱️ Timeout (10s). The server did not respond in time.' };
+      }
       return { url, status: 'error', reason: `🌐 Network error: ${err.message}` };
     }
   };
