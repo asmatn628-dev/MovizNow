@@ -40,6 +40,11 @@ export default function MovieDetails() {
   const navigate = useNavigate();
   const location = useLocation();
 
+  // Scroll to top on mount or ID change
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, [id]);
+
   // Load cache from sessionStorage
   useEffect(() => {
     if (id) {
