@@ -14,11 +14,6 @@ const MovieDetails = lazy(() => import('./pages/user/MovieDetails'));
 const WatchLater = lazy(() => import('./pages/user/WatchLater'));
 const Favorites = lazy(() => import('./pages/user/Favorites'));
 const MovieRequests = lazy(() => import('./pages/user/MovieRequests'));
-const OpenFile = lazy(() => import('./pages/capabilities/OpenFile'));
-const PlayProtocol = lazy(() => import('./pages/capabilities/PlayProtocol'));
-const ShareTarget = lazy(() => import('./pages/capabilities/ShareTarget'));
-const NewNote = lazy(() => import('./pages/capabilities/NewNote'));
-const WidgetData = lazy(() => import('./pages/capabilities/WidgetData'));
 
 // Admin Pages
 const AdminLayout = lazy(() => import('./pages/admin/AdminLayout'));
@@ -69,13 +64,6 @@ export default function App() {
               <Route path="/watch-later" element={<ProtectedRoute><WatchLater /></ProtectedRoute>} />
               <Route path="/favorites" element={<ProtectedRoute><Favorites /></ProtectedRoute>} />
               <Route path="/requests" element={<ProtectedRoute><MovieRequests /></ProtectedRoute>} />
-              
-              {/* Capability Routes */}
-              <Route path="/open-file" element={<OpenFile />} />
-              <Route path="/play" element={<PlayProtocol />} />
-              <Route path="/share" element={<ShareTarget />} />
-              <Route path="/notes/new" element={<NewNote />} />
-              <Route path="/widget-data" element={<WidgetData />} />
               
               {/* Admin Routes */}
               <Route path="/admin" element={<ProtectedRoute requireAdmin><AdminLayout /></ProtectedRoute>}>
