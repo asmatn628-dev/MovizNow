@@ -5,7 +5,7 @@ import { doc, updateDoc } from 'firebase/firestore';
 import { Content } from '../../types';
 import { useAuth } from '../../contexts/AuthContext';
 import { useContent } from '../../contexts/ContentContext';
-import { Film, Search, Filter, MessageCircle, Clock, Heart, LogOut, User, Lock } from 'lucide-react';
+import { Film, Search, Filter, MessageCircle, Clock, Heart, LogOut, User, Users, Lock, LayoutDashboard } from 'lucide-react';
 import { clsx } from 'clsx';
 import { format } from 'date-fns';
 import ConfirmModal from '../../components/ConfirmModal';
@@ -32,7 +32,7 @@ export default function Home({ onOpenMediaModal }: { onOpenMediaModal: () => voi
   const [whatsappNumber, setWhatsappNumber] = useState('');
 
   useEffect(() => {
-    if (profile && profile.phone === undefined && profile.role !== 'admin' && profile.role !== 'data_editor') {
+    if (profile && profile.phone === undefined && profile.role !== 'admin' && profile.role !== 'content_manager' && profile.role !== 'manager') {
       setShowWhatsappPrompt(true);
     }
   }, [profile]);
@@ -81,8 +81,14 @@ export default function Home({ onOpenMediaModal }: { onOpenMediaModal: () => voi
 
   const recentlyAddedContent = useMemo(() => {
     let result = [...contentList];
-    if (profile?.role !== 'admin' && profile?.role !== 'data_editor') {
-      result = result.filter(c => c.status !== 'draft');
+    if (profile?.role !== 'admin' && profile?.role !== 'content_manager' && profile?.role !== 'manager') {
+      result = result.filter(c => {
+        if (c.status === 'draft') return false;
+        if (c.status === 'selected_content') {
+          return profile?.assignedContent?.some(id => id === c.id || id.startsWith(`${c.id}:`));
+        }
+        return true;
+      });
     }
     return result.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()).slice(0, 10);
   }, [contentList, profile]);
@@ -90,7 +96,8 @@ export default function Home({ onOpenMediaModal }: { onOpenMediaModal: () => voi
   const getRoleColor = (role: string) => {
     switch(role) {
       case 'admin': return 'bg-purple-500/20 text-purple-400 border-purple-500/30';
-      case 'data_editor': return 'bg-blue-500/20 text-blue-400 border-blue-500/30';
+      case 'manager': return 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30';
+      case 'content_manager': return 'bg-blue-500/20 text-blue-400 border-blue-500/30';
       case 'selected_content': return 'bg-amber-500/20 text-amber-400 border-amber-500/30';
       case 'temporary': return 'bg-orange-500/20 text-orange-400 border-orange-500/30';
       case 'trial': return 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30';
@@ -111,9 +118,15 @@ export default function Home({ onOpenMediaModal }: { onOpenMediaModal: () => voi
   const filteredAndSortedContent = useMemo(() => {
     let result = [...contentList];
 
-    // Filter out drafts for non-admins and non-editors
-    if (profile?.role !== 'admin' && profile?.role !== 'data_editor') {
-      result = result.filter(c => c.status !== 'draft');
+    // Filter out drafts and selected_content for non-admins and non-editors
+    if (profile?.role !== 'admin' && profile?.role !== 'content_manager' && profile?.role !== 'manager') {
+      result = result.filter(c => {
+        if (c.status === 'draft') return false;
+        if (c.status === 'selected_content') {
+          return profile?.assignedContent?.some(id => id === c.id || id.startsWith(`${c.id}:`));
+        }
+        return true;
+      });
     }
 
     if (search) {
@@ -176,15 +189,19 @@ export default function Home({ onOpenMediaModal }: { onOpenMediaModal: () => voi
             <span className="tracking-tight">MovizNow</span>
           </Link>
 
-          <div className="flex items-center gap-3 sm:gap-4">
+          <div className={clsx("flex items-center", profile?.role === 'manager' ? "gap-0.5" : "gap-1.5")}>
             {profile && (
-              <div className="hidden md:flex items-center gap-4 mr-2">
+              <div className="hidden md:flex items-center gap-2 mr-2">
                 <div className="flex flex-col items-end">
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-1">
                     <span className="text-sm font-bold text-white">{profile.displayName || 'User'}</span>
-                    <div className="flex items-center gap-1.5">
-                      <span className={clsx("text-[10px] font-medium capitalize px-2 py-0.5 rounded-full border", getRoleColor(profile.role))}>
-                        {profile.role === 'selected_content' ? 'Selected Content' : profile.role.replace('_', ' ')}
+                    <div className="flex items-center gap-1">
+                      <span className={clsx("text-[10px] font-medium px-2 py-0.5 rounded-full border", getRoleColor(profile.role))}>
+                        {profile.role === 'selected_content' ? 'Selected Content' : 
+                         profile.role === 'content_manager' ? 'Content Manager' :
+                         profile.role === 'user_manager' ? 'User Manager' :
+                         profile.role === 'manager' ? 'Manager' :
+                         profile.role.charAt(0).toUpperCase() + profile.role.slice(1).replace('_', ' ')}
                       </span>
                       <span className={clsx("text-[10px] font-medium capitalize px-2 py-0.5 rounded-full border", getStatusColor(profile.status))}>
                         {profile.status}
@@ -223,7 +240,7 @@ export default function Home({ onOpenMediaModal }: { onOpenMediaModal: () => voi
                   href="https://wa.me/923363284466" 
                   target="_blank" 
                   rel="noreferrer" 
-                  className="flex items-center gap-2 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-500 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ml-2"
+                  className="flex items-center gap-1 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-500 px-2 py-1 rounded-lg text-sm font-medium transition-colors ml-1"
                 >
                   <MessageCircle className="w-4 h-4" />
                   Support
@@ -234,21 +251,31 @@ export default function Home({ onOpenMediaModal }: { onOpenMediaModal: () => voi
             <Link to="/watch-later" className="text-zinc-400 hover:text-white transition-colors" title="Watch Later">
               <Clock className="w-5 h-5" />
             </Link>
-            {(profile?.role === 'admin' || profile?.role === 'data_editor') && (
+            <Link to="/favorites" className="text-zinc-400 hover:text-white transition-colors" title="Favorites">
+              <Heart className="w-5 h-5" />
+            </Link>
+            {(profile?.role === 'admin' || profile?.role === 'content_manager' || profile?.role === 'manager') && (
               <button onClick={onOpenMediaModal} className="text-zinc-400 hover:text-white transition-colors" title="Search Media">
                 <Search className="w-5 h-5" />
               </button>
             )}
-            <Link to="/favorites" className="text-zinc-400 hover:text-white transition-colors" title="Favorites">
-              <Heart className="w-5 h-5" />
-            </Link>
             <Link to="/requests" className="text-zinc-400 hover:text-white transition-colors" title="Movie Requests">
               <MessageCircle className="w-5 h-5" />
             </Link>
             {profile && <NotificationMenu profile={profile} />}
-            {(profile?.role === 'admin' || profile?.role === 'data_editor') && (
-              <Link to="/admin" className="text-sm font-medium text-emerald-500 hover:text-emerald-400">
-                Admin Panel
+            {profile?.role === 'admin' && (
+              <Link to="/admin" className="text-zinc-400 hover:text-white transition-colors" title="Admin Panel">
+                <LayoutDashboard className="w-5 h-5" />
+              </Link>
+            )}
+            {(profile?.role === 'manager' || profile?.role === 'content_manager') && (
+              <Link to="/admin/content" className="text-zinc-400 hover:text-white transition-colors" title={profile?.role === 'manager' ? 'Content Management' : 'Content Manager'}>
+                <Film className="w-5 h-5" />
+              </Link>
+            )}
+            {(profile?.role === 'user_manager' || profile?.role === 'manager') && (
+              <Link to="/admin/users" className="text-zinc-400 hover:text-white transition-colors" title={profile?.role === 'manager' ? 'User Management' : 'User Manager'}>
+                <Users className="w-5 h-5" />
               </Link>
             )}
             <button onClick={() => setIsLogoutModalOpen(true)} className="text-zinc-400 hover:text-white transition-colors" title="Sign Out">
@@ -273,8 +300,12 @@ export default function Home({ onOpenMediaModal }: { onOpenMediaModal: () => voi
               )}
             </div>
             <div className="flex items-center gap-1.5">
-              <span className={clsx("text-[10px] font-medium capitalize px-2 py-0.5 rounded-full border", getRoleColor(profile.role))}>
-                {profile.role === 'selected_content' ? 'Selected Content' : profile.role.replace('_', ' ')}
+              <span className={clsx("text-[10px] font-medium px-2 py-0.5 rounded-full border", getRoleColor(profile.role))}>
+                {profile.role === 'selected_content' ? 'Selected Content' : 
+                 profile.role === 'content_manager' ? 'Content Manager' :
+                 profile.role === 'user_manager' ? 'User Manager' :
+                 profile.role === 'manager' ? 'Manager' :
+                 profile.role.charAt(0).toUpperCase() + profile.role.slice(1).replace('_', ' ')}
               </span>
               <span className={clsx("text-[10px] font-medium capitalize px-2 py-0.5 rounded-full border", getStatusColor(profile.status))}>
                 {profile.status}

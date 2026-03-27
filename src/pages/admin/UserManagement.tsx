@@ -1,19 +1,28 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { db } from '../../firebase';
-import { collection, doc, updateDoc, onSnapshot, query, where, getDocs, writeBatch, deleteDoc } from 'firebase/firestore';
+import { collection, doc, updateDoc, onSnapshot, query, where, getDocs, writeBatch, deleteDoc, setDoc } from 'firebase/firestore';
 import { UserProfile, Role, Status, AnalyticsEvent } from '../../types';
-import { Edit2, MessageCircle, X, Check, Search, ArrowUp, ArrowDown, Clock, MousePointerClick, Film, Trash2, Tv, Plus, Loader2, ArrowRight } from 'lucide-react';
+import { Edit2, MessageCircle, X, Check, Search, ArrowUp, ArrowDown, Clock, MousePointerClick, Film, Trash2, Tv, Plus, Loader2, ArrowRight, UserPlus } from 'lucide-react';
 import { format } from 'date-fns';
 import clsx from 'clsx';
 import AlertModal from '../../components/AlertModal';
 import ConfirmModal from '../../components/ConfirmModal';
 import { handleFirestoreError, OperationType } from '../../utils/firestoreErrorHandler';
 import { formatDateToMonthDDYYYY } from '../../utils/contentUtils';
+import { useAuth } from '../../contexts/AuthContext';
+
+import { useLocation, useNavigate } from 'react-router-dom';
 
 type SortField = 'createdAt' | 'displayName' | 'phone' | 'expiryDate';
 type SortOrder = 'asc' | 'desc';
 
 export default function UserManagement() {
+  const { profile } = useAuth();
+  const location = useLocation();
+  const navigate = useNavigate();
+  const searchParams = new URLSearchParams(location.search);
+  const managedByFilter = searchParams.get('managedBy');
+
   const [users, setUsers] = useState<UserProfile[]>([]);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<Partial<UserProfile>>({});
@@ -39,14 +48,29 @@ export default function UserManagement() {
   const [isContentPickerOpen, setIsContentPickerOpen] = useState(false);
   const [assignedIds, setAssignedIds] = useState<Set<string>>(new Set());
   const [contentSearchTerm, setContentSearchTerm] = useState('');
+  
+  // Add Pending User State
+  const [isAddUserModalOpen, setIsAddUserModalOpen] = useState(false);
+  const [searchPendingQuery, setSearchPendingQuery] = useState('');
+  const [searchedPendingUser, setSearchedPendingUser] = useState<UserProfile | null>(null);
+  const [searchPendingError, setSearchPendingError] = useState<string | null>(null);
+  const [newUserForm, setNewUserForm] = useState({ email: '', phone: '', role: 'user' as Role, expiryDate: '' });
+  const [managers, setManagers] = useState<Record<string, string>>({});
 
   useEffect(() => {
-    const unsub = onSnapshot(collection(db, 'users'), (snapshot) => {
-      const data = snapshot.docs.map((doc) => ({ ...doc.data() } as UserProfile));
+    let q = collection(db, 'users') as any;
+    if (profile?.role === 'user_manager' || profile?.role === 'manager') {
+      q = query(collection(db, 'users'), where('managedBy', '==', profile.uid));
+    } else if (profile?.role === 'admin' && managedByFilter) {
+      q = query(collection(db, 'users'), where('managedBy', '==', managedByFilter));
+    }
+
+    const unsub = onSnapshot(q, (snapshot: any) => {
+      const data = snapshot.docs.map((doc: any) => ({ ...doc.data() } as UserProfile));
       
       // Auto-expire users whose expiry date has passed
       const now = new Date();
-      data.forEach(user => {
+      data.forEach((user: UserProfile) => {
         if (user.status === 'active' && user.expiryDate) {
           const expiryDate = new Date(user.expiryDate);
           // Add 24 hours to make it expire at the end of the day
@@ -59,13 +83,28 @@ export default function UserManagement() {
 
       setUsers(data);
       setLoading(false);
-    }, (error) => {
+    }, (error: any) => {
       console.error("Users snapshot error:", error);
       setLoading(false);
       handleFirestoreError(error, OperationType.LIST, 'users');
     });
     return () => unsub();
-  }, []);
+  }, [profile, managedByFilter]);
+
+  useEffect(() => {
+    if (profile?.role === 'admin') {
+      const q = query(collection(db, 'users'), where('isUserManager', '==', true));
+      const unsub = onSnapshot(q, (snapshot) => {
+        const managersData: Record<string, string> = {};
+        snapshot.docs.forEach(doc => {
+          const data = doc.data();
+          managersData[doc.id] = data.displayName || data.email || 'Unknown Manager';
+        });
+        setManagers(managersData);
+      });
+      return () => unsub();
+    }
+  }, [profile]);
 
   useEffect(() => {
     const unsub = onSnapshot(collection(db, 'content'), (snapshot) => {
@@ -177,8 +216,8 @@ export default function UserManagement() {
     setIsEditingOverlay(true);
   };
 
-  const handleSave = () => {
-    if (!editingId) return;
+  const handleSave = async () => {
+    if (!editingId || !selectedUser) return;
     try {
       const updateData: any = {
         displayName: editForm.displayName,
@@ -189,6 +228,11 @@ export default function UserManagement() {
         permissions: editForm.permissions || [],
       };
       
+      // Set isUserManager flag if role is user_manager or manager
+      if (editForm.role === 'user_manager' || editForm.role === 'manager') {
+        updateData.isUserManager = true;
+      }
+      
       if (editForm.expiryDate) {
         updateData.expiryDate = new Date(editForm.expiryDate).toISOString();
       } else {
@@ -196,14 +240,45 @@ export default function UserManagement() {
       }
 
       const currentEditingId = editingId;
+      const previousRole = selectedUser.role;
+      const newRole = editForm.role;
+
       setEditingId(null);
       setIsEditingOverlay(false);
       setSelectedUser(null);
 
-      updateDoc(doc(db, 'users', currentEditingId), updateData).catch(error => {
-        console.error('Error updating user:', error);
-        setAlertConfig({ isOpen: true, title: 'Error', message: 'Failed to update user' });
-      });
+      await updateDoc(doc(db, 'users', currentEditingId), updateData);
+
+      // Handle User Manager role changes
+      if (previousRole === 'user_manager' && newRole !== 'user_manager') {
+        // Expire all managed users
+        const q = query(collection(db, 'users'), where('managedBy', '==', currentEditingId));
+        const snapshot = await getDocs(q);
+        const updatePromises = snapshot.docs.map(userDoc => {
+          const userData = userDoc.data() as UserProfile;
+          return updateDoc(doc(db, 'users', userDoc.id), {
+            status: 'expired',
+            previousStatus: userData.status || 'active'
+          });
+        });
+        await Promise.all(updatePromises);
+      } else if (previousRole !== 'user_manager' && newRole === 'user_manager') {
+        // Restore all managed users
+        const q = query(collection(db, 'users'), where('managedBy', '==', currentEditingId));
+        const snapshot = await getDocs(q);
+        const updatePromises = snapshot.docs.map(userDoc => {
+          const userData = userDoc.data() as UserProfile;
+          if (userData.previousStatus) {
+            return updateDoc(doc(db, 'users', userDoc.id), {
+              status: userData.previousStatus,
+              previousStatus: null
+            });
+          }
+          return Promise.resolve();
+        });
+        await Promise.all(updatePromises);
+      }
+
     } catch (error) {
       console.error('Error updating user:', error);
       setAlertConfig({ isOpen: true, title: 'Error', message: 'Failed to update user' });
@@ -477,10 +552,130 @@ export default function UserManagement() {
     return result;
   }, [users, searchTerm, filterRole, filterStatus, sortField, sortOrder]);
 
+  const handleSearchPendingUser = async () => {
+    if (!searchPendingQuery) {
+      setSearchPendingError('Please enter an email or phone number.');
+      return;
+    }
+    setSearchPendingError(null);
+    setSearchedPendingUser(null);
+
+    try {
+      // Search by email
+      let q = query(collection(db, 'users'), where('email', '==', searchPendingQuery), where('status', '==', 'pending'));
+      let snapshot = await getDocs(q);
+      
+      // If not found by email, search by phone
+      if (snapshot.empty) {
+        q = query(collection(db, 'users'), where('phone', '==', searchPendingQuery), where('status', '==', 'pending'));
+        snapshot = await getDocs(q);
+      }
+
+      if (snapshot.empty) {
+        setSearchPendingError('User not found or is already active.');
+        return;
+      }
+
+      const userDoc = snapshot.docs[0];
+      const userData = userDoc.data() as UserProfile;
+
+      setSearchedPendingUser(userData);
+      setNewUserForm({
+        email: userData.email || '',
+        phone: userData.phone || '',
+        role: userData.role || 'user',
+        expiryDate: userData.expiryDate ? new Date(userData.expiryDate).toISOString().split('T')[0] : ''
+      });
+    } catch (error) {
+      console.error("Error searching user:", error);
+      setSearchPendingError('An error occurred while searching.');
+    }
+  };
+
+  const handleClaimPendingUser = async () => {
+    if (!searchedPendingUser) return;
+    try {
+      const updateData: any = {
+        role: newUserForm.role,
+        managedBy: profile?.uid,
+      };
+      if (newUserForm.expiryDate) {
+        updateData.expiryDate = new Date(newUserForm.expiryDate).toISOString();
+      }
+      await updateDoc(doc(db, 'users', searchedPendingUser.uid), updateData);
+      setIsAddUserModalOpen(false);
+      setSearchedPendingUser(null);
+      setSearchPendingQuery('');
+      setAlertConfig({ isOpen: true, title: 'Success', message: 'User successfully claimed and updated.' });
+    } catch (error) {
+      console.error("Error claiming user:", error);
+      setAlertConfig({ isOpen: true, title: 'Error', message: 'Failed to update user.' });
+    }
+  };
+
+  const handleAddUser = async () => {
+    if (!newUserForm.email && !newUserForm.phone) {
+      setAlertConfig({ isOpen: true, title: 'Error', message: 'Please provide either an email or a phone number.' });
+      return;
+    }
+
+    try {
+      const newUserId = `pending_${Date.now()}`;
+      const newUserData: any = {
+        uid: newUserId,
+        email: newUserForm.email || `${newUserForm.phone}@pending.local`,
+        phone: newUserForm.phone || '',
+        role: newUserForm.role,
+        status: 'pending',
+        createdAt: new Date().toISOString(),
+        isUserManager: newUserForm.role === 'user_manager' || newUserForm.role === 'manager'
+      };
+
+      if (newUserForm.expiryDate) {
+        newUserData.expiryDate = new Date(newUserForm.expiryDate).toISOString();
+      }
+
+      if (profile?.role === 'user_manager' || profile?.role === 'manager') {
+        newUserData.managedBy = profile.uid;
+      }
+
+      await setDoc(doc(db, 'users', newUserId), newUserData);
+      
+      setIsAddUserModalOpen(false);
+      setNewUserForm({ email: '', phone: '', role: 'user', expiryDate: '' });
+      setAlertConfig({ isOpen: true, title: 'Success', message: 'Pending user added successfully.' });
+    } catch (error) {
+      console.error('Error adding user:', error);
+      setAlertConfig({ isOpen: true, title: 'Error', message: 'Failed to add user.' });
+    }
+  };
+
   return (
     <div className="p-4 md:p-8">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
-        <h1 className="text-2xl md:text-3xl font-bold">Membership Management</h1>
+        <div className="flex items-center gap-4">
+          <h1 className="text-2xl md:text-3xl font-bold">Membership Management</h1>
+          {managedByFilter && (
+            <button
+              onClick={() => {
+                searchParams.delete('managedBy');
+                navigate(`${location.pathname}?${searchParams.toString()}`);
+              }}
+              className="px-3 py-1 bg-zinc-800 hover:bg-zinc-700 text-sm rounded-lg transition-colors"
+            >
+              Clear Manager Filter
+            </button>
+          )}
+        </div>
+        { (profile?.role === 'user_manager' || profile?.role === 'manager') && (
+          <button
+            onClick={() => setIsAddUserModalOpen(true)}
+            className="flex items-center gap-2 bg-emerald-500 hover:bg-emerald-600 text-white px-4 py-2 rounded-xl font-bold transition-colors"
+          >
+            <UserPlus className="w-5 h-5" />
+            Add User
+          </button>
+        )}
       </div>
 
       <div className="flex flex-col md:flex-row gap-4 mb-6">
@@ -512,7 +707,9 @@ export default function UserManagement() {
                 <option value="active">Set Active</option>
                 <option value="pending">Set Pending</option>
                 <option value="expired">Set Expired</option>
-                <option value="suspended">Suspend</option>
+                {profile?.role === 'admin' && (
+                  <option value="suspended">Suspend</option>
+                )}
               </select>
             </div>
           )}
@@ -523,11 +720,17 @@ export default function UserManagement() {
           >
             <option value="all">All Roles</option>
             <option value="user">User</option>
-            <option value="temporary">Temporary</option>
-            <option value="selected_content">Selected Content</option>
             <option value="trial">Trial</option>
-            <option value="data_editor">Data Editor</option>
-            <option value="admin">Admin</option>
+            <option value="selected_content">Selected Content</option>
+            {profile?.role === 'admin' && (
+              <>
+                <option value="temporary">Temporary</option>
+                <option value="content_manager">Content Manager</option>
+                <option value="user_manager">User Manager</option>
+                <option value="manager">Manager</option>
+                <option value="admin">Admin</option>
+              </>
+            )}
           </select>
 
           <select
@@ -568,6 +771,9 @@ export default function UserManagement() {
                 <th className="px-4 md:px-6 py-4 cursor-pointer hover:text-white transition-colors" onClick={() => toggleSort('expiryDate')}>
                   Expiry Date <SortIcon field="expiryDate" />
                 </th>
+                {profile?.role === 'admin' && (
+                  <th className="px-4 md:px-6 py-4">Managed By</th>
+                )}
                 <th className="px-4 md:px-6 py-4 cursor-pointer hover:text-white transition-colors" onClick={() => toggleSort('createdAt')}>
                   Joined <SortIcon field="createdAt" />
                 </th>
@@ -613,13 +819,19 @@ export default function UserManagement() {
                     <div className="flex flex-col gap-1 items-start">
                       <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium capitalize
                         ${user.role === 'admin' ? 'bg-purple-500/10 text-purple-500' : 
-                          user.role === 'data_editor' ? 'bg-indigo-500/10 text-indigo-500' :
+                          user.role === 'content_manager' ? 'bg-indigo-500/10 text-indigo-500' :
+                          user.role === 'user_manager' ? 'bg-blue-500/10 text-blue-500' :
+                          user.role === 'manager' ? 'bg-emerald-500/10 text-emerald-500' :
                           user.role === 'temporary' ? 'bg-orange-500/10 text-orange-500' : 
                           user.role === 'selected_content' ? 'bg-pink-500/10 text-pink-500' :
                           user.role === 'trial' ? 'bg-yellow-500/10 text-yellow-500' :
-                          'bg-blue-500/10 text-blue-500'}`}
+                          'bg-zinc-500/10 text-zinc-500'}`}
                       >
-                        {user.role === 'selected_content' ? 'Selected Content' : user.role.replace('_', ' ')}
+                        {user.role === 'selected_content' ? 'Selected Content' : 
+                         user.role === 'content_manager' ? 'Content Manager' :
+                         user.role === 'user_manager' ? 'User Manager' :
+                         user.role === 'manager' ? 'Manager' :
+                         user.role.charAt(0).toUpperCase() + user.role.slice(1).replace('_', ' ')}
                       </span>
                       <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider
                         ${user.status === 'active' ? 'bg-emerald-500/10 text-emerald-500' : 
@@ -635,6 +847,13 @@ export default function UserManagement() {
                       {user.expiryDate ? format(new Date(user.expiryDate), 'MMM dd, yyyy') : '-'}
                     </span>
                   </td>
+                  {profile?.role === 'admin' && (
+                    <td className="px-4 md:px-6 py-4">
+                      <span className="text-zinc-400 text-sm">
+                        {user.managedBy ? managers[user.managedBy] || 'Unknown Manager' : '-'}
+                      </span>
+                    </td>
+                  )}
                   <td className="px-4 md:px-6 py-4 whitespace-nowrap text-zinc-400">
                     {format(new Date(user.createdAt), 'MMM dd, yyyy')}
                   </td>
@@ -659,15 +878,17 @@ export default function UserManagement() {
                       >
                         <Edit2 className="w-5 h-5" />
                       </button>
-                      <button 
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setDeleteConfirm(user.uid);
-                        }} 
-                        className="p-2 text-red-500 hover:bg-red-500/10 rounded-lg transition-colors"
-                      >
-                        <Trash2 className="w-5 h-5" />
-                      </button>
+                      {profile?.role === 'admin' && (
+                        <button 
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setDeleteConfirm(user.uid);
+                          }} 
+                          className="p-2 text-red-500 hover:bg-red-500/10 rounded-lg transition-colors"
+                        >
+                          <Trash2 className="w-5 h-5" />
+                        </button>
+                      )}
                     </div>
                   </td>
                 </tr>
@@ -732,11 +953,17 @@ export default function UserManagement() {
                         className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-emerald-500"
                       >
                         <option value="user">User</option>
-                        <option value="temporary">Temporary</option>
-                        <option value="selected_content">Selected Content</option>
                         <option value="trial">Trial</option>
-                        <option value="data_editor">Data Editor</option>
-                        <option value="admin">Admin</option>
+                        <option value="selected_content">Selected Content</option>
+                        {profile?.role === 'admin' && (
+                          <>
+                            <option value="temporary">Temporary</option>
+                            <option value="content_manager">Content Manager</option>
+                            <option value="user_manager">User Manager</option>
+                            <option value="manager">Manager</option>
+                            <option value="admin">Admin</option>
+                          </>
+                        )}
                       </select>
                     </div>
                     
@@ -789,7 +1016,13 @@ export default function UserManagement() {
                     <div className="bg-zinc-950 p-3 rounded-xl border border-zinc-800 flex justify-between items-center">
                       <div>
                         <div className="text-zinc-500 text-[10px] uppercase font-bold mb-0.5">Role</div>
-                        <div className="capitalize font-bold text-emerald-400 text-sm">{selectedUser.role.replace('_', ' ')}</div>
+                        <div className="font-bold text-emerald-400 text-sm">
+                          {selectedUser.role === 'selected_content' ? 'Selected Content' : 
+                           selectedUser.role === 'content_manager' ? 'Content Manager' :
+                           selectedUser.role === 'user_manager' ? 'User Manager' :
+                           selectedUser.role === 'manager' ? 'Manager' :
+                           selectedUser.role.charAt(0).toUpperCase() + selectedUser.role.slice(1).replace('_', ' ')}
+                        </div>
                       </div>
                       <div className="text-right">
                         <div className="text-zinc-500 text-[10px] uppercase font-bold mb-0.5">Status</div>
@@ -866,117 +1099,121 @@ export default function UserManagement() {
                     </div>
                   )}
 
-                  <div className="border-t border-zinc-800 pt-6">
-                    <h4 className="text-xs font-bold text-zinc-500 uppercase tracking-wider mb-4">Movie Requests</h4>
-                    <div className="space-y-2">
-                      {userRequests.length === 0 ? (
-                        <p className="text-xs text-zinc-500 italic">No requests submitted yet.</p>
-                      ) : (
-                        userRequests.map(req => (
-                          <div key={req.id} className="bg-zinc-950 p-3 rounded-xl border border-zinc-800 flex items-center justify-between">
-                            <div className="flex items-center gap-3">
-                              <div className={clsx(
-                                "w-8 h-8 rounded-lg flex items-center justify-center shrink-0",
-                                req.type === 'movie' ? "bg-blue-500/10 text-blue-500" : "bg-purple-500/10 text-purple-500"
-                              )}>
-                                {req.type === 'movie' ? <Film className="w-4 h-4" /> : <Tv className="w-4 h-4" />}
-                              </div>
-                              <div>
-                                <p className="text-xs font-bold text-zinc-200">{req.title}</p>
-                                <p className="text-[10px] text-zinc-500 uppercase font-bold">{req.type}</p>
-                              </div>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <span className={clsx(
-                                "text-[10px] font-bold px-2 py-0.5 rounded-full border",
-                                req.status === 'pending' && "bg-yellow-500/10 text-yellow-500 border-yellow-500/20",
-                                req.status === 'completed' && "bg-emerald-500/10 text-emerald-500 border-emerald-500/20",
-                                req.status === 'rejected' && "bg-red-500/10 text-red-500 border-red-500/20"
-                              )}>
-                                {req.status}
-                              </span>
-                              <div className="flex items-center gap-1">
-                                {req.status === 'pending' && (
-                                  <>
+                  {profile?.role !== 'user_manager' && (
+                    <>
+                      <div className="border-t border-zinc-800 pt-6">
+                        <h4 className="text-xs font-bold text-zinc-500 uppercase tracking-wider mb-4">Movie Requests</h4>
+                        <div className="space-y-2">
+                          {userRequests.length === 0 ? (
+                            <p className="text-xs text-zinc-500 italic">No requests submitted yet.</p>
+                          ) : (
+                            userRequests.map(req => (
+                              <div key={req.id} className="bg-zinc-950 p-3 rounded-xl border border-zinc-800 flex items-center justify-between">
+                                <div className="flex items-center gap-3">
+                                  <div className={clsx(
+                                    "w-8 h-8 rounded-lg flex items-center justify-center shrink-0",
+                                    req.type === 'movie' ? "bg-blue-500/10 text-blue-500" : "bg-purple-500/10 text-purple-500"
+                                  )}>
+                                    {req.type === 'movie' ? <Film className="w-4 h-4" /> : <Tv className="w-4 h-4" />}
+                                  </div>
+                                  <div>
+                                    <p className="text-xs font-bold text-zinc-200">{req.title}</p>
+                                    <p className="text-[10px] text-zinc-500 uppercase font-bold">{req.type}</p>
+                                  </div>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <span className={clsx(
+                                    "text-[10px] font-bold px-2 py-0.5 rounded-full border",
+                                    req.status === 'pending' && "bg-yellow-500/10 text-yellow-500 border-yellow-500/20",
+                                    req.status === 'completed' && "bg-emerald-500/10 text-emerald-500 border-emerald-500/20",
+                                    req.status === 'rejected' && "bg-red-500/10 text-red-500 border-red-500/20"
+                                  )}>
+                                    {req.status}
+                                  </span>
+                                  <div className="flex items-center gap-1">
+                                    {req.status === 'pending' && (
+                                      <>
+                                        <button 
+                                          onClick={() => handleUpdateRequestStatus(req.id, 'completed')}
+                                          className="p-1.5 text-emerald-500 hover:bg-emerald-500/10 rounded-lg transition-colors"
+                                          title="Complete"
+                                        >
+                                          <Check className="w-4 h-4" />
+                                        </button>
+                                        <button 
+                                          onClick={() => handleUpdateRequestStatus(req.id, 'rejected')}
+                                          className="p-1.5 text-red-500 hover:bg-red-500/10 rounded-lg transition-colors"
+                                          title="Reject"
+                                        >
+                                          <X className="w-4 h-4" />
+                                        </button>
+                                      </>
+                                    )}
                                     <button 
-                                      onClick={() => handleUpdateRequestStatus(req.id, 'completed')}
-                                      className="p-1.5 text-emerald-500 hover:bg-emerald-500/10 rounded-lg transition-colors"
-                                      title="Complete"
+                                      onClick={() => handleDeleteRequest(req.id)}
+                                      className="p-1.5 text-zinc-500 hover:text-red-500 hover:bg-red-500/10 rounded-lg transition-colors"
+                                      title="Delete"
                                     >
-                                      <Check className="w-4 h-4" />
+                                      <Trash2 className="w-4 h-4" />
                                     </button>
-                                    <button 
-                                      onClick={() => handleUpdateRequestStatus(req.id, 'rejected')}
-                                      className="p-1.5 text-red-500 hover:bg-red-500/10 rounded-lg transition-colors"
-                                      title="Reject"
-                                    >
-                                      <X className="w-4 h-4" />
-                                    </button>
-                                  </>
-                                )}
-                                <button 
-                                  onClick={() => handleDeleteRequest(req.id)}
-                                  className="p-1.5 text-zinc-500 hover:text-red-500 hover:bg-red-500/10 rounded-lg transition-colors"
-                                  title="Delete"
-                                >
-                                  <Trash2 className="w-4 h-4" />
-                                </button>
+                                  </div>
+                                </div>
                               </div>
-                            </div>
-                          </div>
-                        ))
-                      )}
-                    </div>
-                  </div>
+                            ))
+                          )}
+                        </div>
+                      </div>
 
-                  <div className="border-t border-zinc-800 pt-6">
-                    <div className="flex items-center justify-between mb-4">
-                      <h4 className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Activity Overview</h4>
-                      {isAnalyticsLoading && (
-                        <div className="flex items-center gap-2 text-emerald-500">
-                          <Loader2 className="w-3 h-3 animate-spin" />
-                          <span className="text-[10px] font-bold uppercase tracking-wider">Scanning</span>
+                      <div className="border-t border-zinc-800 pt-6">
+                        <div className="flex items-center justify-between mb-4">
+                          <h4 className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Activity Overview</h4>
+                          {isAnalyticsLoading && (
+                            <div className="flex items-center gap-2 text-emerald-500">
+                              <Loader2 className="w-3 h-3 animate-spin" />
+                              <span className="text-[10px] font-bold uppercase tracking-wider">Scanning</span>
+                            </div>
+                          )}
                         </div>
-                      )}
-                    </div>
-                    <div className="space-y-2">
-                      <div className="flex items-center justify-between bg-zinc-950 p-3 rounded-xl border border-zinc-800">
-                        <div className="flex items-center gap-3 text-zinc-300">
-                          <Clock className="w-4 h-4 text-emerald-500" />
-                          <span className="text-xs font-medium">Time in App</span>
+                        <div className="space-y-2">
+                          <div className="flex items-center justify-between bg-zinc-950 p-3 rounded-xl border border-zinc-800">
+                            <div className="flex items-center gap-3 text-zinc-300">
+                              <Clock className="w-4 h-4 text-emerald-500" />
+                              <span className="text-xs font-medium">Time in App</span>
+                            </div>
+                            <span className="font-bold text-white text-xs">{selectedUser.timeSpent || 0} mins</span>
+                          </div>
+                          <div className="bg-zinc-950 p-3 rounded-xl border border-zinc-800">
+                            <div className="flex items-center justify-between mb-1">
+                              <div className="flex items-center gap-3 text-zinc-300">
+                                <Film className="w-4 h-4 text-emerald-500" />
+                                <span className="text-xs font-medium">Movies Clicked</span>
+                              </div>
+                              <span className="font-bold text-white text-xs">{userAnalytics.moviesClicked}</span>
+                            </div>
+                            {userAnalytics.viewedMovies.length > 0 && (
+                              <div className="text-[10px] text-zinc-500 mt-1 pl-7 line-clamp-2">
+                                {userAnalytics.viewedMovies.join(', ')}
+                              </div>
+                            )}
+                          </div>
+                          <div className="bg-zinc-950 p-3 rounded-xl border border-zinc-800">
+                            <div className="flex items-center justify-between mb-1">
+                              <div className="flex items-center gap-3 text-zinc-300">
+                                <MousePointerClick className="w-4 h-4 text-emerald-500" />
+                                <span className="text-xs font-medium">Links Clicked</span>
+                              </div>
+                              <span className="font-bold text-white text-xs">{userAnalytics.linksClicked}</span>
+                            </div>
+                            {userAnalytics.clickedLinks.length > 0 && (
+                              <div className="text-[10px] text-zinc-500 mt-1 pl-7 line-clamp-2">
+                                {userAnalytics.clickedLinks.join(', ')}
+                              </div>
+                            )}
+                          </div>
                         </div>
-                        <span className="font-bold text-white text-xs">{selectedUser.timeSpent || 0} mins</span>
                       </div>
-                      <div className="bg-zinc-950 p-3 rounded-xl border border-zinc-800">
-                        <div className="flex items-center justify-between mb-1">
-                          <div className="flex items-center gap-3 text-zinc-300">
-                            <Film className="w-4 h-4 text-emerald-500" />
-                            <span className="text-xs font-medium">Movies Clicked</span>
-                          </div>
-                          <span className="font-bold text-white text-xs">{userAnalytics.moviesClicked}</span>
-                        </div>
-                        {userAnalytics.viewedMovies.length > 0 && (
-                          <div className="text-[10px] text-zinc-500 mt-1 pl-7 line-clamp-2">
-                            {userAnalytics.viewedMovies.join(', ')}
-                          </div>
-                        )}
-                      </div>
-                      <div className="bg-zinc-950 p-3 rounded-xl border border-zinc-800">
-                        <div className="flex items-center justify-between mb-1">
-                          <div className="flex items-center gap-3 text-zinc-300">
-                            <MousePointerClick className="w-4 h-4 text-emerald-500" />
-                            <span className="text-xs font-medium">Links Clicked</span>
-                          </div>
-                          <span className="font-bold text-white text-xs">{userAnalytics.linksClicked}</span>
-                        </div>
-                        {userAnalytics.clickedLinks.length > 0 && (
-                          <div className="text-[10px] text-zinc-500 mt-1 pl-7 line-clamp-2">
-                            {userAnalytics.clickedLinks.join(', ')}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </div>
+                    </>
+                  )}
                 </div>
               )}
             </div>
@@ -1159,6 +1396,146 @@ export default function UserManagement() {
         onConfirm={handleDelete}
         onCancel={() => setDeleteConfirm(null)}
       />
+
+      {/* Add User Modal */}
+      {isAddUserModalOpen && (
+        <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4">
+          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-md overflow-hidden flex flex-col max-h-[90vh]">
+            <div className="p-4 md:p-6 border-b border-zinc-800 flex justify-between items-center shrink-0">
+              <h2 className="text-xl font-bold">{(profile?.role === 'user_manager' || profile?.role === 'manager') ? 'Search Pending User' : 'Add Pending User'}</h2>
+              <button onClick={() => { setIsAddUserModalOpen(false); setSearchedPendingUser(null); setSearchPendingQuery(''); setSearchPendingError(null); }} className="text-zinc-400 hover:text-white transition-colors">
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+            
+            <div className="p-4 md:p-6 space-y-4 overflow-y-auto">
+              {(profile?.role === 'user_manager' || profile?.role === 'manager') && !searchedPendingUser && (
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-zinc-400 mb-1">Search by Email or WhatsApp</label>
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        value={searchPendingQuery}
+                        onChange={(e) => setSearchPendingQuery(e.target.value)}
+                        placeholder="user@example.com or +1234567890"
+                        className="flex-1 bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-2 focus:outline-none focus:border-emerald-500"
+                        onKeyDown={(e) => e.key === 'Enter' && handleSearchPendingUser()}
+                      />
+                    </div>
+                    {searchPendingError && (
+                      <p className="text-red-500 text-sm mt-2">{searchPendingError}</p>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {(!profile || (profile.role !== 'user_manager' && profile.role !== 'manager') || searchedPendingUser) && (
+                <>
+                  {(profile?.role === 'user_manager' || profile?.role === 'manager') && searchedPendingUser && (
+                    <div className="bg-zinc-800/50 p-4 rounded-xl mb-4 flex items-center gap-4">
+                      {searchedPendingUser.photoURL ? (
+                        <img src={searchedPendingUser.photoURL} alt={searchedPendingUser.displayName} className="w-12 h-12 rounded-full object-cover" referrerPolicy="no-referrer" />
+                      ) : (
+                        <div className="w-12 h-12 bg-zinc-900 rounded-full flex items-center justify-center text-xl font-bold text-emerald-500 shrink-0">
+                          {(searchedPendingUser.displayName || searchedPendingUser.email || '?').charAt(0).toUpperCase()}
+                        </div>
+                      )}
+                      <div>
+                        <p className="text-sm text-zinc-400 mb-0.5 font-bold uppercase tracking-wider text-[10px]">Found Pending User:</p>
+                        <p className="font-bold text-white">{searchedPendingUser.displayName || 'No Name'}</p>
+                        <p className="text-xs text-zinc-400">{searchedPendingUser.email || searchedPendingUser.phone}</p>
+                      </div>
+                    </div>
+                  )}
+                  <div>
+                    <label className="block text-sm font-medium text-zinc-400 mb-1">Email</label>
+                    <input
+                      type="email"
+                      value={newUserForm.email}
+                      onChange={(e) => setNewUserForm({ ...newUserForm, email: e.target.value })}
+                      placeholder="user@example.com"
+                      disabled={!!searchedPendingUser}
+                      className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-2 focus:outline-none focus:border-emerald-500 disabled:opacity-50"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-zinc-400 mb-1">WhatsApp Number</label>
+                    <input
+                      type="text"
+                      value={newUserForm.phone}
+                      onChange={(e) => setNewUserForm({ ...newUserForm, phone: e.target.value })}
+                      placeholder="+1234567890"
+                      disabled={!!searchedPendingUser}
+                      className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-2 focus:outline-none focus:border-emerald-500 disabled:opacity-50"
+                    />
+                  </div>
+                  <div className="flex items-center gap-4">
+                    <div className="flex-1">
+                      <label className="block text-sm font-medium text-zinc-400 mb-1">Role</label>
+                      <select
+                        value={newUserForm.role}
+                        onChange={(e) => setNewUserForm({ ...newUserForm, role: e.target.value as Role })}
+                        className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-emerald-500"
+                      >
+                        <option value="user">User</option>
+                        <option value="trial">Trial</option>
+                        <option value="selected_content">Selected Content</option>
+                        {profile?.role === 'admin' && (
+                          <>
+                            <option value="temporary">Temporary</option>
+                            <option value="content_manager">Content Manager</option>
+                            <option value="user_manager">User Manager</option>
+                            <option value="manager">Manager</option>
+                            <option value="admin">Admin</option>
+                          </>
+                        )}
+                      </select>
+                    </div>
+                    <div className="flex-1">
+                      <label className="block text-sm font-medium text-zinc-400 mb-1">Expiry Date</label>
+                      <input
+                        type="date"
+                        value={newUserForm.expiryDate}
+                        onChange={(e) => setNewUserForm({ ...newUserForm, expiryDate: e.target.value })}
+                        className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-emerald-500"
+                      />
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
+
+            <div className="p-4 md:p-6 border-t border-zinc-800 flex gap-4 shrink-0">
+              <button
+                onClick={() => { setIsAddUserModalOpen(false); setSearchedPendingUser(null); setSearchPendingQuery(''); setSearchPendingError(null); }}
+                className="flex-1 bg-zinc-800 hover:bg-zinc-700 text-white py-3 rounded-xl font-bold transition-colors"
+              >
+                Cancel
+              </button>
+              {(profile?.role === 'user_manager' || profile?.role === 'manager') && !searchedPendingUser ? (
+                <button
+                  onClick={handleSearchPendingUser}
+                  className="flex-1 bg-emerald-500 hover:bg-emerald-600 text-white py-3 rounded-xl font-bold transition-colors flex items-center justify-center gap-2"
+                >
+                  <Search className="w-5 h-5" />
+                  Search
+                </button>
+              ) : (
+                (!profile || (profile.role !== 'user_manager' && profile.role !== 'manager') || searchedPendingUser) && (
+                  <button
+                    onClick={searchedPendingUser ? handleClaimPendingUser : handleAddUser}
+                    className="flex-1 bg-emerald-500 hover:bg-emerald-600 text-white py-3 rounded-xl font-bold transition-colors flex items-center justify-center gap-2"
+                  >
+                    <Check className="w-5 h-5" />
+                    {searchedPendingUser ? 'Claim & Update' : 'Add User'}
+                  </button>
+                )
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

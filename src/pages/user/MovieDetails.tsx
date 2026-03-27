@@ -42,7 +42,7 @@ export default function MovieDetails() {
 
   // Scroll to top on mount or ID change
   useEffect(() => {
-    window.scrollTo(0, 0);
+    window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
   }, [id]);
 
   // Load cache from sessionStorage
@@ -326,7 +326,14 @@ export default function MovieDetails() {
     return <div className="min-h-screen bg-zinc-950 flex items-center justify-center"><div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-emerald-500"></div></div>;
   }
 
-  if (!content || (content.status === 'draft' && profile?.role !== 'admin' && profile?.role !== 'data_editor')) {
+  const isAuthorized = profile?.role === 'admin' || profile?.role === 'content_manager' || (
+    content.status !== 'draft' && (
+      content.status !== 'selected_content' || 
+      profile?.assignedContent?.some(id => id === content.id || id.startsWith(`${content.id}:`))
+    )
+  );
+
+  if (!content || !isAuthorized) {
     return <div className="min-h-screen bg-zinc-950 flex items-center justify-center text-white">Content not found</div>;
   }
 
@@ -334,14 +341,11 @@ export default function MovieDetails() {
   const isExpired = profile?.status === 'expired';
   const isTemp = profile?.role === 'temporary';
   const isSelectedContent = profile?.role === 'selected_content';
-  const isAssigned = (isTemp || isSelectedContent) && (
-    profile?.assignedContent?.includes(content.id) ||
-    profile?.assignedContent?.some(id => id.startsWith(`${content.id}:`))
-  );
-  const canPlay = profile?.role === 'admin' || profile?.role === 'data_editor' || (profile?.status === 'active' && (!(isTemp || isSelectedContent) || isAssigned));
+  const isAssigned = profile?.assignedContent?.some(id => id === content.id || id.startsWith(`${content.id}:`));
+  const canPlay = profile?.role === 'admin' || profile?.role === 'content_manager' || (profile?.status === 'active' && (!(isTemp || isSelectedContent || content.status === 'selected_content') || isAssigned));
 
   const allowedSeasons = profile?.assignedContent?.filter(id => id.startsWith(`${content.id}:`)).map(id => id.split(':')[1]) || [];
-  const hasFullAccess = profile?.role === 'admin' || profile?.role === 'data_editor' || (!(isTemp || isSelectedContent)) || profile?.assignedContent?.includes(content.id);
+  const hasFullAccess = profile?.role === 'admin' || profile?.role === 'content_manager' || (!(isTemp || isSelectedContent || content.status === 'selected_content')) || profile?.assignedContent?.includes(content.id);
 
   const toggleWatchLater = async () => {
     if (!profile) return;
@@ -815,7 +819,7 @@ export default function MovieDetails() {
                   </button>
                 </div>
 
-                {(profile?.role === 'admin' || profile?.role === 'data_editor') && (
+                {(profile?.role === 'admin' || profile?.role === 'content_manager') && (
                   <div className="flex gap-4">
                     <button
                       onClick={() => setIsMediaModalOpen(true)}

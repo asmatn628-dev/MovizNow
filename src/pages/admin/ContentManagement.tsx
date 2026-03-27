@@ -3,8 +3,9 @@ import { useSearchParams, Link, useLocation } from 'react-router-dom';
 import { db } from '../../firebase';
 import { aiService } from '../../services/aiService';
 import { collection, addDoc, deleteDoc, doc, updateDoc, onSnapshot, writeBatch } from 'firebase/firestore';
-import { Content, Genre, Language, Quality, QualityLinks, Season, Episode, LinkDef } from '../../types';
-import { Plus, Edit2, Trash2, Share2, Film, Tv, X, Save, Upload, Search, Eye, EyeOff, ArrowUp, ArrowDown, Copy, ClipboardPaste, GripVertical, Bell, RefreshCw, ChevronDown, ChevronUp } from 'lucide-react';
+import { useAuth } from '../../contexts/AuthContext';
+import { Content, Genre, Language, Quality, QualityLinks, Season, Episode, LinkDef, Role } from '../../types';
+import { Plus, Edit2, Trash2, Share2, Film, Tv, X, Save, Upload, Search, Eye, EyeOff, ArrowUp, ArrowDown, Copy, ClipboardPaste, GripVertical, Bell, RefreshCw, ChevronDown, ChevronUp, User, Lock } from 'lucide-react';
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
 import ConfirmModal from '../../components/ConfirmModal';
 import AlertModal from '../../components/AlertModal';
@@ -14,6 +15,7 @@ import { formatContentTitle, formatReleaseDate, formatRuntime, formatDateToMonth
 import { handleFirestoreError, OperationType } from '../../utils/firestoreErrorHandler';
 
 export default function ContentManagement() {
+  const { profile, user } = useAuth();
   const [contentList, setContentList] = useState<Content[]>([]);
   const [loading, setLoading] = useState(true);
   const [genres, setGenres] = useState<Genre[]>([]);
@@ -23,10 +25,11 @@ export default function ContentManagement() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [alertConfig, setAlertConfig] = useState<{ isOpen: boolean; title: string; message: string }>({ isOpen: false, title: '', message: '' });
+  const [managers, setManagers] = useState<Record<string, string>>({});
 
   // Form State
   const [type, setType] = useState<'movie' | 'series'>('movie');
-  const [status, setStatus] = useState<'draft' | 'published'>('published');
+  const [status, setStatus] = useState<'draft' | 'published' | 'selected_content'>('published');
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [posterUrl, setPosterUrl] = useState('');
@@ -51,7 +54,7 @@ export default function ContentManagement() {
   // Series specific
   const [seasons, setSeasons] = useState<Season[]>([]);
   const [expandedEpisodes, setExpandedEpisodes] = useState<Record<string, boolean>>({});
-
+ 
   // Search States
   const [searchTerm, setSearchTerm] = useState('');
   const [filterType, setFilterType] = useState<'all' | 'movie' | 'series'>('all');
@@ -59,7 +62,8 @@ export default function ContentManagement() {
   const [filterLanguage, setFilterLanguage] = useState<string>('all');
   const [filterQuality, setFilterQuality] = useState<string>('all');
   const [filterYear, setFilterYear] = useState<string>('all');
-  const [filterStatus, setFilterStatus] = useState<'all' | 'published' | 'draft'>('all');
+  const [filterStatus, setFilterStatus] = useState<'all' | 'published' | 'draft' | 'selected_content'>('all');
+  const [filterAddedBy, setFilterAddedBy] = useState<string>('all');
   const [filterDateAdded, setFilterDateAdded] = useState<'newest' | 'oldest'>('newest');
   const [selectedContent, setSelectedContent] = useState<string[]>([]);
 
@@ -162,7 +166,25 @@ export default function ContentManagement() {
       console.error("Qualities snapshot error:", error);
       handleFirestoreError(error, OperationType.LIST, 'qualities');
     });
-    return () => { unsubContent(); unsubGenres(); unsubLangs(); unsubQualities(); };
+
+    const unsubManagers = onSnapshot(collection(db, 'users'), (snapshot) => {
+      const managersData: Record<string, string> = {};
+      snapshot.docs.forEach(doc => {
+        const data = doc.data();
+        if (data.role === 'admin' || data.role === 'content_manager') {
+          managersData[doc.id] = data.displayName || data.email || 'Unknown';
+        }
+      });
+      setManagers(managersData);
+    });
+
+    return () => { 
+      unsubContent(); 
+      unsubGenres(); 
+      unsubLangs(); 
+      unsubQualities(); 
+      unsubManagers();
+    };
   }, []);
 
   useEffect(() => {
@@ -346,7 +368,7 @@ export default function ContentManagement() {
 
       const data: Partial<Content> = {
         type,
-        status,
+        status: profile?.role === 'content_manager' ? 'draft' : status,
         title,
         description,
         posterUrl,
@@ -383,6 +405,8 @@ export default function ContentManagement() {
         });
       } else {
         data.createdAt = new Date().toISOString();
+        data.addedBy = user?.uid;
+        data.addedByRole = profile?.role;
         addDoc(collection(db, 'content'), data).catch(error => {
           console.error('Error saving content:', error);
           setAlertConfig({ isOpen: true, title: 'Error', message: 'Failed to save content' });
@@ -1496,6 +1520,12 @@ export default function ContentManagement() {
 
   const filteredContent = useMemo(() => {
     let result = contentList;
+    
+    // Content Manager restriction: only see their own content
+    if (profile?.role === 'content_manager') {
+      result = result.filter(c => c.addedBy === user?.uid);
+    }
+
     if (filterType !== 'all') {
       result = result.filter(c => c.type === filterType);
     }
@@ -1514,6 +1544,13 @@ export default function ContentManagement() {
     if (filterStatus !== 'all') {
       result = result.filter(c => (c.status || 'published') === filterStatus);
     }
+    if (profile?.role === 'content_manager') {
+      result = result.filter(c => c.addedBy === user?.uid);
+    }
+
+    if (filterAddedBy !== 'all') {
+      result = result.filter(c => c.addedBy === filterAddedBy);
+    }
     if (searchTerm) {
       const lower = searchTerm.toLowerCase();
       result = result.filter(c => c.title.toLowerCase().includes(lower));
@@ -1526,7 +1563,7 @@ export default function ContentManagement() {
     });
     
     return result;
-  }, [contentList, searchTerm, filterType, filterGenre, filterLanguage, filterQuality, filterYear, filterStatus, filterDateAdded]);
+  }, [contentList, searchTerm, filterType, filterGenre, filterLanguage, filterQuality, filterYear, filterStatus, filterDateAdded, filterAddedBy, profile, user]);
 
   const filteredGenres = useMemo(() => {
     if (!genreSearchTerm) return genres;
@@ -1555,7 +1592,7 @@ export default function ContentManagement() {
     );
   };
 
-  const handleBulkStatusChange = (status: 'published' | 'draft') => {
+  const handleBulkStatusChange = (status: 'published' | 'draft' | 'selected_content') => {
     if (!window.confirm(`Are you sure you want to change the status of ${selectedContent.length} items to ${status}?`)) return;
     
     const currentSelected = [...selectedContent];
@@ -1620,9 +1657,17 @@ export default function ContentManagement() {
                   className="bg-transparent border-none text-sm focus:outline-none text-emerald-500 font-medium cursor-pointer"
                 >
                   <option value="">Bulk Actions</option>
-                  <option value="published">Publish</option>
-                  <option value="draft">Draft</option>
-                  <option value="delete">Delete</option>
+                  {profile?.role === 'admin' && (
+                    <>
+                      <option value="published">Publish</option>
+                      <option value="draft">Draft</option>
+                      <option value="selected_content">Selected Content Only</option>
+                      <option value="delete">Delete</option>
+                    </>
+                  )}
+                  {profile?.role === 'content_manager' && (
+                    <option value="draft">Draft</option>
+                  )}
                 </select>
               </div>
             )}
@@ -1636,37 +1681,51 @@ export default function ContentManagement() {
           </div>
         </div>
         
-        <div className="flex flex-wrap gap-3 bg-zinc-900 p-4 rounded-xl border border-zinc-800">
-          <select value={filterType} onChange={(e) => setFilterType(e.target.value as any)} className="bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm focus:border-emerald-500">
-            <option value="all">All Types</option>
-            <option value="movie">Movies</option>
-            <option value="series">Series</option>
-          </select>
-          <select value={filterGenre} onChange={(e) => setFilterGenre(e.target.value)} className="bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm focus:border-emerald-500">
-            <option value="all">All Genres</option>
-            {genres.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
-          </select>
-          <select value={filterLanguage} onChange={(e) => setFilterLanguage(e.target.value)} className="bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm focus:border-emerald-500">
-            <option value="all">All Languages</option>
-            {languages.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
-          </select>
-          <select value={filterQuality} onChange={(e) => setFilterQuality(e.target.value)} className="bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm focus:border-emerald-500">
-            <option value="all">All Qualities</option>
-            {qualities.map(q => <option key={q.id} value={q.id}>{q.name}</option>)}
-          </select>
-          <select value={filterYear} onChange={(e) => setFilterYear(e.target.value)} className="bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm focus:border-emerald-500">
-            <option value="all">All Years</option>
-            {uniqueYears.map(y => <option key={y} value={y.toString()}>{y}</option>)}
-          </select>
-          <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value as any)} className="bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm focus:border-emerald-500">
-            <option value="all">All Status</option>
-            <option value="published">Published</option>
-            <option value="draft">Draft</option>
-          </select>
-          <select value={filterDateAdded} onChange={(e) => setFilterDateAdded(e.target.value as any)} className="bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm focus:border-emerald-500">
-            <option value="newest">Newest Added</option>
-            <option value="oldest">Oldest Added</option>
-          </select>
+        <div className="flex flex-col gap-2 bg-zinc-900 p-3 rounded-xl border border-zinc-800">
+          <div className="flex flex-wrap gap-2">
+            <select value={filterType} onChange={(e) => setFilterType(e.target.value as any)} className="bg-zinc-950 border border-zinc-800 rounded-lg px-2 py-1 text-xs focus:border-emerald-500">
+              <option value="all">All Types</option>
+              <option value="movie">Movies</option>
+              <option value="series">Series</option>
+            </select>
+            <select value={filterYear} onChange={(e) => setFilterYear(e.target.value)} className="bg-zinc-950 border border-zinc-800 rounded-lg px-2 py-1 text-xs focus:border-emerald-500">
+              <option value="all">All Years</option>
+              {uniqueYears.map(y => <option key={y} value={y.toString()}>{y}</option>)}
+            </select>
+            <select value={filterDateAdded} onChange={(e) => setFilterDateAdded(e.target.value as any)} className="bg-zinc-950 border border-zinc-800 rounded-lg px-2 py-1 text-xs focus:border-emerald-500">
+              <option value="newest">Newest Added</option>
+              <option value="oldest">Oldest Added</option>
+            </select>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <select value={filterGenre} onChange={(e) => setFilterGenre(e.target.value)} className="bg-zinc-950 border border-zinc-800 rounded-lg px-2 py-1 text-xs focus:border-emerald-500">
+              <option value="all">All Genres</option>
+              {genres.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
+            </select>
+            <select value={filterLanguage} onChange={(e) => setFilterLanguage(e.target.value)} className="bg-zinc-950 border border-zinc-800 rounded-lg px-2 py-1 text-xs focus:border-emerald-500">
+              <option value="all">All Languages</option>
+              {languages.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
+            </select>
+            <select value={filterQuality} onChange={(e) => setFilterQuality(e.target.value)} className="bg-zinc-950 border border-zinc-800 rounded-lg px-2 py-1 text-xs focus:border-emerald-500">
+              <option value="all">All Qualities</option>
+              {qualities.map(q => <option key={q.id} value={q.id}>{q.name}</option>)}
+            </select>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value as any)} className="bg-zinc-950 border border-zinc-800 rounded-lg px-2 py-1 text-xs focus:border-emerald-500">
+              <option value="all">All Status</option>
+              <option value="published">Published</option>
+              <option value="draft">Draft</option>
+            </select>
+            {profile?.role === 'admin' && (
+              <select value={filterAddedBy} onChange={(e) => setFilterAddedBy(e.target.value)} className="bg-zinc-950 border border-zinc-800 rounded-lg px-2 py-1 text-xs focus:border-emerald-500">
+                <option value="all">Added By: All</option>
+                {Object.entries(managers).map(([id, name]) => (
+                  <option key={id} value={id}>{name}</option>
+                ))}
+              </select>
+            )}
+          </div>
         </div>
       </div>
 
@@ -1734,9 +1793,11 @@ export default function ContentManagement() {
                     <button onClick={() => handleShare(content)} className="text-emerald-500 hover:text-emerald-400 p-1.5 transition-colors" title="Share to WhatsApp" disabled={loadingShareId === content.id}>
                       {loadingShareId === content.id ? <RefreshCw className="w-4 h-4 md:w-5 md:h-5 animate-spin" /> : <Share2 className="w-4 h-4 md:w-5 md:h-5" />}
                     </button>
-                    <button onClick={() => setNotificationModal({ isOpen: true, content, status: 'idle' })} className="text-blue-500 hover:text-blue-400 p-1.5 transition-colors" title="Send Notification">
-                      <Bell className="w-4 h-4 md:w-5 md:h-5" />
-                    </button>
+                    {profile?.role === 'admin' && (
+                      <button onClick={() => setNotificationModal({ isOpen: true, content, status: 'idle' })} className="text-blue-500 hover:text-blue-400 p-1.5 transition-colors" title="Send Notification">
+                        <Bell className="w-4 h-4 md:w-5 md:h-5" />
+                      </button>
+                    )}
                     <button onClick={() => handleCopyData(content)} className="text-zinc-400 hover:text-white p-1.5 transition-colors" title="Copy Data">
                       <Copy className="w-4 h-4 md:w-5 md:h-5" />
                     </button>
@@ -1745,9 +1806,11 @@ export default function ContentManagement() {
                     <button onClick={() => handleEdit(content)} className="text-zinc-400 hover:text-white p-1.5 transition-colors">
                       <Edit2 className="w-4 h-4 md:w-5 md:h-5" />
                     </button>
-                    <button onClick={() => setDeleteId(content.id)} className="text-red-500 hover:text-red-400 p-1.5 transition-colors">
-                      <Trash2 className="w-4 h-4 md:w-5 md:h-5" />
-                    </button>
+                    {profile?.role === 'admin' && (
+                      <button onClick={() => setDeleteId(content.id)} className="text-red-500 hover:text-red-400 p-1.5 transition-colors">
+                        <Trash2 className="w-4 h-4 md:w-5 md:h-5" />
+                      </button>
+                    )}
                   </div>
                 </div>
               </div>
@@ -1798,14 +1861,27 @@ export default function ContentManagement() {
                       <div className="flex-1">
                         <label className="block text-xs font-medium text-zinc-500 mb-1">Status</label>
                         <div className="flex gap-2">
-                          <label className={`flex-1 flex items-center justify-center gap-1 p-1.5 rounded-lg border cursor-pointer transition-colors text-xs ${status === 'published' ? 'bg-emerald-500/10 border-emerald-500 text-emerald-500' : 'bg-zinc-950 border-zinc-800 text-zinc-400'}`}>
-                            <input type="radio" name="status" value="published" checked={status === 'published'} onChange={() => setStatus('published')} className="hidden" />
-                            <Eye className="w-3.5 h-3.5" /> Pub
-                          </label>
-                          <label className={`flex-1 flex items-center justify-center gap-1 p-1.5 rounded-lg border cursor-pointer transition-colors text-xs ${status === 'draft' ? 'bg-yellow-500/10 border-yellow-500 text-yellow-500' : 'bg-zinc-950 border-zinc-800 text-zinc-400'}`}>
-                            <input type="radio" name="status" value="draft" checked={status === 'draft'} onChange={() => setStatus('draft')} className="hidden" />
-                            <EyeOff className="w-3.5 h-3.5" /> Draft
-                          </label>
+                          {profile?.role === 'admin' && (
+                            <>
+                              <label className={`flex-1 flex items-center justify-center gap-1 p-1.5 rounded-lg border cursor-pointer transition-colors text-xs ${status === 'published' ? 'bg-emerald-500/10 border-emerald-500 text-emerald-500' : 'bg-zinc-950 border-zinc-800 text-zinc-400'}`}>
+                                <input type="radio" name="status" value="published" checked={status === 'published'} onChange={() => setStatus('published')} className="hidden" />
+                                <Eye className="w-3.5 h-3.5" /> Pub
+                              </label>
+                              <label className={`flex-1 flex items-center justify-center gap-1 p-1.5 rounded-lg border cursor-pointer transition-colors text-xs ${status === 'draft' ? 'bg-yellow-500/10 border-yellow-500 text-yellow-500' : 'bg-zinc-950 border-zinc-800 text-zinc-400'}`}>
+                                <input type="radio" name="status" value="draft" checked={status === 'draft'} onChange={() => setStatus('draft')} className="hidden" />
+                                <EyeOff className="w-3.5 h-3.5" /> Draft
+                              </label>
+                              <label className={`flex-1 flex items-center justify-center gap-1 p-1.5 rounded-lg border cursor-pointer transition-colors text-xs ${status === 'selected_content' ? 'bg-blue-500/10 border-blue-500 text-blue-500' : 'bg-zinc-950 border-zinc-800 text-zinc-400'}`}>
+                                <input type="radio" name="status" value="selected_content" checked={status === 'selected_content'} onChange={() => setStatus('selected_content')} className="hidden" />
+                                <Lock className="w-3.5 h-3.5" /> Selected
+                              </label>
+                            </>
+                          )}
+                          {profile?.role === 'content_manager' && (
+                            <label className={`flex-1 flex items-center justify-center gap-1 p-1.5 rounded-lg border cursor-pointer transition-colors text-xs bg-yellow-500/10 border-yellow-500 text-yellow-500`}>
+                              <EyeOff className="w-3.5 h-3.5" /> Draft
+                            </label>
+                          )}
                         </div>
                       </div>
                     </div>

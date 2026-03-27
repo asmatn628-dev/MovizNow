@@ -14,7 +14,12 @@ export default function WatchLater() {
 
   const watchLaterContent = contentList.filter(c => 
     profile?.watchLater?.includes(c.id) && 
-    (profile?.role === 'admin' || profile?.role === 'data_editor' || c.status !== 'draft')
+    (profile?.role === 'admin' || profile?.role === 'content_manager' || (
+      c.status !== 'draft' && (
+        c.status !== 'selected_content' || 
+        profile?.assignedContent?.some(id => id === c.id || id.startsWith(`${c.id}:`))
+      )
+    ))
   );
 
   return (
@@ -37,8 +42,8 @@ export default function WatchLater() {
       <main className="flex-1 max-w-7xl mx-auto w-full px-4 py-8">
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4 md:gap-6">
           {watchLaterContent.map((content) => {
-            const isAssigned = (profile?.role === 'temporary' || profile?.role === 'selected_content') && profile.assignedContent?.some(id => id === content.id || id.startsWith(`${content.id}:`));
-            const isLocked = profile?.status !== 'active' || ((profile?.role === 'temporary' || profile?.role === 'selected_content') && !isAssigned);
+            const isAssigned = profile?.assignedContent?.some(id => id === content.id || id.startsWith(`${content.id}:`));
+            const isLocked = profile?.status !== 'active' || ((profile?.role === 'temporary' || profile?.role === 'selected_content' || content.status === 'selected_content') && !isAssigned);
             
             const contentQuality = qualities.find(q => q.id === content.qualityId)?.name;
             const contentLangs = languages.filter(l => content.languageIds?.includes(l.id)).map(l => l.name).join(', ');

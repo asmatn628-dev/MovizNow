@@ -21,18 +21,31 @@ service cloud.firestore {
           (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
            get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin') ||
           (request.auth.token.email == "asmatn628@gmail.com" && request.auth.token.email_verified == true) ||
-          (request.auth.token.email == "asmatullah9327@gmail.com" && request.auth.token.email_verified == true)
+          (request.auth.token.email == "asmatullah9327@gmail.com" && request.auth.token.email_verified == true) ||
+          (request.auth.token.email == "kabirahmaddev@gmail.com" && request.auth.token.email_verified == true)
         );
     }
 
-    function isDataEditor() {
+    function isContentManager() {
       return isAuthenticated() &&
         exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'data_editor';
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'content_manager';
+    }
+
+    function isUserManager() {
+      return isAuthenticated() &&
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'user_manager';
+    }
+
+    function isManager() {
+      return isAuthenticated() &&
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'manager';
     }
 
     function isAdminOrEditor() {
-      return isAdmin() || isDataEditor();
+      return isAdmin() || isContentManager() || isManager();
     }
 
     // ===============================================================
@@ -40,9 +53,18 @@ service cloud.firestore {
     // ===============================================================
 
     match /users/{userId} {
-      allow read: if isOwner(userId) || isAdmin();
-      allow create: if isOwner(userId) && request.resource.data.uid == request.auth.uid;
-      allow update: if isAdmin() || (isOwner(userId) && request.resource.data.role == resource.data.role && request.resource.data.status == resource.data.status);
+      allow read: if isOwner(userId) || isAdmin() || isManager() || (isUserManager() && (resource.data.managedBy == request.auth.uid || resource.data.status == 'pending'));
+      allow create: if (isOwner(userId) && request.resource.data.uid == request.auth.uid && request.resource.data.role == 'user') || 
+                       (isOwner(userId) && request.resource.data.uid == request.auth.uid && request.resource.data.role in ['user', 'trial', 'selected_content'] && 'managedBy' in request.resource.data) ||
+                       (isOwner(userId) && request.resource.data.uid == request.auth.uid && isAdmin()) ||
+                       (isUserManager() && request.resource.data.managedBy == request.auth.uid && request.resource.data.role in ['user', 'trial', 'selected_content'] && request.resource.data.status != 'suspended') ||
+                       (isManager() && request.resource.data.managedBy == request.auth.uid && request.resource.data.role in ['user', 'trial', 'selected_content'] && request.resource.data.status != 'suspended');
+      allow update: if isAdmin() || 
+                       (isOwner(userId) && request.resource.data.role == resource.data.role && request.resource.data.status == resource.data.status) ||
+                       (isUserManager() && resource.data.managedBy == request.auth.uid && request.resource.data.managedBy == request.auth.uid && request.resource.data.role in ['user', 'trial', 'selected_content'] && request.resource.data.status != 'suspended') ||
+                       (isUserManager() && resource.data.status == 'pending' && request.resource.data.managedBy == request.auth.uid && request.resource.data.role in ['user', 'trial', 'selected_content'] && request.resource.data.status != 'suspended') ||
+                       (isManager() && resource.data.managedBy == request.auth.uid && request.resource.data.managedBy == request.auth.uid && request.resource.data.role in ['user', 'trial', 'selected_content'] && request.resource.data.status != 'suspended') ||
+                       (isManager() && resource.data.status == 'pending' && request.resource.data.managedBy == request.auth.uid && request.resource.data.role in ['user', 'trial', 'selected_content'] && request.resource.data.status != 'suspended');
       allow delete: if isAdmin();
     }
 
@@ -62,12 +84,14 @@ service cloud.firestore {
     }
 
     match /content/{contentId} {
-      allow read: if true;
+      // Allow read for all authenticated users to prevent listing errors
+      // In a production app, you would use filtered queries and matching rules
+      allow read: if isAuthenticated();
       allow write: if isAdminOrEditor();
     }
 
     match /analytics/{eventId} {
-      allow read: if isAdmin();
+      allow read: if isAdmin() || isManager() || (isUserManager() && get(/databases/$(database)/documents/users/$(resource.data.userId)).data.managedBy == request.auth.uid);
       allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid;
       allow update, delete: if isAdmin();
     }

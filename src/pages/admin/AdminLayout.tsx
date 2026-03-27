@@ -19,6 +19,7 @@ export default function AdminLayout() {
     { path: '/admin/languages', label: 'Languages', icon: Languages },
     { path: '/admin/qualities', label: 'Qualities', icon: MonitorPlay },
     { path: '/admin/users', label: 'Membership', icon: Users },
+    { path: '/admin/user-managers', label: 'User Managers', icon: Users },
     { path: '/admin/temporary-users', label: 'Temporary Users', icon: Clock },
     { path: '/admin/selected-content', label: 'Selected Content Only', icon: Film },
     { path: '/admin/income', label: 'Income / Earn', icon: DollarSign },
@@ -27,11 +28,22 @@ export default function AdminLayout() {
     { path: '/admin/requests', label: 'Movie Requests', icon: MessageCircle },
   ];
 
-  const navItems = profile?.role === 'data_editor' 
-    ? allNavItems.filter(item => ['/admin/content', '/admin/genres', '/admin/languages', '/admin/qualities', '/admin/error-links'].includes(item.path))
-    : allNavItems;
+  let navItems = allNavItems;
+  if (profile?.role === 'content_manager') {
+    navItems = allNavItems.filter(item => ['/admin/content'].includes(item.path));
+  } else if (profile?.role === 'user_manager') {
+    navItems = allNavItems.filter(item => ['/admin/users'].includes(item.path));
+  } else if (profile?.role === 'manager') {
+    navItems = allNavItems.filter(item => ['/admin/content', '/admin/users'].includes(item.path));
+  }
 
-  if (profile?.role === 'data_editor' && !['/admin/content', '/admin/genres', '/admin/languages', '/admin/qualities', '/admin/error-links'].includes(location.pathname)) {
+  if (profile?.role === 'content_manager' && !['/admin/content'].includes(location.pathname)) {
+    return <Navigate to="/admin/content" replace />;
+  }
+  if (profile?.role === 'user_manager' && !['/admin/users'].includes(location.pathname)) {
+    return <Navigate to="/admin/users" replace />;
+  }
+  if (profile?.role === 'manager' && !['/admin/content', '/admin/users'].includes(location.pathname)) {
     return <Navigate to="/admin/content" replace />;
   }
 
@@ -41,14 +53,27 @@ export default function AdminLayout() {
       <div className="md:hidden flex items-center justify-between p-4 bg-zinc-900 border-b border-zinc-800">
         <h1 className="text-xl font-bold text-emerald-500 flex items-center gap-3">
           <img src="/logo.svg?v=2" alt="Logo" className="w-6 h-6" />
-          <span className="tracking-tight">MovizNow Admin</span>
+          <span className="tracking-tight">
+            {profile?.role === 'user_manager' ? 'MovizNow User Manager' : 
+             profile?.role === 'content_manager' ? 'MovizNow Content Manager' : 
+             profile?.role === 'manager' ? 'MovizNow Manager' : 'MovizNow Admin'}
+          </span>
         </h1>
-        <button 
-          onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-          className="p-2 text-zinc-400 hover:text-white"
-        >
-          {isMobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
-        </button>
+        {(profile?.role === 'user_manager' || profile?.role === 'content_manager' || profile?.role === 'manager') ? (
+          <button 
+            onClick={() => navigate('/')}
+            className="p-2 text-zinc-400 hover:text-white"
+          >
+            <X className="w-6 h-6" />
+          </button>
+        ) : (
+          <button 
+            onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+            className="p-2 text-zinc-400 hover:text-white"
+          >
+            {isMobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
+          </button>
+        )}
       </div>
 
       {/* Sidebar */}
@@ -61,7 +86,11 @@ export default function AdminLayout() {
             <img src="/logo.svg?v=2" alt="Logo" className="w-8 h-8" />
             <span className="tracking-tight">MovizNow</span>
           </h1>
-          <p className="text-xs text-zinc-400 mt-1 uppercase tracking-wider font-semibold">Admin Panel</p>
+          <p className="text-xs text-zinc-400 mt-1 uppercase tracking-wider font-semibold">
+            {profile?.role === 'user_manager' ? 'User Manager' : 
+             profile?.role === 'content_manager' ? 'Content Manager' : 
+             profile?.role === 'manager' ? 'Manager' : 'Admin Panel'}
+          </p>
         </div>
 
         <nav className="flex-1 px-4 py-4 md:py-0 space-y-2 overflow-y-auto">

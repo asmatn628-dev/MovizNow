@@ -23,6 +23,7 @@ const GenreManagement = lazy(() => import('./pages/admin/GenreManagement'));
 const LanguageManagement = lazy(() => import('./pages/admin/LanguageManagement'));
 const QualityManagement = lazy(() => import('./pages/admin/QualityManagement'));
 const UserManagement = lazy(() => import('./pages/admin/UserManagement'));
+const UserManagers = lazy(() => import('./pages/admin/UserManagers'));
 const TemporaryUsers = lazy(() => import('./pages/admin/TemporaryUsers'));
 const SelectedContentUsers = lazy(() => import('./pages/admin/SelectedContentUsers'));
 const IncomeManagement = lazy(() => import('./pages/admin/IncomeManagement'));
@@ -74,6 +75,7 @@ export default function App() {
                 <Route path="languages" element={<LanguageManagement />} />
                 <Route path="qualities" element={<QualityManagement />} />
                 <Route path="users" element={<UserManagement />} />
+                <Route path="user-managers" element={<UserManagers />} />
                 <Route path="temporary-users" element={<TemporaryUsers />} />
                 <Route path="selected-content" element={<SelectedContentUsers />} />
                 <Route path="income" element={<IncomeManagement />} />

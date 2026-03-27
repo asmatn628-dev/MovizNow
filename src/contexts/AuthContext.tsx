@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useEffect, useState, useRef } from 'react';
 import { auth, db } from '../firebase';
 import { onAuthStateChanged, User, signInWithPopup, GoogleAuthProvider, signOut } from 'firebase/auth';
-import { doc, getDoc, setDoc, onSnapshot, updateDoc } from 'firebase/firestore';
+import { doc, getDoc, setDoc, onSnapshot, updateDoc, query, collection, where, getDocs, deleteDoc } from 'firebase/firestore';
 import { UserProfile } from '../types';
 import { logEvent, updateTimeSpent } from '../services/analytics';
 import { handleFirestoreError, OperationType } from '../utils/firestoreErrorHandler';
@@ -83,17 +83,37 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               }
             } else {
               // Create new user profile
+              let pendingData: Partial<UserProfile> = {};
+              if (currentUser.email) {
+                try {
+                  const pendingQuery = query(collection(db, 'users'), where('email', '==', currentUser.email), where('status', '==', 'pending'));
+                  const pendingSnap = await getDocs(pendingQuery);
+                  if (!pendingSnap.empty) {
+                    const pendingDoc = pendingSnap.docs[0];
+                    pendingData = pendingDoc.data();
+                    // Delete the pending document since we are creating the real one
+                    await deleteDoc(pendingDoc.ref);
+                  }
+                } catch (err) {
+                  console.error("Error checking pending users:", err);
+                }
+              }
+
               const isAdmin = currentUser.email === 'asmatn628@gmail.com' || currentUser.email === 'asmatullah9327@gmail.com';
+              const roleToSet = isAdmin ? 'admin' : (pendingData.role && ['user', 'trial', 'selected_content'].includes(pendingData.role) ? pendingData.role : 'user');
               const newProfile: UserProfile = {
                 uid: currentUser.uid,
                 email: currentUser.email || '',
                 displayName: currentUser.displayName || '',
                 photoURL: currentUser.photoURL || '',
-                role: isAdmin ? 'admin' : 'user',
-                status: isAdmin ? 'active' : 'pending',
-                createdAt: new Date().toISOString(),
+                role: roleToSet,
+                status: isAdmin ? 'active' : (pendingData.status || 'pending'),
+                createdAt: pendingData.createdAt || new Date().toISOString(),
                 sessionsCount: 1,
-                timeSpent: 0
+                timeSpent: 0,
+                ...(pendingData.expiryDate && { expiryDate: pendingData.expiryDate }),
+                ...(pendingData.managedBy && { managedBy: pendingData.managedBy }),
+                ...(pendingData.phone && { phone: pendingData.phone }),
               };
               try {
                 await setDoc(userRef, newProfile);

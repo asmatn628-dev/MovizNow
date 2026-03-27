@@ -1,4 +1,4 @@
-export type Role = 'admin' | 'user' | 'temporary' | 'selected_content' | 'data_editor' | 'trial';
+export type Role = 'admin' | 'user' | 'temporary' | 'selected_content' | 'content_manager' | 'trial' | 'user_manager' | 'manager';
 export type Status = 'pending' | 'active' | 'expired';
 
 export interface UserProfile {
@@ -18,6 +18,9 @@ export interface UserProfile {
   timeSpent?: number; // in minutes
   lastNotificationCheck?: string; // ISO string
   permissions?: string[]; // Specific management access
+  managedBy?: string; // UID of the User Manager who added this user
+  isUserManager?: boolean; // Flag to keep user in User Managers list even if role changes
+  previousStatus?: 'active' | 'pending' | 'suspended' | 'expired'; // Store previous status when manager role changes
 }
 
 export interface AppNotification {
@@ -117,7 +120,9 @@ export interface Content {
   runtime?: string;
   createdAt: string;
   updatedAt: string;
-  status?: 'draft' | 'published';
+  addedBy?: string; // UID of the Content Manager who added this content
+  addedByRole?: Role; // Role of the person who added this content
+  status?: 'draft' | 'published' | 'selected_content';
   movieLinks?: string; // JSON stringified QualityLinks
   seasons?: string; // JSON stringified Season[]
   imdbRating?: string; // Added imdbRating
