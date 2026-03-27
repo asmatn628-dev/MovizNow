@@ -5,7 +5,7 @@ import { Content, Season, QualityLinks, LinkDef } from '../../types';
 import { AlertTriangle, Edit2, ExternalLink, RefreshCw, X, Save, CheckCircle2, Filter, ArrowUpDown, Search } from 'lucide-react';
 import { handleFirestoreError, OperationType } from '../../utils/firestoreErrorHandler';
 import { scannerService, ErrorLinkInfo, ScanState } from '../../services/ScannerService';
-import { PixelDrainModal } from '../../components/PixelDrainModal';
+import { LinkCheckerModal } from '../../components/LinkCheckerModal';
 
 export default function ErrorLinks() {
   const [contentList, setContentList] = useState<Content[]>([]);
@@ -15,7 +15,7 @@ export default function ErrorLinks() {
   const [errorLinks, setErrorLinks] = useState<ErrorLinkInfo[]>([]);
   const [scannedCount, setScannedCount] = useState(0);
   const [totalLinks, setTotalLinks] = useState(0);
-  const [isPixelDrainModalOpen, setIsPixelDrainModalOpen] = useState(false);
+  const [isLinkCheckerModalOpen, setIsLinkCheckerModalOpen] = useState(false);
 
   const [editingLink, setEditingLink] = useState<ErrorLinkInfo | null>(null);
   const [editUrl, setEditUrl] = useState('');
@@ -90,9 +90,7 @@ export default function ErrorLinks() {
     return [];
   };
 
-  const scanLinks = async () => {
-    if (scanning) return;
-    
+  const getAllLinksToScan = (): { info: ErrorLinkInfo, url: string }[] => {
     let allLinksToScan: { info: ErrorLinkInfo, url: string }[] = [];
 
     contentList.forEach(content => {
@@ -179,9 +177,13 @@ export default function ErrorLinks() {
         }
       }
     });
+    return allLinksToScan;
+  };
 
+  const scanLinks = async () => {
+    if (scanning) return;
+    const allLinksToScan = getAllLinksToScan();
     if (allLinksToScan.length === 0) return;
-    
     scannerService.startScan(allLinksToScan);
   };
 
@@ -330,57 +332,97 @@ export default function ErrorLinks() {
           </h1>
           <p className="text-zinc-400 mt-1">AI-Powered Deep Scan using multiple algorithms to find broken links.</p>
         </div>
-        <div className="flex items-center gap-4">
-          {scanStatus === 'completed' && (
-            <span className="text-emerald-500 text-sm font-medium flex items-center gap-1">
-              <CheckCircle2 className="w-4 h-4" /> Deep Scan complete
-            </span>
-          )}
-          {scanStatus === 'error' && (
-            <span className="text-red-500 text-sm font-medium flex items-center gap-1">
-              <AlertTriangle className="w-4 h-4" /> Deep Scan failed
-            </span>
-          )}
-          <button
-            onClick={scanLinks}
-            disabled={scanning || loading}
-            className="bg-emerald-500 hover:bg-emerald-600 disabled:bg-emerald-500/50 text-white px-6 py-3 rounded-xl font-medium flex items-center justify-center gap-2 transition-colors whitespace-nowrap"
-          >
-            {scanning ? (
-              <>
-                <RefreshCw className="w-5 h-5 animate-spin" />
-                Deep Scanning ({scannedCount}/{totalLinks})
-              </>
-            ) : (
-              <>
-                <RefreshCw className="w-5 h-5" />
-                {scanStatus === 'idle' ? 'Start AI Deep Scan' : 'Restart Deep Scan'}
-              </>
+        <div className="flex flex-col gap-2 items-end">
+          {/* Line 1: Main Scan Buttons */}
+          <div className="flex items-center gap-2">
+            {scanStatus === 'completed' && (
+              <span className="text-emerald-500 text-sm font-medium flex items-center gap-1">
+                <CheckCircle2 className="w-4 h-4" /> Deep Scan complete
+              </span>
             )}
-          </button>
-          {scanning && (
+            {scanStatus === 'error' && (
+              <span className="text-red-500 text-sm font-medium flex items-center gap-1">
+                <AlertTriangle className="w-4 h-4" /> Deep Scan failed
+              </span>
+            )}
             <button
-              onClick={() => {
-                console.log("Stop button clicked");
-                scannerService.stopScan();
-              }}
-              className="bg-red-500 hover:bg-red-600 text-white px-6 py-3 rounded-xl font-medium flex items-center justify-center gap-2 transition-colors whitespace-nowrap"
+              onClick={scanLinks}
+              disabled={scanning || loading}
+              className="bg-emerald-500 hover:bg-emerald-600 disabled:bg-emerald-500/50 text-white px-4 py-2 rounded-lg text-sm font-medium flex items-center justify-center gap-2 transition-colors whitespace-nowrap"
             >
-              <X className="w-5 h-5" />
-              Stop Scan
+              {scanning ? (
+                <>
+                  <RefreshCw className="w-4 h-4 animate-spin" />
+                  Scanning ({scannedCount}/{totalLinks})
+                </>
+              ) : (
+                <>
+                  <RefreshCw className="w-4 h-4" />
+                  {scanStatus === 'idle' ? 'Start Deep Scan' : 'Restart Deep Scan'}
+                </>
+              )}
             </button>
-          )}
-          <button
-            onClick={() => setIsPixelDrainModalOpen(true)}
-            className="bg-sky-500 hover:bg-sky-600 text-white px-6 py-3 rounded-xl font-medium flex items-center justify-center gap-2 transition-colors whitespace-nowrap"
-          >
-            <Search className="w-5 h-5" />
-            Manual Check
-          </button>
+            <button
+              onClick={async () => {
+                const allLinksToScan = getAllLinksToScan();
+                if (allLinksToScan.length === 0) return;
+                try {
+                  await scannerService.startServerSideScan(allLinksToScan);
+                  alert("Server-side scan started successfully!");
+                } catch (error) {
+                  console.error("Error starting server-side scan:", error);
+                  alert("Failed to start server-side scan");
+                }
+              }}
+              className="bg-purple-500 hover:bg-purple-600 text-white px-4 py-2 rounded-lg text-sm font-medium flex items-center justify-center gap-2 transition-colors whitespace-nowrap"
+            >
+              <RefreshCw className="w-4 h-4" />
+              Server-Side Scan
+            </button>
+          </div>
+
+          {/* Line 2: Manual/Rescan Buttons */}
+          <div className="flex items-center gap-2">
+            <button
+              onClick={async () => {
+                if (scanning) return;
+                const filteredLinks = filteredAndSortedLinks.map(link => ({ info: link, url: link.link.url }));
+                if (filteredLinks.length === 0) return;
+                scannerService.startScan(filteredLinks);
+              }}
+              className="bg-amber-500 hover:bg-amber-600 text-white px-4 py-2 rounded-lg text-sm font-medium flex items-center justify-center gap-2 transition-colors whitespace-nowrap"
+            >
+              <RefreshCw className="w-4 h-4" />
+              Rescan Filtered
+            </button>
+            <button
+              onClick={() => setIsLinkCheckerModalOpen(true)}
+              className="bg-sky-500 hover:bg-sky-600 text-white px-4 py-2 rounded-lg text-sm font-medium flex items-center justify-center gap-2 transition-colors whitespace-nowrap"
+            >
+              <Search className="w-4 h-4" />
+              Manual Check
+            </button>
+          </div>
+
+          {/* Line 3: Stop/Cancel Buttons */}
+          <div className="flex items-center gap-2">
+            {scanning && (
+              <button
+                onClick={() => {
+                  console.log("Stop button clicked");
+                  scannerService.stopScan();
+                }}
+                className="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded-lg text-sm font-medium flex items-center justify-center gap-2 transition-colors whitespace-nowrap"
+              >
+                <X className="w-4 h-4" />
+                Stop Scan
+              </button>
+            )}
+          </div>
         </div>
       </div>
 
-      <PixelDrainModal isOpen={isPixelDrainModalOpen} onClose={() => setIsPixelDrainModalOpen(false)} />
+      <LinkCheckerModal isOpen={isLinkCheckerModalOpen} onClose={() => setIsLinkCheckerModalOpen(false)} />
 
       {loading ? (
         <div className="flex justify-center items-center py-20">

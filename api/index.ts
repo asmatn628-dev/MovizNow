@@ -3,6 +3,15 @@ import path from "path";
 import { fileURLToPath } from "url";
 import fs from "fs";
 import firebaseConfig from "../firebase-applet-config.json" assert { type: "json" };
+import admin from "firebase-admin";
+
+// Initialize Firebase Admin
+if (!admin.apps.length) {
+  admin.initializeApp({
+    credential: admin.credential.applicationDefault(),
+  });
+}
+const dbAdmin = admin.firestore();
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -144,6 +153,62 @@ async function startServer() {
       res.status(404).json({ error: "No video found" });
     } catch (error) {
       console.error("YouTube Proxy Error:", error);
+      res.status(500).json({ error: "Internal Server Error" });
+    }
+  });
+
+  // Server-side Link Scanner
+  app.post("/api/scan-links", async (req, res) => {
+    try {
+      const { links } = req.body;
+      if (!links || !Array.isArray(links)) return res.status(400).json({ error: "Links array required" });
+
+      // Trigger scan asynchronously
+      console.log(`Starting server-side scan for ${links.length} links`);
+      
+      // We'll update the scan status in Firestore immediately
+      await dbAdmin.doc('scans/current').set({
+        status: 'scanning',
+        scannedCount: 0,
+        totalLinks: links.length,
+        errorLinks: [],
+        lastUpdated: admin.firestore.FieldValue.serverTimestamp()
+      });
+
+      // Perform scan in background
+      (async () => {
+        const errorLinks = [];
+        let scannedCount = 0;
+        for (const link of links) {
+          try {
+            const response = await fetch(link.url, { method: 'HEAD' });
+            if (!response.ok) {
+              errorLinks.push({ ...link, errorDetail: `HTTP ${response.status}` });
+            }
+          } catch (e) {
+            errorLinks.push({ ...link, errorDetail: 'Network error' });
+          }
+          scannedCount++;
+          
+          // Update progress every 5 links or at the end
+          if (scannedCount % 5 === 0 || scannedCount === links.length) {
+            await dbAdmin.doc('scans/current').update({
+              scannedCount,
+              errorLinks,
+              lastUpdated: admin.firestore.FieldValue.serverTimestamp()
+            });
+          }
+        }
+        await dbAdmin.doc('scans/current').update({
+          status: 'completed',
+          lastUpdated: admin.firestore.FieldValue.serverTimestamp()
+        });
+        console.log("Server-side scan completed");
+      })();
+
+      res.json({ status: "Scan started" });
+    } catch (error) {
+      console.error("Scan Links Error:", error);
       res.status(500).json({ error: "Internal Server Error" });
     }
   });

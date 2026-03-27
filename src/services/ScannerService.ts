@@ -210,6 +210,29 @@ class ScannerService {
     return obj;
   }
 
+  public async startServerSideScan(allLinksToScan: { info: ErrorLinkInfo, url: string }[]) {
+    console.log("startServerSideScan called");
+    try {
+      const response = await fetch('/api/scan-links', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          links: allLinksToScan.map(item => ({
+            url: item.url,
+            ...item.info
+          }))
+        }),
+      });
+      if (!response.ok) throw new Error("Failed to start server-side scan");
+      console.log("Server-side scan started successfully");
+    } catch (error) {
+      console.error("Error starting server-side scan:", error);
+      throw error;
+    }
+  }
+
   public async stopScan() {
     console.log("stopScan called, current isScanning:", this.isScanning);
     this.isScanning = false;
