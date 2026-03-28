@@ -12,11 +12,10 @@ const __dirname = path.dirname(__filename);
 // Initialize Firebase Admin
 if (!admin.apps.length) {
   admin.initializeApp({
-    credential: admin.credential.applicationDefault(),
-    projectId: firebaseConfig.projectId
+    credential: admin.credential.applicationDefault()
   });
 }
-const db = getFirestore(firebaseConfig.firestoreDatabaseId);
+const db = getFirestore(admin.app(), firebaseConfig.firestoreDatabaseId);
 
 async function startServer() {
   const app = express();

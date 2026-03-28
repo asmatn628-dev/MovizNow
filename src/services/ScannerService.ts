@@ -1,5 +1,6 @@
 import { db } from '../firebase';
 import { doc, setDoc, updateDoc, getDoc, serverTimestamp } from 'firebase/firestore';
+import { serverCheckLink } from './linkCheckerService';
 
 export interface ErrorLinkInfo {
   contentId: string;
@@ -357,23 +358,25 @@ class ScannerService {
       const item = queue.shift()!;
       
       try {
-        let result = await this.checkPixeldrainLink(item.url);
-        let error = result.error;
+        const result = await serverCheckLink(item.url);
+        let error = result.ok ? null : (result.message || `Status ${result.status}`);
+        const size = result.fileSizeText ? result.fileSizeText.split(' ')[0] : undefined;
+        const unit = result.fileSizeText ? result.fileSizeText.split(' ')[1] : undefined;
         
         if (!error && (!item.info.link.size || !item.info.link.unit)) {
           error = "Missing size or unit";
         }
 
-        if (!error && item.info.link.size && item.info.link.unit && result.size && result.unit) {
+        if (!error && item.info.link.size && item.info.link.unit && size && unit) {
           const stored = `${item.info.link.size}${item.info.link.unit}`;
-          const server = `${result.size}${result.unit}`;
+          const server = `${size}${unit}`;
           if (stored !== server) error = `Size mismatch`;
         }
         
         if (error) {
           item.info.errorDetail = error;
-          item.info.fetchedSize = result.size;
-          item.info.fetchedUnit = result.unit;
+          item.info.fetchedSize = size;
+          item.info.fetchedUnit = unit as 'MB' | 'GB';
           foundErrors.push(item.info);
         }
 
