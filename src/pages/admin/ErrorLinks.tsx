@@ -258,7 +258,26 @@ export default function ErrorLinks() {
     if (scanning) return;
     const allLinksToScan = getAllLinksToScan();
     if (allLinksToScan.length === 0) return;
-    scannerService.startScan(allLinksToScan, false);
+    
+    setScanning(true);
+    setScanStatus('scanning');
+    setScannedCount(0);
+    setTotalLinks(allLinksToScan.length);
+    setErrorLinks([]);
+    
+    try {
+      await scannerService.startScan(allLinksToScan, false, (count, total, errors) => {
+        setScannedCount(count);
+        setTotalLinks(total);
+        setErrorLinks(errors);
+      });
+      setScanStatus('completed');
+    } catch (e) {
+      console.error("Error starting scan:", e);
+      setScanStatus('error');
+    } finally {
+      setScanning(false);
+    }
   };
 
   const startBackgroundScan = async () => {
@@ -606,7 +625,26 @@ export default function ErrorLinks() {
                 if (scanning) return;
                 const filteredLinks = filteredAndSortedLinks.map(link => ({ info: link, url: link.link.url }));
                 if (filteredLinks.length === 0) return;
-                scannerService.startScan(filteredLinks);
+                
+                setScanning(true);
+                setScanStatus('scanning');
+                setScannedCount(0);
+                setTotalLinks(filteredLinks.length);
+                setErrorLinks([]);
+                
+                try {
+                  await scannerService.startScan(filteredLinks, false, (count, total, errors) => {
+                    setScannedCount(count);
+                    setTotalLinks(total);
+                    setErrorLinks(errors);
+                  });
+                  setScanStatus('completed');
+                } catch (e) {
+                  console.error("Error starting scan:", e);
+                  setScanStatus('error');
+                } finally {
+                  setScanning(false);
+                }
               }}
               className="bg-amber-500 hover:bg-amber-600 text-white px-4 py-2 rounded-lg text-sm font-medium flex items-center justify-center gap-2 transition-colors whitespace-nowrap"
             >

@@ -312,7 +312,11 @@ class ScannerService {
     }
   }
 
-  public async startScan(allLinksToScan: { info: ErrorLinkInfo, url: string }[], useFirebase: boolean = true) {
+  public async startScan(
+    allLinksToScan: { info: ErrorLinkInfo, url: string }[], 
+    useFirebase: boolean = true,
+    onProgress?: (scannedCount: number, totalLinks: number, errorLinks: ErrorLinkInfo[]) => void
+  ) {
     console.log("startScan called, current isScanning:", this.isScanning, "useFirebase:", useFirebase);
     if (this.isScanning) return;
     
@@ -396,6 +400,10 @@ class ScannerService {
         }
 
         scannedCount++;
+        
+        if (onProgress) {
+          onProgress(scannedCount, allLinksToScan.length, foundErrors);
+        }
         
         if (useFirebase) {
           // Update Firestore incrementally
