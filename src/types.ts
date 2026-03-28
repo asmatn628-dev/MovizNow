@@ -130,6 +130,8 @@ export interface Content {
   addedByRole?: Role; // Role of the person who added this content
   status?: 'draft' | 'published' | 'selected_content';
   movieLinks?: string; // JSON stringified QualityLinks
+  fullSeasonZip?: string; // JSON stringified QualityLinks
+  fullSeasonMkv?: string; // JSON stringified QualityLinks
   seasons?: string; // JSON stringified Season[]
   imdbRating?: string; // Added imdbRating
   subtitles?: boolean; // Added subtitles

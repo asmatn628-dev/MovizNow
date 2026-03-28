@@ -3,15 +3,156 @@ import path from "path";
 import { fileURLToPath } from "url";
 import fs from "fs";
 import firebaseConfig from "../firebase-applet-config.json" assert { type: "json" };
+import admin from "firebase-admin";
+import { getFirestore } from "firebase-admin/firestore";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+
+// Initialize Firebase Admin
+if (!admin.apps.length) {
+  admin.initializeApp({
+    credential: admin.credential.applicationDefault(),
+    projectId: firebaseConfig.projectId
+  });
+}
+const db = getFirestore(firebaseConfig.firestoreDatabaseId);
 
 async function startServer() {
   const app = express();
   const PORT = 3000;
 
-  app.use(express.json());
+  app.use(express.json({ limit: '50mb' }));
+
+  // Background Scan Endpoint
+  app.post("/api/start-background-scan", async (req, res) => {
+    console.log("Received request to /api/start-background-scan");
+    const { links } = req.body;
+    console.log("Links length:", links ? links.length : 'undefined');
+    if (!links || !Array.isArray(links)) {
+      console.log("Invalid links array");
+      return res.status(400).json({ error: "Links array required" });
+    }
+
+    // Start background process
+    const scanId = 'background';
+    const scanDocRef = db.collection('scans').doc(scanId);
+
+    try {
+      await scanDocRef.set({
+        id: scanId,
+        status: 'scanning',
+        scannedCount: 0,
+        totalLinks: links.length,
+        errorLinks: [],
+        startedAt: admin.firestore.FieldValue.serverTimestamp(),
+        lastUpdated: admin.firestore.FieldValue.serverTimestamp()
+      });
+    } catch (error) {
+      console.error("Error setting scan document:", error);
+      return res.status(500).json({ error: "Failed to initialize scan document" });
+    }
+
+    res.json({ message: "Background scan started", scanId });
+
+    // Run the scan in the background
+    (async () => {
+      const foundErrors: any[] = [];
+      let scannedCount = 0;
+      const concurrency = 10;
+      const queue = [...links];
+
+      const checkPixeldrainLink = async (url: string) => {
+        if (!url || url.trim() === '') return { error: "Empty link" };
+        const fileMatch = url.match(/pixeldrain\.(?:com|dev)\/(?:u|api\/file)\/([a-zA-Z0-9]+)/);
+        const listMatch = url.match(/pixeldrain\.(?:com|dev)\/(?:l|api\/list)\/([a-zA-Z0-9]+)/);
+        
+        try {
+          let apiUrl = "";
+          if (fileMatch) apiUrl = `https://pixeldrain.com/api/file/${fileMatch[1]}/info`;
+          else if (listMatch) apiUrl = `https://pixeldrain.com/api/list/${listMatch[1]}`;
+          else return { error: null };
+
+          const res = await fetch(apiUrl);
+          if (res.status === 451) return { error: "Unavailable from Server" };
+          if (!res.ok) return { error: `HTTP ${res.status}` };
+          
+          const data = await res.json();
+          if (data.success === false) return { error: "File not found or deleted" };
+
+          let sizeInBytes = 0;
+          if (fileMatch) sizeInBytes = data.size;
+          else if (listMatch && data.files) sizeInBytes = data.files.reduce((acc: number, f: any) => acc + (f.size || 0), 0);
+
+          let size = 0;
+          let unit: 'MB' | 'GB' = 'MB';
+          if (sizeInBytes >= 1000 * 1000 * 1000) {
+            size = sizeInBytes / (1000 * 1000 * 1000);
+            unit = 'GB';
+          } else {
+            size = sizeInBytes / (1000 * 1000);
+            unit = 'MB';
+          }
+          return { error: null, size: size.toFixed(2).replace(/\.00$/, ''), unit };
+        } catch (e) {
+          return { error: "Network error" };
+        }
+      };
+
+      const processNext = async (): Promise<void> => {
+        if (queue.length === 0) return;
+        const item = queue.shift()!;
+        
+        try {
+          const result = await checkPixeldrainLink(item.url);
+          let error = result.error;
+
+          if (!error && (!item.link.size || !item.link.unit)) {
+            error = "Missing size or unit";
+          }
+
+          if (!error && item.link.size && item.link.unit && result.size && result.unit) {
+            const stored = `${item.link.size}${item.link.unit}`;
+            const server = `${result.size}${result.unit}`;
+            if (stored !== server) error = `Size mismatch`;
+          }
+
+          if (error) {
+            foundErrors.push({
+              ...item,
+              errorDetail: error,
+              fetchedSize: result.size,
+              fetchedUnit: result.unit
+            });
+          }
+
+          scannedCount++;
+          if (scannedCount % 10 === 0 || scannedCount === links.length) {
+            await scanDocRef.update({
+              scannedCount,
+              errorLinks: foundErrors,
+              lastUpdated: admin.firestore.FieldValue.serverTimestamp()
+            });
+          }
+        } catch (e) {
+          console.error("Background scan error for link:", item.url, e);
+        } finally {
+          await processNext();
+        }
+      };
+
+      const workers = Array.from({ length: Math.min(concurrency, links.length) }, () => processNext());
+      await Promise.all(workers);
+
+      await scanDocRef.update({
+        status: 'completed',
+        lastUpdated: admin.firestore.FieldValue.serverTimestamp()
+      });
+    })().catch(err => {
+      console.error("Background scan fatal error:", err);
+      scanDocRef.update({ status: 'error', lastUpdated: admin.firestore.FieldValue.serverTimestamp() });
+    });
+  });
 
   // IMDb Fetch Proxy
   app.get("/api/imdb-fetch", async (req, res) => {
@@ -469,7 +610,7 @@ async function startServer() {
     });
     app.use(vite.middlewares);
     
-    app.use('*', async (req, res, next) => {
+    app.get('*', async (req, res, next) => {
       try {
         const url = req.originalUrl;
         let template = fs.readFileSync(path.resolve(__dirname, '../index.html'), 'utf-8');

@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { db } from '../../firebase';
 import { collection, onSnapshot, doc, updateDoc, getDoc } from 'firebase/firestore';
 import { Content, Season, QualityLinks, LinkDef } from '../../types';
-import { AlertTriangle, Edit2, ExternalLink, RefreshCw, X, Save, CheckCircle2, Filter, ArrowUpDown, Search } from 'lucide-react';
+import { AlertTriangle, Edit2, ExternalLink, RefreshCw, X, Save, CheckCircle2, Filter, ArrowUpDown, Search, Trash2, Plus } from 'lucide-react';
 import { handleFirestoreError, OperationType } from '../../utils/firestoreErrorHandler';
 import { scannerService, ErrorLinkInfo, ScanState } from '../../services/ScannerService';
 import { LinkCheckerModal } from '../../components/LinkCheckerModal';
@@ -10,11 +10,21 @@ import { LinkCheckerModal } from '../../components/LinkCheckerModal';
 export default function ErrorLinks() {
   const [contentList, setContentList] = useState<Content[]>([]);
   const [loading, setLoading] = useState(true);
+  
+  // Client-side/Deep Scan State
   const [scanning, setScanning] = useState(false);
   const [scanStatus, setScanStatus] = useState<'idle' | 'scanning' | 'completed' | 'error'>('idle');
-  const [errorLinks, setErrorLinks] = useState<ErrorLinkInfo[]>([]);
   const [scannedCount, setScannedCount] = useState(0);
   const [totalLinks, setTotalLinks] = useState(0);
+  const [errorLinks, setErrorLinks] = useState<ErrorLinkInfo[]>([]);
+
+  // Background Scan State
+  const [bgScanning, setBgScanning] = useState(false);
+  const [bgScanStatus, setBgScanStatus] = useState<'idle' | 'scanning' | 'completed' | 'error'>('idle');
+  const [bgScannedCount, setBgScannedCount] = useState(0);
+  const [bgTotalLinks, setBgTotalLinks] = useState(0);
+  const [bgErrorLinks, setBgErrorLinks] = useState<ErrorLinkInfo[]>([]);
+
   const [isLinkCheckerModalOpen, setIsLinkCheckerModalOpen] = useState(false);
   const [modalInput, setModalInput] = useState('');
   const [modalAutoStart, setModalAutoStart] = useState(false);
@@ -31,9 +41,20 @@ export default function ErrorLinks() {
   const [sortBy, setSortBy] = useState<'title' | 'error'>('title');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
 
-  const uniqueErrorTypes = Array.from(new Set(errorLinks.map(link => link.errorDetail))).sort();
+  const [isAddLinksModalOpen, setIsAddLinksModalOpen] = useState(false);
+  const [addLinksContent, setAddLinksContent] = useState<Content | null>(null);
+  const [addLinksInput, setAddLinksInput] = useState('');
+  const [addingLinks, setAddingLinks] = useState(false);
 
-  const filteredAndSortedLinks = [...errorLinks]
+  const activeErrorLinks = bgScanning ? bgErrorLinks : errorLinks;
+  const activeScannedCount = bgScanning ? bgScannedCount : scannedCount;
+  const activeTotalLinks = bgScanning ? bgTotalLinks : totalLinks;
+  const activeScanStatus = bgScanning ? bgScanStatus : scanStatus;
+  const isAnyScanning = scanning || bgScanning;
+
+  const uniqueErrorTypes = Array.from(new Set(activeErrorLinks.map(link => link.errorDetail))).sort();
+
+  const filteredAndSortedLinks = [...activeErrorLinks]
     .filter(link => filterErrorType === 'all' || link.errorDetail === filterErrorType)
     .sort((a, b) => {
       let comparison = 0;
@@ -67,9 +88,21 @@ export default function ErrorLinks() {
       }
     });
 
+    const unsubBgScan = onSnapshot(doc(db, 'scans', 'background'), (snapshot) => {
+      if (snapshot.exists()) {
+        const data = snapshot.data() as ScanState;
+        setBgScanStatus(data.status);
+        setBgScanning(data.status === 'scanning');
+        setBgScannedCount(data.scannedCount);
+        setBgTotalLinks(data.totalLinks);
+        setBgErrorLinks(data.errorLinks || []);
+      }
+    });
+
     return () => {
       unsubContent();
       unsubScan();
+      unsubBgScan();
     };
   }, []);
 
@@ -97,23 +130,61 @@ export default function ErrorLinks() {
     let allLinksToScan: { info: ErrorLinkInfo, url: string }[] = [];
 
     contentList.forEach(content => {
-      if (content.type === 'movie' && content.movieLinks) {
-        const links = parseLinks(content.movieLinks);
-        links.forEach((link, idx) => {
-          allLinksToScan.push({
-            info: {
-              contentId: content.id,
-              contentTitle: content.title,
-              contentType: 'movie',
-              location: 'Movie Links',
-              link,
-              linkIndex: idx,
-              listType: 'movie',
-              errorDetail: ''
-            },
-            url: link.url || ''
+      if (content.type === 'movie') {
+        if (content.movieLinks) {
+          const links = parseLinks(content.movieLinks);
+          links.forEach((link, idx) => {
+            allLinksToScan.push({
+              info: {
+                contentId: content.id,
+                contentTitle: content.title,
+                contentType: 'movie',
+                location: 'Movie Links',
+                link,
+                linkIndex: idx,
+                listType: 'movie',
+                errorDetail: ''
+              },
+              url: link.url || ''
+            });
           });
-        });
+        }
+        if (content.fullSeasonZip) {
+          const links = parseLinks(content.fullSeasonZip);
+          links.forEach((link, idx) => {
+            allLinksToScan.push({
+              info: {
+                contentId: content.id,
+                contentTitle: content.title,
+                contentType: 'movie',
+                location: 'Full Season ZIP',
+                link,
+                linkIndex: idx,
+                listType: 'zip',
+                errorDetail: ''
+              },
+              url: link.url || ''
+            });
+          });
+        }
+        if (content.fullSeasonMkv) {
+          const links = parseLinks(content.fullSeasonMkv);
+          links.forEach((link, idx) => {
+            allLinksToScan.push({
+              info: {
+                contentId: content.id,
+                contentTitle: content.title,
+                contentType: 'movie',
+                location: 'Full Season MKV',
+                link,
+                linkIndex: idx,
+                listType: 'mkv',
+                errorDetail: ''
+              },
+              url: link.url || ''
+            });
+          });
+        }
       } else if (content.type === 'series' && content.seasons) {
         try {
           const seasons: Season[] = JSON.parse(content.seasons);
@@ -190,6 +261,126 @@ export default function ErrorLinks() {
     scannerService.startScan(allLinksToScan);
   };
 
+  const startBackgroundScan = async () => {
+    if (bgScanning) return;
+    const allLinksToScan = getAllLinksToScan();
+    if (allLinksToScan.length === 0) return;
+    
+    setBgScanning(true);
+    try {
+      await scannerService.startBackgroundScan(allLinksToScan);
+    } catch (e) {
+      alert("Failed to start background scan.");
+      setBgScanning(false);
+    }
+  };
+
+  const handleDeleteLink = async (info: ErrorLinkInfo) => {
+    if (!window.confirm(`Are you sure you want to delete this link: ${info.link.name}?`)) return;
+    
+    const content = contentList.find(c => c.id === info.contentId);
+    if (!content) return;
+
+    try {
+      const updatedContent = { ...content };
+      if (info.contentType === 'movie') {
+        if (info.listType === 'movie') {
+          const links = parseLinks(content.movieLinks);
+          links.splice(info.linkIndex, 1);
+          updatedContent.movieLinks = JSON.stringify(links);
+        } else if (info.listType === 'zip') {
+          const links = parseLinks(content.fullSeasonZip);
+          links.splice(info.linkIndex, 1);
+          updatedContent.fullSeasonZip = JSON.stringify(links);
+        } else if (info.listType === 'mkv') {
+          const links = parseLinks(content.fullSeasonMkv);
+          links.splice(info.linkIndex, 1);
+          updatedContent.fullSeasonMkv = JSON.stringify(links);
+        }
+      } else if (content.type === 'series' && content.seasons) {
+        try {
+          const seasons: Season[] = JSON.parse(content.seasons);
+          const sIdx = info.seasonIndex!;
+          if (seasons[sIdx]) {
+            if (info.listType === 'zip') {
+              const links = parseLinks(JSON.stringify(seasons[sIdx].zipLinks));
+              links.splice(info.linkIndex, 1);
+              seasons[sIdx].zipLinks = links;
+            } else if (info.listType === 'mkv') {
+              const links = parseLinks(JSON.stringify(seasons[sIdx].mkvLinks || []));
+              links.splice(info.linkIndex, 1);
+              seasons[sIdx].mkvLinks = links;
+            } else if (info.listType === 'episode') {
+              const eIdx = info.episodeIndex!;
+              if (seasons[sIdx].episodes && seasons[sIdx].episodes[eIdx]) {
+                const links = parseLinks(JSON.stringify(seasons[sIdx].episodes[eIdx].links));
+                links.splice(info.linkIndex, 1);
+                seasons[sIdx].episodes[eIdx].links = links;
+              }
+            }
+            updatedContent.seasons = JSON.stringify(seasons);
+          }
+        } catch (e) {
+          console.error("Error parsing seasons for delete", e);
+        }
+      }
+
+      await updateDoc(doc(db, 'content', content.id), updatedContent);
+      
+      // Update local error links state to remove the deleted link
+      if (bgScanning) {
+        setBgErrorLinks(prev => prev.filter(l => !(l.contentId === info.contentId && l.link.url === info.link.url)));
+      } else {
+        setErrorLinks(prev => prev.filter(l => !(l.contentId === info.contentId && l.link.url === info.link.url)));
+      }
+    } catch (error) {
+      console.error("Error deleting link:", error);
+      alert("Failed to delete link.");
+    }
+  };
+
+  const sortLinksBySize = (links: QualityLinks) => {
+    return [...links].sort((a, b) => {
+      const sizeA = parseFloat(a.size || '0') * (a.unit === 'GB' ? 1024 : 1);
+      const sizeB = parseFloat(b.size || '0') * (b.unit === 'GB' ? 1024 : 1);
+      return sizeB - sizeA; // Descending
+    });
+  };
+
+  const handleAddLinks = async () => {
+    if (!addLinksContent || !addLinksInput.trim()) return;
+    setAddingLinks(true);
+    try {
+      const newLinks = parseLinks(addLinksInput);
+      const updatedContent = { ...addLinksContent };
+      
+      if (updatedContent.type === 'movie') {
+        const existing = parseLinks(updatedContent.movieLinks);
+        updatedContent.movieLinks = JSON.stringify(sortLinksBySize([...existing, ...newLinks]));
+      } else if (updatedContent.type === 'series' && updatedContent.seasons) {
+        try {
+          const seasons: Season[] = JSON.parse(updatedContent.seasons);
+          if (seasons.length > 0 && seasons[0].episodes && seasons[0].episodes.length > 0) {
+            const existing = parseLinks(JSON.stringify(seasons[0].episodes[0].links));
+            seasons[0].episodes[0].links = sortLinksBySize([...existing, ...newLinks]);
+            updatedContent.seasons = JSON.stringify(seasons);
+          }
+        } catch (e) {
+          console.error("Error parsing seasons for add links", e);
+        }
+      }
+
+      await updateDoc(doc(db, 'content', updatedContent.id), updatedContent);
+      setIsAddLinksModalOpen(false);
+      setAddLinksInput('');
+    } catch (error) {
+      console.error("Error adding links:", error);
+      alert("Failed to add links.");
+    } finally {
+      setAddingLinks(false);
+    }
+  };
+
   const handleEditClick = (info: ErrorLinkInfo) => {
     setEditingLink(info);
     setEditUrl(info.link.url);
@@ -250,6 +441,30 @@ export default function ErrorLinks() {
             name: editName
           };
           updateData.movieLinks = JSON.stringify(links);
+        }
+      } else if (editingLink.listType === 'zip' && content.type === 'movie') {
+        const links = parseLinks(content.fullSeasonZip);
+        if (links[editingLink.linkIndex]) {
+          links[editingLink.linkIndex] = {
+            ...links[editingLink.linkIndex],
+            url: editUrl,
+            size: editSize,
+            unit: editUnit,
+            name: editName
+          };
+          updateData.fullSeasonZip = JSON.stringify(links);
+        }
+      } else if (editingLink.listType === 'mkv' && content.type === 'movie') {
+        const links = parseLinks(content.fullSeasonMkv);
+        if (links[editingLink.linkIndex]) {
+          links[editingLink.linkIndex] = {
+            ...links[editingLink.linkIndex],
+            url: editUrl,
+            size: editSize,
+            unit: editUnit,
+            name: editName
+          };
+          updateData.fullSeasonMkv = JSON.stringify(links);
         }
       } else if (content.type === 'series' && content.seasons) {
         try {
@@ -366,22 +581,21 @@ export default function ErrorLinks() {
               )}
             </button>
             <button
-              onClick={() => {
-                const allLinks = getAllLinksToScan();
-                if (allLinks.length === 0) {
-                  alert("No links found to scan.");
-                  return;
-                }
-                const urls = allLinks.map(l => l.url).join('\n');
-                setModalInput(urls);
-                setModalAutoStart(true);
-                setModalTitle('Full Database Scan');
-                setIsLinkCheckerModalOpen(true);
-              }}
-              className="bg-purple-500 hover:bg-purple-600 text-white px-4 py-2 rounded-lg text-sm font-medium flex items-center justify-center gap-2 transition-colors whitespace-nowrap"
+              onClick={startBackgroundScan}
+              disabled={bgScanning || loading}
+              className="bg-purple-500 hover:bg-purple-600 disabled:bg-purple-500/50 text-white px-4 py-2 rounded-lg text-sm font-medium flex items-center justify-center gap-2 transition-colors whitespace-nowrap"
             >
-              <RefreshCw className="w-4 h-4" />
-              Server-Side Scan
+              {bgScanning ? (
+                <>
+                  <RefreshCw className="w-4 h-4 animate-spin" />
+                  Scanning Background ({bgScannedCount}/{bgTotalLinks})
+                </>
+              ) : (
+                <>
+                  <RefreshCw className="w-4 h-4" />
+                  {bgScanStatus === 'idle' ? 'Server-Side Scan' : 'Restart Server Scan'}
+                </>
+              )}
             </button>
           </div>
 
@@ -544,12 +758,35 @@ export default function ErrorLinks() {
                         )}
                       </td>
                       <td className="px-6 py-4 text-right">
-                        <button
-                          onClick={() => handleEditClick(info)}
-                          className="bg-zinc-800 hover:bg-zinc-700 text-white px-3 py-1.5 rounded-lg text-xs font-medium transition-colors flex items-center gap-1 ml-auto"
-                        >
-                          <Edit2 className="w-3 h-3" /> Edit
-                        </button>
+                        <div className="flex items-center justify-end gap-2">
+                          <button
+                            onClick={() => {
+                              const content = contentList.find(c => c.id === info.contentId);
+                              if (content) {
+                                setAddLinksContent(content);
+                                setIsAddLinksModalOpen(true);
+                              }
+                            }}
+                            className="bg-zinc-800 hover:bg-zinc-700 text-white p-1.5 rounded-lg transition-colors"
+                            title="Add Links"
+                          >
+                            <Plus className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={() => handleEditClick(info)}
+                            className="bg-zinc-800 hover:bg-zinc-700 text-white p-1.5 rounded-lg transition-colors"
+                            title="Edit"
+                          >
+                            <Edit2 className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={() => handleDeleteLink(info)}
+                            className="bg-red-500/10 hover:bg-red-500/20 text-red-500 p-1.5 rounded-lg transition-colors"
+                            title="Delete Link"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -558,6 +795,49 @@ export default function ErrorLinks() {
             </div>
             </div>
           )}
+        </div>
+      )}
+
+      {/* Add Links Modal */}
+      {isAddLinksModalOpen && addLinksContent && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-lg p-6">
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-xl font-bold text-white">Add Links to {addLinksContent.title}</h2>
+              <button onClick={() => setIsAddLinksModalOpen(false)} className="text-zinc-400 hover:text-white">
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-zinc-400 mb-2">Paste Links (JSON or Name:URL format)</label>
+                <textarea
+                  value={addLinksInput}
+                  onChange={(e) => setAddLinksInput(e.target.value)}
+                  placeholder='[{"name":"720p","url":"..."},...]'
+                  className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-3 focus:outline-none focus:border-emerald-500 h-40 font-mono text-sm"
+                />
+              </div>
+
+              <div className="flex gap-3 pt-2">
+                <button
+                  onClick={() => setIsAddLinksModalOpen(false)}
+                  className="flex-1 bg-zinc-800 hover:bg-zinc-700 text-white py-3 rounded-xl font-bold transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleAddLinks}
+                  disabled={addingLinks || !addLinksInput.trim()}
+                  className="flex-1 bg-emerald-500 hover:bg-emerald-600 disabled:bg-emerald-500/50 text-white py-3 rounded-xl font-bold transition-colors flex items-center justify-center gap-2"
+                >
+                  {addingLinks ? <RefreshCw className="w-5 h-5 animate-spin" /> : <Save className="w-5 h-5" />}
+                  {addingLinks ? 'Adding...' : 'Add Links'}
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
       )}
 

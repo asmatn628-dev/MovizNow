@@ -200,7 +200,7 @@ class ScannerService {
       lastUpdated: serverTimestamp()
     }));
 
-    const batchSize = 20;
+    const batchSize = 50;
     const foundErrors: ErrorLinkInfo[] = [];
 
     try {
@@ -268,6 +268,29 @@ class ScannerService {
     }
   }
 
+  public async startBackgroundScan(allLinksToScan: { info: ErrorLinkInfo, url: string }[]) {
+    try {
+      const response = await fetch('/api/start-background-scan', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          links: allLinksToScan.map(item => ({
+            url: item.url,
+            ...item.info
+          }))
+        }),
+      });
+
+      if (!response.ok) throw new Error("Failed to start background scan");
+      return await response.json();
+    } catch (error) {
+      console.error("Error starting background scan:", error);
+      throw error;
+    }
+  }
+
   public async stopScan() {
     console.log("stopScan called, current isScanning:", this.isScanning);
     this.isScanning = false;
@@ -323,62 +346,57 @@ class ScannerService {
       lastUpdated: serverTimestamp()
     }));
 
-    const batchSize = 3;
+    const concurrency = 10;
     const foundErrors: ErrorLinkInfo[] = [];
+    const queue = [...allLinksToScan];
+    let scannedCount = 0;
+
+    const processNext = async (): Promise<void> => {
+      if (queue.length === 0 || !this.isScanning) return;
+      
+      const item = queue.shift()!;
+      
+      try {
+        let result = await this.checkPixeldrainLink(item.url);
+        let error = result.error;
+        
+        if (!error && (!item.info.link.size || !item.info.link.unit)) {
+          error = "Missing size or unit";
+        }
+
+        if (!error && item.info.link.size && item.info.link.unit && result.size && result.unit) {
+          const stored = `${item.info.link.size}${item.info.link.unit}`;
+          const server = `${result.size}${result.unit}`;
+          if (stored !== server) error = `Size mismatch`;
+        }
+        
+        if (error) {
+          item.info.errorDetail = error;
+          item.info.fetchedSize = result.size;
+          item.info.fetchedUnit = result.unit;
+          foundErrors.push(item.info);
+        }
+
+        scannedCount++;
+        
+        // Update Firestore incrementally
+        if (scannedCount % 5 === 0 || scannedCount === allLinksToScan.length) {
+          await updateDoc(scanDocRef, this.sanitizeForFirestore({
+            scannedCount: scannedCount,
+            errorLinks: foundErrors,
+            lastUpdated: serverTimestamp()
+          }));
+        }
+      } catch (e) {
+        console.error(`Error scanning link ${item.url}:`, e);
+      } finally {
+        await processNext();
+      }
+    };
 
     try {
-      for (let i = 0; i < allLinksToScan.length; i += batchSize) {
-        if (!this.isScanning) {
-          console.log("Scan stopped by user.");
-          await updateDoc(scanDocRef, {
-            status: 'idle',
-            lastUpdated: serverTimestamp()
-          });
-          return;
-        }
-
-        const batch = allLinksToScan.slice(i, i + batchSize);
-        const results = await Promise.all(
-          batch.map(async (item) => {
-            let result = await this.checkPixeldrainLink(item.url);
-            let error = result.error;
-            
-            if (!error && (!item.info.link.size || !item.info.link.unit)) {
-              error = "Missing size or unit";
-            }
-
-            if (!error && item.info.link.size && item.info.link.unit && result.size && result.unit) {
-              const stored = `${item.info.link.size}${item.info.link.unit}`;
-              const server = `${result.size}${result.unit}`;
-              if (stored !== server) error = `Size mismatch`;
-            }
-            
-            return { item, error, fetchedSize: result.size, fetchedUnit: result.unit };
-          })
-        );
-        
-        results.forEach(({ item, error, fetchedSize, fetchedUnit }) => {
-          if (error) {
-            item.info.errorDetail = error;
-            item.info.fetchedSize = fetchedSize;
-            item.info.fetchedUnit = fetchedUnit;
-            foundErrors.push(item.info);
-          }
-        });
-        
-        const currentScanned = Math.min(i + batchSize, allLinksToScan.length);
-        
-        // Update Firestore
-        await updateDoc(scanDocRef, this.sanitizeForFirestore({
-          scannedCount: currentScanned,
-          errorLinks: foundErrors,
-          lastUpdated: serverTimestamp()
-        }));
-
-        if (i + batchSize < allLinksToScan.length) {
-          await new Promise(resolve => setTimeout(resolve, 1000));
-        }
-      }
+      const workers = Array.from({ length: Math.min(concurrency, allLinksToScan.length) }, () => processNext());
+      await Promise.all(workers);
 
       await updateDoc(scanDocRef, {
         status: 'completed',

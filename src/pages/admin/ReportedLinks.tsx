@@ -61,7 +61,12 @@ export default function ReportedLinks() {
     }
   };
 
+  const [notifying, setNotifying] = useState<string | null>(null);
+  const [notified, setNotified] = useState<string | null>(null);
+  const [bgScanning, setBgScanning] = useState(false);
+
   const handleNotify = async (report: ReportedLink) => {
+    setNotifying(report.id);
     try {
       // Create a notification for the user
       await updateDoc(doc(db, 'reported_links', report.id), {
@@ -79,10 +84,13 @@ export default function ReportedLinks() {
         targetUserId: report.userId
       });
       
-      alert(`User ${report.userName} has been notified that the link is working now.`);
+      setNotified(report.id);
+      setTimeout(() => setNotified(null), 3000); // Reset after 3 seconds
     } catch (error) {
       console.error("Error notifying user:", error);
       alert("Failed to notify user");
+    } finally {
+      setNotifying(null);
     }
   };
 
@@ -302,10 +310,21 @@ export default function ReportedLinks() {
                       <div className="flex items-center justify-end gap-2">
                         <button
                           onClick={() => handleNotify(report)}
-                          className="p-2 text-zinc-400 hover:text-blue-500 hover:bg-blue-500/10 rounded-lg transition-colors"
+                          disabled={notifying === report.id || notified === report.id}
+                          className={`p-2 rounded-lg transition-colors ${
+                            notified === report.id 
+                              ? 'text-emerald-500 bg-emerald-500/10' 
+                              : 'text-zinc-400 hover:text-blue-500 hover:bg-blue-500/10'
+                          }`}
                           title="Notify User"
                         >
-                          <Bell className="w-4 h-4" />
+                          {notifying === report.id ? (
+                            <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                          ) : notified === report.id ? (
+                            <CheckCircle2 className="w-4 h-4" />
+                          ) : (
+                            <Bell className="w-4 h-4" />
+                          )}
                         </button>
                         <button
                           onClick={() => handleEditClick(report)}

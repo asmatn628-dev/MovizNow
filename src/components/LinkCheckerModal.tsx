@@ -473,54 +473,68 @@ export const LinkCheckerModal: React.FC<Props> = ({
 
     setLoading(true);
     try {
-      const batchSize = 5;
+      const concurrency = 10;
       const allResults: LinkCheckResult[] = [];
-      
-      for (let i = 0; i < urls.length; i += batchSize) {
-        const batch = urls.slice(i, i + batchSize);
-        const batchResults = await Promise.all(
-          batch.map(async (u) => {
-            const base = await serverCheckLink(u);
-            const postMeta = extractedMeta[u] || {};
-            const fileMeta = detectFromFilename(base.fileName, base.finalUrl, languages, qualities);
-            
-            const hasFileName = !!base.fileName;
+      const queue = [...urls];
+      let activeCount = 0;
+      let completedCount = 0;
 
-            return {
-              ...base,
-              qualityLabel: fileMeta.qualityLabel || postMeta.qualityLabel,
-              codecLabel: fileMeta.codecLabel || (hasFileName ? undefined : postMeta.codecLabel),
-              audioLabel: fileMeta.audioLabel || (hasFileName ? undefined : postMeta.audioLabel),
-              subtitleLabel: fileMeta.subtitleLabel || (hasFileName ? undefined : postMeta.subtitleLabel),
-              printQualityLabel: fileMeta.printQualityLabel || postMeta.printQualityLabel,
-              season: fileMeta.season || postMeta.season,
-              episode: fileMeta.episode || postMeta.episode,
-              isFullSeasonMKV: fileMeta.isFullSeasonMKV || postMeta.isFullSeasonMKV,
-              isFullSeasonZIP: fileMeta.isFullSeasonZIP || postMeta.isFullSeasonZIP,
-            };
-          })
-        );
-        allResults.push(...batchResults);
+      const processNext = async (): Promise<void> => {
+        if (queue.length === 0) return;
         
-        // Update results incrementally for better UX
-        if (onlyUrls?.length) {
-          setResults((prev) => {
-            const keep = prev.filter((r) => !onlyUrls.includes(r.url));
-            const merged = [...keep, ...allResults];
-            return merged.map((r) => ({
+        activeCount++;
+        const u = queue.shift()!;
+        
+        try {
+          const base = await serverCheckLink(u);
+          const postMeta = extractedMeta[u] || {};
+          const fileMeta = detectFromFilename(base.fileName, base.finalUrl, languages, qualities);
+          const hasFileName = !!base.fileName;
+
+          const result: LinkCheckResult = {
+            ...base,
+            qualityLabel: fileMeta.qualityLabel || postMeta.qualityLabel,
+            codecLabel: fileMeta.codecLabel || (hasFileName ? undefined : postMeta.codecLabel),
+            audioLabel: fileMeta.audioLabel || (hasFileName ? undefined : postMeta.audioLabel),
+            subtitleLabel: fileMeta.subtitleLabel || (hasFileName ? undefined : postMeta.subtitleLabel),
+            printQualityLabel: fileMeta.printQualityLabel || postMeta.printQualityLabel,
+            season: fileMeta.season || postMeta.season,
+            episode: fileMeta.episode || postMeta.episode,
+            isFullSeasonMKV: fileMeta.isFullSeasonMKV || postMeta.isFullSeasonMKV,
+            isFullSeasonZIP: fileMeta.isFullSeasonZIP || postMeta.isFullSeasonZIP,
+          };
+
+          allResults.push(result);
+          completedCount++;
+
+          // Update results incrementally for better UX
+          if (onlyUrls?.length) {
+            setResults((prev) => {
+              const keep = prev.filter((r) => !onlyUrls.includes(r.url));
+              const merged = [...keep, ...allResults];
+              return merged.map((r) => ({
+                ...r,
+                mismatchWarnings: buildMismatchWarnings(r, merged, languages, qualities),
+                confidenceScore: Math.max(0, 100 - (buildMismatchWarnings(r, merged, languages, qualities).length * 18)),
+              }));
+            });
+          } else {
+            setResults(allResults.map(r => ({
               ...r,
-              mismatchWarnings: buildMismatchWarnings(r, merged, languages, qualities),
-              confidenceScore: Math.max(0, 100 - (buildMismatchWarnings(r, merged, languages, qualities).length * 18)),
-            }));
-          });
-        } else {
-          setResults(allResults.map(r => ({
-            ...r,
-            mismatchWarnings: buildMismatchWarnings(r, allResults, languages, qualities),
-            confidenceScore: Math.max(0, 100 - (buildMismatchWarnings(r, allResults, languages, qualities).length * 18)),
-          })));
+              mismatchWarnings: buildMismatchWarnings(r, allResults, languages, qualities),
+              confidenceScore: Math.max(0, 100 - (buildMismatchWarnings(r, allResults, languages, qualities).length * 18)),
+            })));
+          }
+        } catch (e) {
+          console.error(`Error checking link ${u}:`, e);
+        } finally {
+          activeCount--;
+          await processNext();
         }
-      }
+      };
+
+      const workers = Array.from({ length: Math.min(concurrency, urls.length) }, () => processNext());
+      await Promise.all(workers);
     } catch (e: any) {
       setError(e?.message || "Unknown error while checking links.");
     } finally {
