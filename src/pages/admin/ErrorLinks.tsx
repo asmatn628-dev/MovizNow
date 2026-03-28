@@ -541,14 +541,56 @@ export default function ErrorLinks() {
 
       await updateDoc(doc(db, 'content', editingLink.contentId), updateData);
       
-      // Remove from error list if fixed
-      setErrorLinks(prev => prev.filter(item => 
-        !(item.contentId === editingLink.contentId && 
-          item.listType === editingLink.listType && 
-          item.linkIndex === editingLink.linkIndex &&
-          item.seasonIndex === editingLink.seasonIndex &&
-          item.episodeIndex === editingLink.episodeIndex)
-      ));
+      // Update error list
+      setErrorLinks(prev => {
+        const filtered = prev.filter(item => 
+          !(item.contentId === editingLink.contentId && 
+            item.listType === editingLink.listType && 
+            item.linkIndex === editingLink.linkIndex &&
+            item.seasonIndex === editingLink.seasonIndex &&
+            item.episodeIndex === editingLink.episodeIndex)
+        );
+        
+        const updatedLink: ErrorLinkInfo = {
+          ...editingLink,
+          link: {
+            ...editingLink.link,
+            url: editUrl,
+            size: editSize,
+            unit: editUnit,
+            name: editName
+          }
+        };
+        
+        return [...filtered, updatedLink];
+      });
+
+      // Update scans/current in Firestore
+      const scanDocRef = doc(db, 'scans', 'current');
+      const scanDoc = await getDoc(scanDocRef);
+      if (scanDoc.exists()) {
+        const scanData = scanDoc.data() as ScanState;
+        const updatedErrorLinks = scanData.errorLinks.map(item => {
+          if (item.contentId === editingLink.contentId && 
+              item.listType === editingLink.listType && 
+              item.linkIndex === editingLink.linkIndex &&
+              item.seasonIndex === editingLink.seasonIndex &&
+              item.episodeIndex === editingLink.episodeIndex) {
+            return {
+              ...item,
+              link: {
+                ...item.link,
+                url: editUrl,
+                size: editSize,
+                unit: editUnit,
+                name: editName
+              }
+            };
+          }
+          return item;
+        });
+        await updateDoc(scanDocRef, { errorLinks: updatedErrorLinks });
+      }
       
       setEditingLink(null);
     } catch (error) {
