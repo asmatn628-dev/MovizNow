@@ -18,7 +18,8 @@ export const NotificationMenu: React.FC<NotificationMenuProps> = ({ profile }) =
   useEffect(() => {
     const q = query(collection(db, 'notifications'), orderBy('createdAt', 'desc'));
     const unsubscribe = onSnapshot(q, (snapshot) => {
-      const notifs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as AppNotification));
+      const notifs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as AppNotification))
+        .filter(n => !n.targetUserId || n.targetUserId === profile.uid);
       setNotifications(notifs);
     });
 

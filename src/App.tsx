@@ -28,6 +28,7 @@ const TemporaryUsers = lazy(() => import('./pages/admin/TemporaryUsers'));
 const SelectedContentUsers = lazy(() => import('./pages/admin/SelectedContentUsers'));
 const IncomeManagement = lazy(() => import('./pages/admin/IncomeManagement'));
 const ErrorLinks = lazy(() => import('./pages/admin/ErrorLinks'));
+const ReportedLinks = lazy(() => import('./pages/admin/ReportedLinks'));
 const Notifications = lazy(() => import('./pages/admin/Notifications'));
 const MovieRequestsManagement = lazy(() => import('./pages/admin/MovieRequestsManagement'));
 
@@ -80,6 +81,7 @@ export default function App() {
                 <Route path="selected-content" element={<SelectedContentUsers />} />
                 <Route path="income" element={<IncomeManagement />} />
                 <Route path="error-links" element={<ErrorLinks />} />
+                <Route path="reported-links" element={<ReportedLinks />} />
                 <Route path="notifications" element={<Notifications />} />
                 <Route path="requests" element={<MovieRequestsManagement />} />
               </Route>

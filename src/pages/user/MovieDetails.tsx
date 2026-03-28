@@ -2,11 +2,11 @@ import { useState, useEffect, useRef, useMemo } from 'react';
 import { useParams, Link, useNavigate, useLocation } from 'react-router-dom';
 import { Helmet } from 'react-helmet-async';
 import { db } from '../../firebase';
-import { doc, updateDoc, arrayUnion, arrayRemove, deleteDoc } from 'firebase/firestore';
+import { doc, updateDoc, arrayUnion, arrayRemove, deleteDoc, addDoc, collection, serverTimestamp } from 'firebase/firestore';
 import { Content, QualityLinks, Season } from '../../types';
 import { useAuth } from '../../contexts/AuthContext';
 import { useContent } from '../../contexts/ContentContext';
-import { Film, ArrowLeft, Play, Clock, Heart, MessageCircle, AlertCircle, Download, Share2, Chrome, Copy, Youtube, X, Edit2, Trash2, Settings, Lock, ChevronDown, ChevronUp, Loader2, Search } from 'lucide-react';
+import { Film, ArrowLeft, Play, Clock, Heart, MessageCircle, AlertCircle, Download, Share2, Chrome, Copy, Youtube, X, Edit2, Trash2, Settings, Lock, ChevronDown, ChevronUp, Loader2, Search, AlertTriangle } from 'lucide-react';
 import { logEvent } from '../../services/analytics';
 import AlertModal from '../../components/AlertModal';
 import ConfirmModal from '../../components/ConfirmModal';
@@ -28,7 +28,7 @@ export default function MovieDetails() {
   const [isFavoriteLoading, setIsFavoriteLoading] = useState(false);
   const [isShareLoading, setIsShareLoading] = useState(false);
   const [showLoginPrompt, setShowLoginPrompt] = useState(false);
-  const [linkPopup, setLinkPopup] = useState<{ isOpen: boolean; url: string; name: string; id: string; isZip?: boolean } | null>(null);
+  const [linkPopup, setLinkPopup] = useState<{ isOpen: boolean; url: string; name: string; id: string; isZip?: boolean; tinyUrl?: string } | null>(null);
   const [isPosterExpanded, setIsPosterExpanded] = useState(false);
   const [isTrailerPopupOpen, setIsTrailerPopupOpen] = useState(false);
   const [isMediaModalOpen, setIsMediaModalOpen] = useState(false);
@@ -392,10 +392,10 @@ export default function MovieDetails() {
     }
   };
 
-  const handlePlayClick = (url: string, linkName?: string, linkId?: string, isZip?: boolean) => {
+  const handlePlayClick = (url: string, linkName?: string, linkId?: string, isZip?: boolean, tinyUrl?: string) => {
     // Allow Sample link to be played by anyone
     if (linkId === 'sample') {
-      setLinkPopup({ isOpen: true, url, name: linkName || 'Sample', id: linkId, isZip });
+      setLinkPopup({ isOpen: true, url, name: linkName || 'Sample', id: linkId, isZip, tinyUrl });
       return;
     }
 
@@ -418,7 +418,7 @@ export default function MovieDetails() {
       return;
     }
     
-    setLinkPopup({ isOpen: true, url, name: linkName || 'Unknown Link', id: linkId || 'unknown', isZip });
+    setLinkPopup({ isOpen: true, url, name: linkName || 'Unknown Link', id: linkId || 'unknown', isZip, tinyUrl });
   };
 
   const closePosterPopup = () => {
@@ -435,7 +435,7 @@ export default function MovieDetails() {
     }
   };
 
-  const handlePlayExternal = (player: 'vlc' | 'mx' | 'generic' | 'download' | 'browser') => {
+  const handlePlayExternal = async (player: 'vlc' | 'mx' | 'generic' | 'download' | 'browser') => {
     if (!linkPopup) return;
     
     if (profile?.uid) {
@@ -500,18 +500,32 @@ export default function MovieDetails() {
     }
 
     if (player === 'download') {
-      navigator.clipboard.writeText(urlToPlay).then(() => {
+      let copyUrl = urlToPlay;
+      if (!copyUrl.includes('pixeldrain.com') && !copyUrl.includes('pixeldrain.dev')) {
+        if (linkPopup.tinyUrl) {
+          copyUrl = linkPopup.tinyUrl;
+        } else {
+          try {
+            const { generateTinyUrl } = await import('../../utils/tinyurl');
+            copyUrl = await generateTinyUrl(copyUrl);
+          } catch (e) {
+            console.error("Failed to generate tinyurl on the fly", e);
+          }
+        }
+      }
+
+      navigator.clipboard.writeText(copyUrl).then(() => {
         setAlertConfig({
           isOpen: true,
           title: 'Link Copied!',
-          message: 'The video link has been copied to your clipboard. To bypass the hotlink protection, please open a new tab and paste the link into the address bar.'
+          message: 'The link has been copied to your clipboard.'
         });
       }).catch(err => {
         console.error('Failed to copy', err);
         setAlertConfig({
           isOpen: true,
           title: 'Copy Failed',
-          message: 'Could not copy link. Please copy it manually: ' + urlToPlay
+          message: 'Could not copy link. Please copy it manually: ' + copyUrl
         });
       });
       closeLinkPopup();
@@ -563,6 +577,29 @@ export default function MovieDetails() {
     closeLinkPopup();
   };
 
+  const handleReportLink = async () => {
+    if (!profile || !linkPopup || !content) return;
+    try {
+      await addDoc(collection(db, 'reported_links'), {
+        userId: profile.uid,
+        userName: profile.displayName || profile.email || 'Unknown User',
+        contentId: content.id,
+        contentTitle: content.title,
+        contentType: content.type,
+        linkId: linkPopup.id,
+        linkName: linkPopup.name,
+        linkUrl: linkPopup.url,
+        status: 'pending',
+        createdAt: serverTimestamp(),
+      });
+      setAlertConfig({ isOpen: true, title: 'Report Submitted', message: 'Thank you for reporting. We will check and fix this link soon.' });
+      closeLinkPopup();
+    } catch (error) {
+      console.error("Error reporting link:", error);
+      setAlertConfig({ isOpen: true, title: 'Error', message: 'Failed to submit report. Please try again later.' });
+    }
+  };
+
   const handlePlayDirectly = async () => {
     if (!linkPopup) return;
     
@@ -592,13 +629,6 @@ export default function MovieDetails() {
       } catch (e) {}
     }
     
-    // Attempt to copy to clipboard
-    try {
-      await navigator.clipboard.writeText(url);
-    } catch (err) {
-      console.error('Failed to copy text: ', err);
-    }
-    
     window.open(url, '_blank', 'noopener,noreferrer');
     
     closeLinkPopup();
@@ -607,7 +637,7 @@ export default function MovieDetails() {
   const contentGenres = genres.filter(g => content.genreIds?.includes(g.id)).map(g => g.name).join(', ');
   const contentLangs = languages.filter(l => content.languageIds?.includes(l.id)).map(l => l.name).join(', ');
 
-  const renderLinks = (links: QualityLinks, isZip?: boolean) => {
+  const renderLinks = (links: QualityLinks, isZip?: boolean, contextName?: string) => {
     if (!Array.isArray(links)) return null;
 
     const validLinks = links.filter(l => l && l.url);
@@ -622,26 +652,29 @@ export default function MovieDetails() {
 
     return (
       <div className="flex flex-wrap gap-3">
-        {sortedLinks.map((link) => (
-          <div key={link.id} className="flex flex-col sm:flex-row items-stretch sm:items-center bg-zinc-800 rounded-xl overflow-hidden border border-zinc-700 flex-1 min-w-[200px] max-w-sm">
-            <button
-              onClick={() => handlePlayClick(link.url, link.name, link.id, isZip)}
-              className="flex-1 flex items-center justify-center gap-2 hover:bg-zinc-700 text-white px-4 py-3 sm:py-2 text-sm font-medium transition-colors border-b sm:border-b-0 sm:border-r border-zinc-700"
-              title="Play"
-            >
-              <Play className="w-4 h-4 shrink-0" />
-              <span className="truncate">Play {link.name}</span>
-            </button>
-            <button
-              onClick={() => handlePlayClick(link.url, link.name, link.id, isZip)}
-              className="flex items-center justify-center gap-2 hover:bg-zinc-700 text-white px-4 py-3 sm:py-2 text-sm font-medium transition-colors shrink-0"
-              title="Download"
-            >
-              <Download className="w-4 h-4 shrink-0" />
-              <span className="text-zinc-400">({link.size} {link.unit})</span>
-            </button>
-          </div>
-        ))}
+        {sortedLinks.map((link) => {
+          const fullName = contextName ? `${contextName} - ${link.name}` : link.name;
+          return (
+            <div key={link.id} className="flex flex-col sm:flex-row items-stretch sm:items-center bg-zinc-800 rounded-xl overflow-hidden border border-zinc-700 flex-1 min-w-[200px] max-w-sm">
+              <button
+                onClick={() => handlePlayClick(link.url, fullName, link.id, isZip, link.tinyUrl)}
+                className="flex-1 flex items-center justify-center gap-2 hover:bg-zinc-700 text-white px-4 py-3 sm:py-2 text-sm font-medium transition-colors border-b sm:border-b-0 sm:border-r border-zinc-700"
+                title="Play"
+              >
+                <Play className="w-4 h-4 shrink-0" />
+                <span className="truncate">Play {link.name}</span>
+              </button>
+              <button
+                onClick={() => handlePlayClick(link.url, fullName, link.id, isZip, link.tinyUrl)}
+                className="flex items-center justify-center gap-2 hover:bg-zinc-700 text-white px-4 py-3 sm:py-2 text-sm font-medium transition-colors shrink-0"
+                title="Download"
+              >
+                <Download className="w-4 h-4 shrink-0" />
+                <span className="text-zinc-400">({link.size} {link.unit})</span>
+              </button>
+            </div>
+          );
+        })}
       </div>
     );
   };
@@ -946,6 +979,12 @@ export default function MovieDetails() {
                           <span className="text-sm font-medium text-cyan-400/80">{contentLangs}</span>
                         </div>
                       )}
+                      {mergedContent.subtitles && (
+                        <div className="flex items-baseline gap-2">
+                          <span className="text-zinc-500 text-xs font-medium">Subtitle</span>
+                          <span className="text-sm font-medium text-cyan-400/80">Yes</span>
+                        </div>
+                      )}
                     </div>
                     
                     {(imdbData.cast || (mergedContent.cast && mergedContent.cast.length > 0)) && (
@@ -1092,13 +1131,13 @@ export default function MovieDetails() {
                                   {zipLinks.length > 0 && (
                                     <div>
                                       <h4 className="font-semibold text-zinc-400 mb-3 text-sm uppercase tracking-wider">Full Season Zip</h4>
-                                      {renderLinks(zipLinks, true)}
+                                      {renderLinks(zipLinks, true, `S${season.seasonNumber} Zip`)}
                                     </div>
                                   )}
                                   {mkvLinks.length > 0 && (
                                     <div>
                                       <h4 className="font-semibold text-zinc-400 mb-3 text-sm uppercase tracking-wider">Full Season MKV</h4>
-                                      {renderLinks(mkvLinks)}
+                                      {renderLinks(mkvLinks, false, `S${season.seasonNumber} MKV`)}
                                     </div>
                                   )}
                                   
@@ -1135,7 +1174,7 @@ export default function MovieDetails() {
                                             </div>
                                             
                                             <div className="flex justify-end">
-                                              {renderLinks(ep.links)}
+                                              {renderLinks(ep.links, false, `S${season.seasonNumber} E${ep.episodeNumber}`)}
                                             </div>
                                           </div>
                                         ))}
@@ -1227,6 +1266,13 @@ export default function MovieDetails() {
                   </div>
                 </>
               ) : null}
+
+              <button
+                onClick={handleReportLink}
+                className="w-full bg-red-600/20 hover:bg-red-600/30 text-red-500 font-bold py-3 px-4 rounded-xl transition-colors flex items-center justify-center gap-2 border border-red-500/30"
+              >
+                <AlertTriangle className="w-5 h-5" /> Report Link (if not Working)
+              </button>
 
               <button
                 onClick={() => handlePlayExternal('download')}

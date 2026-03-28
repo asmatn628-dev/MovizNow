@@ -4,6 +4,8 @@ import { useAuth } from '../../contexts/AuthContext';
 import { Film, Users, Tags, Languages, Clock, LogOut, Menu, X, MonitorPlay, BarChart3, DollarSign, AlertTriangle, Bell, MessageCircle } from 'lucide-react';
 import { clsx } from 'clsx';
 import ConfirmModal from '../../components/ConfirmModal';
+import { collection, onSnapshot, query, where } from 'firebase/firestore';
+import { db } from '../../firebase';
 
 export default function AdminLayout() {
   const { logout, profile } = useAuth();
@@ -11,6 +13,20 @@ export default function AdminLayout() {
   const navigate = useNavigate();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isLogoutModalOpen, setIsLogoutModalOpen] = useState(false);
+  const [reportedLinksCount, setReportedLinksCount] = useState(0);
+
+  useEffect(() => {
+    if (profile?.role !== 'admin' && profile?.role !== 'content_manager' && profile?.role !== 'manager') return;
+
+    const q = query(collection(db, 'reported_links'), where('status', '==', 'pending'));
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      setReportedLinksCount(snapshot.size);
+    }, (error) => {
+      console.error("Error fetching reported links count:", error);
+    });
+
+    return () => unsubscribe();
+  }, [profile]);
 
   const allNavItems = [
     { path: '/admin/analytics', label: 'Analytics', icon: BarChart3 },
@@ -24,6 +40,7 @@ export default function AdminLayout() {
     { path: '/admin/selected-content', label: 'Selected Content Only', icon: Film },
     { path: '/admin/income', label: 'Income / Earn', icon: DollarSign },
     { path: '/admin/error-links', label: 'Error Links', icon: AlertTriangle },
+    { path: '/admin/reported-links', label: `Reported Links${reportedLinksCount > 0 ? ` (${reportedLinksCount})` : ''}`, icon: AlertTriangle },
     { path: '/admin/notifications', label: 'Notifications', icon: Bell },
     { path: '/admin/requests', label: 'Movie Requests', icon: MessageCircle },
   ];

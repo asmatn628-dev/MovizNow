@@ -1,4 +1,3 @@
-import { aiService } from './aiService';
 import { db } from '../firebase';
 import { doc, setDoc, updateDoc, getDoc, serverTimestamp } from 'firebase/firestore';
 
@@ -40,7 +39,7 @@ class ScannerService {
     return ScannerService.instance;
   }
 
-  private async analyzeErrorWithAI(url: string, status: number, data: any): Promise<string> {
+  private async analyzeErrorDetail(url: string, status: number, data: any): Promise<string> {
     const getFallbackError = (status: number, data: any): string => {
       if (status === 404) return "File Not Found";
       if (status === 403) return "Access Forbidden (Check Manually)";
@@ -60,35 +59,7 @@ class ScannerService {
       return `Error ${status}`;
     };
 
-    try {
-      await new Promise(resolve => setTimeout(resolve, 500));
-      const prompt = `
-        Analyze this Pixeldrain API response and determine the exact reason why the link is unavailable or problematic.
-        URL: ${url}
-        HTTP Status: ${status}
-        API Response Body: ${JSON.stringify(data)}
-        
-        Provide a short, clear, and professional error message (max 50 characters).
-        If it's a copyright/legal issue or unavailable for legal reasons, say "Unavailable from Server".
-        If it's deleted by user, say "Deleted by uploader".
-        If it's expired, say "Link Expired".
-        If it's a 404, say "File Not Found".
-        If it's a 403, say "Access Forbidden (Check Manually)".
-        If it's a 410, say "File Gone/Deleted".
-        If it's a 451, say "Unavailable from Server".
-        
-        Just return the error message text, nothing else.
-      `;
-
-      const result = await aiService.chat(prompt, "You are a technical support expert. Return ONLY the error message.");
-
-      return result.trim() || getFallbackError(status, data);
-    } catch (e: any) {
-      if (e?.message?.includes('429') || e?.message?.includes('quota')) {
-        return getFallbackError(status, data);
-      }
-      return getFallbackError(status, data);
-    }
+    return getFallbackError(status, data);
   }
 
   private async checkPixeldrainLink(url: string): Promise<{ error: string | null; size?: string; unit?: 'MB' | 'GB' }> {
@@ -109,8 +80,8 @@ class ScannerService {
         try { data = await res.json(); } catch (e) {}
 
         if (!res.ok || (data && data.success === false)) {
-          const aiError = await this.analyzeErrorWithAI(url, res.status, data);
-          return { error: aiError };
+          const errorDetail = await this.analyzeErrorDetail(url, res.status, data);
+          return { error: errorDetail };
         }
 
         try {
@@ -119,8 +90,8 @@ class ScannerService {
           if (headRes.status === 451) return { error: "Unavailable from Server" };
           
           if (!headRes.ok && headRes.status !== 405 && headRes.status !== 403) { 
-            const aiError = await this.analyzeErrorWithAI(`https://pixeldrain.com/api/file/${id}`, headRes.status, null);
-            return { error: aiError };
+            const errorDetail = await this.analyzeErrorDetail(`https://pixeldrain.com/api/file/${id}`, headRes.status, null);
+            return { error: errorDetail };
           }
         } catch (e) {}
 
@@ -153,8 +124,8 @@ class ScannerService {
         try { data = await res.json(); } catch (e) {}
 
         if (!res.ok || (data && data.success === false)) {
-          const aiError = await this.analyzeErrorWithAI(url, res.status, data);
-          return { error: aiError };
+          const errorDetail = await this.analyzeErrorDetail(url, res.status, data);
+          return { error: errorDetail };
         }
 
         if (data && data.files && data.files.length > 0) {
@@ -211,25 +182,89 @@ class ScannerService {
   }
 
   public async startServerSideScan(allLinksToScan: { info: ErrorLinkInfo, url: string }[]) {
-    console.log("startServerSideScan called");
+    console.log("startServerSideScan called, current isScanning:", this.isScanning);
+    if (this.isScanning) return;
+    
+    const scanDocRef = doc(db, 'scans', 'current');
+    
+    this.isScanning = true;
+    console.log("isScanning set to true");
+
+    await setDoc(scanDocRef, this.sanitizeForFirestore({
+      id: 'current',
+      status: 'scanning',
+      scannedCount: 0,
+      totalLinks: allLinksToScan.length,
+      errorLinks: [],
+      startedAt: serverTimestamp(),
+      lastUpdated: serverTimestamp()
+    }));
+
+    const batchSize = 20;
+    const foundErrors: ErrorLinkInfo[] = [];
+
     try {
-      const response = await fetch('/api/scan-links', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          links: allLinksToScan.map(item => ({
-            url: item.url,
-            ...item.info
-          }))
-        }),
+      for (let i = 0; i < allLinksToScan.length; i += batchSize) {
+        if (!this.isScanning) {
+          console.log("Scan stopped by user.");
+          await updateDoc(scanDocRef, {
+            status: 'idle',
+            lastUpdated: serverTimestamp()
+          });
+          return;
+        }
+
+        const batch = allLinksToScan.slice(i, i + batchSize);
+        
+        const response = await fetch('/api/scan-links', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            links: batch.map(item => ({
+              url: item.url,
+              ...item.info
+            }))
+          }),
+        });
+
+        if (!response.ok) throw new Error("Failed to scan batch on server");
+        
+        const { results } = await response.json();
+        
+        results.forEach((result: any) => {
+          if (result.errorDetail) {
+            foundErrors.push({
+              ...result,
+              errorDetail: result.errorDetail
+            });
+          }
+        });
+        
+        const currentScanned = Math.min(i + batchSize, allLinksToScan.length);
+        
+        // Update Firestore
+        await updateDoc(scanDocRef, this.sanitizeForFirestore({
+          scannedCount: currentScanned,
+          errorLinks: foundErrors,
+          lastUpdated: serverTimestamp()
+        }));
+      }
+
+      await updateDoc(scanDocRef, {
+        status: 'completed',
+        lastUpdated: serverTimestamp()
       });
-      if (!response.ok) throw new Error("Failed to start server-side scan");
-      console.log("Server-side scan started successfully");
     } catch (error) {
-      console.error("Error starting server-side scan:", error);
-      throw error;
+      console.error("Error scanning links:", error);
+      await updateDoc(scanDocRef, {
+        status: 'error',
+        lastUpdated: serverTimestamp()
+      });
+    } finally {
+      this.isScanning = false;
+      console.log("isScanning set to false in finally");
     }
   }
 

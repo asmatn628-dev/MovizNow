@@ -16,6 +16,9 @@ export default function ErrorLinks() {
   const [scannedCount, setScannedCount] = useState(0);
   const [totalLinks, setTotalLinks] = useState(0);
   const [isLinkCheckerModalOpen, setIsLinkCheckerModalOpen] = useState(false);
+  const [modalInput, setModalInput] = useState('');
+  const [modalAutoStart, setModalAutoStart] = useState(false);
+  const [modalTitle, setModalTitle] = useState('Link Checker');
 
   const [editingLink, setEditingLink] = useState<ErrorLinkInfo | null>(null);
   const [editUrl, setEditUrl] = useState('');
@@ -330,7 +333,7 @@ export default function ErrorLinks() {
             <AlertTriangle className="w-8 h-8 text-yellow-500" />
             Error Links
           </h1>
-          <p className="text-zinc-400 mt-1">AI-Powered Deep Scan using multiple algorithms to find broken links.</p>
+          <p className="text-zinc-400 mt-1">Deep Scan using multiple algorithms to find broken links.</p>
         </div>
         <div className="flex flex-col gap-2 items-end">
           {/* Line 1: Main Scan Buttons */}
@@ -363,16 +366,17 @@ export default function ErrorLinks() {
               )}
             </button>
             <button
-              onClick={async () => {
-                const allLinksToScan = getAllLinksToScan();
-                if (allLinksToScan.length === 0) return;
-                try {
-                  await scannerService.startServerSideScan(allLinksToScan);
-                  alert("Server-side scan started successfully!");
-                } catch (error) {
-                  console.error("Error starting server-side scan:", error);
-                  alert("Failed to start server-side scan");
+              onClick={() => {
+                const allLinks = getAllLinksToScan();
+                if (allLinks.length === 0) {
+                  alert("No links found to scan.");
+                  return;
                 }
+                const urls = allLinks.map(l => l.url).join('\n');
+                setModalInput(urls);
+                setModalAutoStart(true);
+                setModalTitle('Full Database Scan');
+                setIsLinkCheckerModalOpen(true);
               }}
               className="bg-purple-500 hover:bg-purple-600 text-white px-4 py-2 rounded-lg text-sm font-medium flex items-center justify-center gap-2 transition-colors whitespace-nowrap"
             >
@@ -396,7 +400,12 @@ export default function ErrorLinks() {
               Rescan Filtered
             </button>
             <button
-              onClick={() => setIsLinkCheckerModalOpen(true)}
+              onClick={() => {
+                setModalInput('');
+                setModalAutoStart(false);
+                setModalTitle('Manual Link Checker');
+                setIsLinkCheckerModalOpen(true);
+              }}
               className="bg-sky-500 hover:bg-sky-600 text-white px-4 py-2 rounded-lg text-sm font-medium flex items-center justify-center gap-2 transition-colors whitespace-nowrap"
             >
               <Search className="w-4 h-4" />
@@ -422,7 +431,13 @@ export default function ErrorLinks() {
         </div>
       </div>
 
-      <LinkCheckerModal isOpen={isLinkCheckerModalOpen} onClose={() => setIsLinkCheckerModalOpen(false)} />
+      <LinkCheckerModal 
+        isOpen={isLinkCheckerModalOpen} 
+        onClose={() => setIsLinkCheckerModalOpen(false)} 
+        initialInput={modalInput}
+        autoStart={modalAutoStart}
+        title={modalTitle}
+      />
 
       {loading ? (
         <div className="flex justify-center items-center py-20">

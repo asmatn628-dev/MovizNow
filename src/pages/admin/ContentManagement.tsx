@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useSearchParams, Link, useLocation } from 'react-router-dom';
 import { db } from '../../firebase';
-import { aiService } from '../../services/aiService';
 import { collection, addDoc, deleteDoc, doc, updateDoc, onSnapshot, writeBatch } from 'firebase/firestore';
 import { useAuth } from '../../contexts/AuthContext';
 import { Content, Genre, Language, Quality, QualityLinks, Season, Episode, LinkDef, Role } from '../../types';
@@ -10,9 +9,10 @@ import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea
 import ConfirmModal from '../../components/ConfirmModal';
 import AlertModal from '../../components/AlertModal';
 import { MediaModal, findTMDBByImdb, searchTMDBByTitle, fetchTMDBDetails, fetchSeriesSeasons, fetchIMDbRating } from '../../components/MediaModal';
-import AIFetchModal from '../../components/AIFetchModal';
+import { LinkCheckerModal } from '../../components/LinkCheckerModal';
 import { formatContentTitle, formatReleaseDate, formatRuntime, formatDateToMonthDDYYYY } from '../../utils/contentUtils';
 import { handleFirestoreError, OperationType } from '../../utils/firestoreErrorHandler';
+import { generateTinyUrl } from '../../utils/tinyurl';
 
 export default function ContentManagement() {
   const { profile, user } = useAuth();
@@ -41,6 +41,7 @@ export default function ContentManagement() {
   const [selectedGenres, setSelectedGenres] = useState<string[]>([]);
   const [selectedLanguages, setSelectedLanguages] = useState<string[]>([]);
   const [selectedQuality, setSelectedQuality] = useState<string>('');
+  const [subtitles, setSubtitles] = useState(false);
   const [cast, setCast] = useState('');
   const [year, setYear] = useState(new Date().getFullYear());
   const [releaseDate, setReleaseDate] = useState('');
@@ -73,8 +74,8 @@ export default function ContentManagement() {
   const [isGenreDropdownOpen, setIsGenreDropdownOpen] = useState(false);
   const [isLanguageDropdownOpen, setIsLanguageDropdownOpen] = useState(false);
   const [searchParams, setSearchParams] = useSearchParams();
-  const [isAIFetchModalOpen, setIsAIFetchModalOpen] = useState(false);
   const [isMasterFetchModalOpen, setIsMasterFetchModalOpen] = useState(false);
+  const [isLinkCheckerOpen, setIsLinkCheckerOpen] = useState(false);
   const [fetchingPoster, setFetchingPoster] = useState(false);
   const [isAutoFillModalOpen, setIsAutoFillModalOpen] = useState(false);
   const [loadingShareId, setLoadingShareId] = useState<string | null>(null);
@@ -110,7 +111,7 @@ export default function ContentManagement() {
       setMovieLinks([]);
       
       // Apply prefilled data using the standard apply function
-      applyAIFetchedData(data);
+      applyFetchedData(data);
       
       setIsModalOpen(true);
       prefilledDataApplied.current = true;
@@ -248,6 +249,7 @@ export default function ContentManagement() {
     setSelectedGenres([]);
     setSelectedLanguages([]);
     setSelectedQuality('');
+    setSubtitles(false);
     setCast('');
     setYear(new Date().getFullYear());
     setReleaseDate('');
@@ -295,6 +297,7 @@ export default function ContentManagement() {
     setSelectedGenres(content.genreIds || []);
     setSelectedLanguages(content.languageIds || []);
     setSelectedQuality(content.qualityId || '');
+    setSubtitles(content.subtitles || false);
     setCast((content.cast || []).join(', '));
     setYear(content.year);
     setReleaseDate(content.releaseDate || '');
@@ -390,6 +393,7 @@ export default function ContentManagement() {
         genreIds: selectedGenres,
         languageIds: selectedLanguages,
         qualityId: selectedQuality,
+        subtitles,
         cast: cast.split(',').map(c => c.trim()).filter(Boolean),
         year,
         releaseDate,
@@ -492,63 +496,245 @@ export default function ContentManagement() {
     });
   };
 
-  const handleMasterAutoFetch = async () => {
-    if (!title && !imdbLink) {
-      setAlertConfig({ isOpen: true, title: 'Missing Information', message: 'Please enter a title or an IMDb link before fetching.' });
-      return;
+  const handleAddLinksFromChecker = (
+    links: QualityLinks,
+    metadata?: {
+      languages: string[];
+      printQuality?: string;
+      subtitles?: boolean;
+      type?: "movie" | "series";
+      season?: number;
+      episode?: number;
     }
-
-    try {
-      setLoading(true);
-      const aiData = await aiService.fetchMovieData(title || '', year.toString(), type, imdbLink, 'gemini-3-flash');
-      
-      if (!aiData) throw new Error("Failed to fetch data from AI.");
-      
-      const mappedData = {
-        title: aiData.title || title,
-        description: aiData.description,
-        genres: selectedGenres,
-        posterUrl: aiData.posterUrl,
-        imdbLink: aiData.imdbId ? `https://www.imdb.com/title/${aiData.imdbId}` : imdbLink,
-        seasons: aiData.seasons || []
-      };
-      
-      applyAIFetchedData(mappedData);
-      setAlertConfig({ isOpen: true, title: 'Success', message: 'Data fetched successfully!' });
-    } catch (error) {
-      console.error("AI Fetch Error:", error);
-      setIsAIFetchModalOpen(true);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const fetchPosterWithAI = async () => {
-    if (!title) return;
-    setFetchingPoster(true);
-    try {
-      const prompt = `Find a high-resolution, official HD poster URL for the ${type === 'movie' ? 'movie' : 'TV series'} titled "${title}" ${year ? `(${year})` : ''}. 
-      Return ONLY a valid, direct image URL (e.g., from IMDb, TMDB, or a major movie database). 
-      Do not include any other text, just the URL. 
-      Ensure it is a high-quality vertical poster.`;
-
-      const posterUrl = await aiService.chat(prompt, "You are a helpful assistant that provides only image URLs.");
-      
-      const url = posterUrl?.trim();
-      if (url && url.startsWith('http')) {
-        setPosterUrl(url);
-      } else {
-        throw new Error("Invalid URL returned from AI");
+  ) => {
+    // Auto-select metadata if provided
+    let activeType: "movie" | "series" = type;
+    if (metadata) {
+      if (metadata.languages.length > 0) {
+        const matchedLangIds = languages
+          .filter(l => metadata.languages.includes(l.name))
+          .map(l => l.id);
+        
+        if (matchedLangIds.length > 0) {
+          setSelectedLanguages(prev => {
+            const combined = new Set([...prev, ...matchedLangIds]);
+            return Array.from(combined);
+          });
+        }
       }
-    } catch (error) {
-      console.error("Error fetching poster with AI:", error);
-      setAlertConfig({ isOpen: true, title: 'Error', message: 'Failed to fetch HD poster using AI.' });
-    } finally {
-      setFetchingPoster(false);
+
+      if (metadata.printQuality) {
+        const matchedQuality = qualities.find(q => q.name === metadata.printQuality);
+        if (matchedQuality) {
+          setSelectedQuality(matchedQuality.id);
+        }
+      }
+
+      if (typeof metadata.subtitles === "boolean") {
+        setSubtitles(metadata.subtitles);
+      }
+
+      if (metadata.type) {
+        setType(metadata.type);
+        activeType = metadata.type;
+      }
+    }
+
+    if (activeType === 'movie') {
+      setMovieLinks(prev => {
+        const updated = [...prev];
+        const newLinks: QualityLinks = [];
+
+        const parseSizeInMB = (size: string, unit: string) => {
+          if (!size) return 0;
+          const num = parseFloat(size.replace(/,/g, '')) || 0;
+          const u = unit.toUpperCase();
+          if (u === 'GB') return num * 1024;
+          if (u === 'TB') return num * 1024 * 1024;
+          return num;
+        };
+
+        const extractQuality = (name: string) => {
+          const match = name.match(/\b(2160p|4k|1440p|1080p|720p|480p|360p|540p)\b/i);
+          return match ? match[1].toLowerCase() : name.toLowerCase();
+        };
+
+        links.forEach(newLink => {
+          const newQuality = extractQuality(newLink.name);
+          const isHEVC = newLink.name.toUpperCase().includes("HEVC");
+          
+          // Find an existing link with the same quality that has an empty URL
+          // ONLY if the new link is NOT HEVC (don't fill "720p" with "720p HEVC")
+          const existingIdx = !isHEVC ? updated.findIndex(l => {
+            const existingQuality = extractQuality(l.name);
+            const existingIsHEVC = l.name.toUpperCase().includes("HEVC");
+            return existingQuality === newQuality && !existingIsHEVC && !l.url;
+          }) : -1;
+
+          if (existingIdx !== -1) {
+            // Fill the existing link but keep its original name (e.g., "480p")
+            updated[existingIdx] = {
+              ...updated[existingIdx],
+              url: newLink.url,
+              size: newLink.size,
+              unit: newLink.unit
+            };
+          } else {
+            // Check if this specific quality (and HEVC status) already exists with a URL
+            const alreadyExistsWithUrl = updated.some(l => {
+              const existingQuality = extractQuality(l.name);
+              const existingIsHEVC = l.name.toUpperCase().includes("HEVC");
+              return existingQuality === newQuality && existingIsHEVC === isHEVC && l.url;
+            });
+            
+            if (!alreadyExistsWithUrl) {
+              newLinks.push(newLink);
+            }
+          }
+        });
+
+        const combined = [...updated, ...newLinks];
+        combined.sort((a, b) => parseSizeInMB(a.size, a.unit) - parseSizeInMB(b.size, b.unit));
+        return combined;
+      });
+      setAlertConfig({ isOpen: true, title: 'Success', message: `Processed ${links.length} links for movie.` });
+    } else {
+      // Series logic
+      const updatedSeasons = [...seasons];
+      
+      const extractQuality = (name: string) => {
+        const match = name.match(/\b(2160p|4k|1440p|1080p|720p|480p|360p|540p)\b/i);
+        return match ? match[1].toLowerCase() : name.toLowerCase();
+      };
+
+      links.forEach(link => {
+        const targetSeason = link.season || metadata?.season || 1;
+        const targetEpisode = link.episode || metadata?.episode; // if undefined, it's a full season
+        
+        let seasonIdx = updatedSeasons.findIndex(s => s.seasonNumber === targetSeason);
+        if (seasonIdx === -1) {
+          const newSeason: Season = {
+            id: Math.random().toString(36).substr(2, 9),
+            seasonNumber: targetSeason,
+            zipLinks: [
+              { id: Math.random().toString(36).substr(2, 9), name: '480p', url: '', size: '', unit: 'GB' },
+              { id: Math.random().toString(36).substr(2, 9), name: '720p', url: '', size: '', unit: 'GB' },
+              { id: Math.random().toString(36).substr(2, 9), name: '1080p', url: '', size: '', unit: 'GB' }
+            ],
+            mkvLinks: [
+              { id: Math.random().toString(36).substr(2, 9), name: '480p', url: '', size: '', unit: 'GB' },
+              { id: Math.random().toString(36).substr(2, 9), name: '720p', url: '', size: '', unit: 'GB' },
+              { id: Math.random().toString(36).substr(2, 9), name: '1080p', url: '', size: '', unit: 'GB' }
+            ],
+            episodes: []
+          };
+          updatedSeasons.push(newSeason);
+          updatedSeasons.sort((a, b) => a.seasonNumber - b.seasonNumber);
+          seasonIdx = updatedSeasons.findIndex(s => s.seasonNumber === targetSeason);
+        }
+
+        if (targetEpisode === undefined || link.isFullSeasonMKV || link.isFullSeasonZIP) {
+          // Full season
+          const isZip = link.isFullSeasonZIP || link.url.toLowerCase().includes('.zip');
+          const targetLinks = isZip ? updatedSeasons[seasonIdx].zipLinks : (updatedSeasons[seasonIdx].mkvLinks || []);
+          const newQuality = extractQuality(link.name);
+
+          const existingIdx = targetLinks.findIndex(l => {
+            const existingQuality = extractQuality(l.name);
+            return existingQuality === newQuality && !l.url;
+          });
+
+          if (existingIdx !== -1) {
+            const isFullSeasonMKV = !isZip && (targetEpisode === undefined || link.isFullSeasonMKV);
+            targetLinks[existingIdx] = {
+              ...targetLinks[existingIdx],
+              name: isFullSeasonMKV ? link.name : targetLinks[existingIdx].name,
+              url: link.url,
+              size: link.size,
+              unit: link.unit
+            };
+          } else {
+            const alreadyExistsWithUrl = targetLinks.some(l => {
+              const existingQuality = extractQuality(l.name);
+              return existingQuality === newQuality && l.url;
+            });
+            if (!alreadyExistsWithUrl) {
+              targetLinks.push(link);
+            }
+          }
+
+          if (isZip) {
+            updatedSeasons[seasonIdx].zipLinks = [...targetLinks];
+          } else {
+            updatedSeasons[seasonIdx].mkvLinks = [...targetLinks];
+          }
+        } else {
+          // Specific episode
+          let episodeIdx = updatedSeasons[seasonIdx].episodes.findIndex(e => e.episodeNumber === targetEpisode);
+          if (episodeIdx === -1) {
+            updatedSeasons[seasonIdx].episodes.push({
+              id: Math.random().toString(36).substr(2, 9),
+              episodeNumber: targetEpisode,
+              title: `Episode ${targetEpisode}`,
+              links: [] // No placeholders for episodes as requested
+            });
+            updatedSeasons[seasonIdx].episodes.sort((a, b) => a.episodeNumber - b.episodeNumber);
+            episodeIdx = updatedSeasons[seasonIdx].episodes.findIndex(e => e.episodeNumber === targetEpisode);
+          }
+
+          const targetLinks = updatedSeasons[seasonIdx].episodes[episodeIdx].links;
+          const newQuality = extractQuality(link.name);
+
+          const existingIdx = targetLinks.findIndex(l => {
+            const existingQuality = extractQuality(l.name);
+            return existingQuality === newQuality && !l.url;
+          });
+
+          if (existingIdx !== -1) {
+            targetLinks[existingIdx] = {
+              ...targetLinks[existingIdx],
+              // Keep original name for episodes
+              url: link.url,
+              size: link.size,
+              unit: link.unit
+            };
+          } else {
+            const alreadyExistsWithUrl = targetLinks.some(l => {
+              const existingQuality = extractQuality(l.name);
+              return existingQuality === newQuality && l.url;
+            });
+            if (!alreadyExistsWithUrl) {
+              targetLinks.push(link);
+            }
+          }
+          updatedSeasons[seasonIdx].episodes[episodeIdx].links = [...targetLinks];
+        }
+      });
+
+      const parseSizeInMB = (size: string, unit: string) => {
+        if (!size) return 0;
+        const num = parseFloat(size.replace(/,/g, '')) || 0;
+        const u = unit.toUpperCase();
+        if (u === 'GB') return num * 1024;
+        if (u === 'TB') return num * 1024 * 1024;
+        return num;
+      };
+
+      // Sort all links in all seasons and episodes
+      updatedSeasons.forEach(s => {
+        if (s.zipLinks) s.zipLinks.sort((a, b) => parseSizeInMB(a.size, a.unit) - parseSizeInMB(b.size, b.unit));
+        if (s.mkvLinks) s.mkvLinks.sort((a, b) => parseSizeInMB(a.size, a.unit) - parseSizeInMB(b.size, b.unit));
+        s.episodes.forEach(e => {
+          if (e.links) e.links.sort((a, b) => parseSizeInMB(a.size, a.unit) - parseSizeInMB(b.size, b.unit));
+        });
+      });
+      
+      setSeasons(updatedSeasons);
+      setAlertConfig({ isOpen: true, title: 'Success', message: `Added ${links.length} links to series.` });
     }
   };
 
-  const applyAIFetchedData = (data: any) => {
+  const applyFetchedData = (data: any) => {
     if (data.title) setTitle(data.title);
     if (data.year) setYear(data.year);
     if (data.type) setType(data.type);
@@ -558,6 +744,7 @@ export default function ContentManagement() {
     if (data.runtime) setRuntime(data.runtime);
     if (data.imdbLink) setImdbLink(data.imdbLink);
     if (data.imdbRating) setImdbRating(data.imdbRating);
+    if (data.subtitles !== undefined) setSubtitles(data.subtitles);
     if (data.posterUrl) setPosterUrl(data.posterUrl);
     if (data.trailerUrl) {
       setTrailerUrl(data.trailerUrl);
@@ -877,6 +1064,7 @@ export default function ContentManagement() {
   };
 
   const executeShare = async (content: Content, selectedSeasonNumbers?: number[]) => {
+    setLoadingShareId(content.id);
     let text = `🎬 *${content.title}${content.year ? ` (${content.year})` : ''}*\n\n`;
     
     const contentGenres = genres.filter(g => content.genreIds?.includes(g.id)).map(g => g.name).join(', ');
@@ -894,8 +1082,32 @@ export default function ContentManagement() {
     if (content.sampleUrl) text += `📽️ Sample: ${content.sampleUrl}\n\n`;
     else text += `\n`;
 
-    if (content.type === 'movie' && content.movieLinks) {
-      const links: QualityLinks = parseLinks(content.movieLinks);
+    let hasUpdates = false;
+    let updatedContent = { ...content };
+
+    const processLink = async (link: LinkDef) => {
+      if (!link.url) return link;
+      if (!link.url.includes('pixeldrain.com') && !link.url.includes('pixeldrain.dev') && !link.tinyUrl) {
+        const tinyUrl = await generateTinyUrl(link.url);
+        if (tinyUrl !== link.url) {
+          hasUpdates = true;
+          return { ...link, tinyUrl };
+        }
+      }
+      return link;
+    };
+
+    if (updatedContent.type === 'movie' && updatedContent.movieLinks) {
+      const links: QualityLinks = parseLinks(updatedContent.movieLinks);
+      
+      for (let i = 0; i < links.length; i++) {
+        links[i] = await processLink(links[i]);
+      }
+
+      if (hasUpdates) {
+        updatedContent.movieLinks = JSON.stringify(links);
+      }
+
       const sortedLinks = [...links].sort((a, b) => getSizeInMB(a.size, a.unit) - getSizeInMB(b.size, b.unit));
       
       const zipLinks = sortedLinks.filter(l => l.name.toLowerCase().includes('zip'));
@@ -908,37 +1120,66 @@ export default function ContentManagement() {
 
       if (zipLinks.length > 0) {
         text += `\n📦 *ZIP Files:*\n`;
-        zipLinks.forEach(l => { if (l.url) text += `▪️ ${l.name} (${l.size}${l.unit})\n${l.url}\n`; });
+        zipLinks.forEach(l => { if (l.url) text += `▪️ ${l.name} (${l.size}${l.unit})\n${l.tinyUrl || l.url}\n`; });
       }
       if (mkvLinks.length > 0) {
         text += `\n🎞️ *MKV Files:*\n`;
-        mkvLinks.forEach(l => { if (l.url) text += `▪️ ${l.name} (${l.size}${l.unit})\n${l.url}\n`; });
+        mkvLinks.forEach(l => { if (l.url) text += `▪️ ${l.name} (${l.size}${l.unit})\n${l.tinyUrl || l.url}\n`; });
       }
       if (otherLinks.length > 0) {
         if (zipLinks.length > 0 || mkvLinks.length > 0) text += `\n📄 *Other Files:*\n`;
-        otherLinks.forEach(l => { if (l.url) text += `▪️ ${l.name} (${l.size}${l.unit})\n${l.url}\n`; });
+        otherLinks.forEach(l => { if (l.url) text += `▪️ ${l.name} (${l.size}${l.unit})\n${l.tinyUrl || l.url}\n`; });
       }
-    } else if (content.type === 'series' && content.seasons) {
-      const parsedSeasons: Season[] = JSON.parse(content.seasons);
+    } else if (updatedContent.type === 'series' && updatedContent.seasons) {
+      const parsedSeasons: Season[] = JSON.parse(updatedContent.seasons);
       const seasonsToShare = selectedSeasonNumbers 
         ? parsedSeasons.filter(s => selectedSeasonNumbers.includes(s.seasonNumber))
         : parsedSeasons;
 
+      for (let s = 0; s < parsedSeasons.length; s++) {
+        const season = parsedSeasons[s];
+        
+        if (season.zipLinks) {
+          for (let i = 0; i < season.zipLinks.length; i++) {
+            season.zipLinks[i] = await processLink(season.zipLinks[i]);
+          }
+        }
+        if (season.mkvLinks) {
+          for (let i = 0; i < season.mkvLinks.length; i++) {
+            season.mkvLinks[i] = await processLink(season.mkvLinks[i]);
+          }
+        }
+        if (season.episodes) {
+          for (let e = 0; e < season.episodes.length; e++) {
+            const ep = season.episodes[e];
+            if (ep.links) {
+              for (let i = 0; i < ep.links.length; i++) {
+                ep.links[i] = await processLink(ep.links[i]);
+              }
+            }
+          }
+        }
+      }
+
+      if (hasUpdates) {
+        updatedContent.seasons = JSON.stringify(parsedSeasons);
+      }
+
       seasonsToShare.forEach(season => {
-        text += `\n📺 *Season ${season.seasonNumber}${season.year ? ` (${season.year})` : content.year ? ` (${content.year})` : ''}*\n`;
+        text += `\n📺 *Season ${season.seasonNumber}${season.year ? ` (${season.year})` : updatedContent.year ? ` (${updatedContent.year})` : ''}*\n`;
         const zipLinks = parseLinks(JSON.stringify(season.zipLinks)).filter(l => l && l.url).sort((a, b) => getSizeInMB(a.size, a.unit) - getSizeInMB(b.size, b.unit));
         const mkvLinks = parseLinks(JSON.stringify(season.mkvLinks || [])).filter(l => l && l.url).sort((a, b) => getSizeInMB(a.size, a.unit) - getSizeInMB(b.size, b.unit));
         
         if (zipLinks.length > 0) {
           text += `📦 *Full Season ZIP:*\n`;
           zipLinks.forEach((link) => {
-            text += `  ▪️ ${link.name} (${link.size}${link.unit})\n  ${link.url}\n`;
+            text += `  ▪️ ${link.name} (${link.size}${link.unit})\n  ${link.tinyUrl || link.url}\n`;
           });
         }
         if (mkvLinks.length > 0) {
           text += `\n🎞️ *Full Season MKV:*\n`;
           mkvLinks.forEach((link) => {
-            text += `  ▪️ ${link.name} (${link.size}${link.unit})\n  ${link.url}\n`;
+            text += `  ▪️ ${link.name} (${link.size}${link.unit})\n  ${link.tinyUrl || link.url}\n`;
           });
         }
         if (season.episodes && season.episodes.length > 0) {
@@ -948,7 +1189,7 @@ export default function ContentManagement() {
             const epLinks = parseLinks(JSON.stringify(ep.links)).sort((a, b) => getSizeInMB(a.size, a.unit) - getSizeInMB(b.size, b.unit));
             epLinks.forEach((link) => {
               if (link && link.url) {
-                text += `    - ${link.name} (${link.size}${link.unit}): ${link.url}\n`;
+                text += `    - ${link.name} (${link.size}${link.unit}): ${link.tinyUrl || link.url}\n`;
               }
             });
           });
@@ -956,12 +1197,23 @@ export default function ContentManagement() {
       });
     }
 
+    if (hasUpdates) {
+      try {
+        await updateDoc(doc(db, 'content', updatedContent.id), {
+          movieLinks: updatedContent.movieLinks,
+          seasons: updatedContent.seasons
+        });
+      } catch (error) {
+        console.error("Error saving tinyUrls to db:", error);
+      }
+    }
+
     text += `\n🍿 Enjoy watching on MovizNow!\n📞 WhatsApp: 03363284466`;
     
     if (navigator.share) {
       try {
         await navigator.share({
-          title: content.title,
+          title: updatedContent.title,
           text: text,
         });
       } catch (err) {
@@ -974,6 +1226,7 @@ export default function ContentManagement() {
       const encodedText = encodeURIComponent(text);
       window.open(`https://wa.me/?text=${encodedText}`, '_blank');
     }
+    setLoadingShareId(null);
   };
 
   const handleCopyData = async (content: Content) => {
@@ -1888,10 +2141,6 @@ export default function ContentManagement() {
                                 <input type="radio" name="status" value="draft" checked={status === 'draft'} onChange={() => setStatus('draft')} className="hidden" />
                                 <EyeOff className="w-3.5 h-3.5" /> Draft
                               </label>
-                              <label className={`flex-1 flex items-center justify-center gap-1 p-1.5 rounded-lg border cursor-pointer transition-colors text-xs ${status === 'selected_content' ? 'bg-blue-500/10 border-blue-500 text-blue-500' : 'bg-zinc-950 border-zinc-800 text-zinc-400'}`}>
-                                <input type="radio" name="status" value="selected_content" checked={status === 'selected_content'} onChange={() => setStatus('selected_content')} className="hidden" />
-                                <Lock className="w-3.5 h-3.5" /> Selected
-                              </label>
                             </>
                           )}
                           {profile?.role === 'content_manager' && (
@@ -1910,14 +2159,14 @@ export default function ContentManagement() {
                     <input type="text" value={title} onChange={(e) => setTitle(e.target.value)} className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-emerald-500" />
                   </div>
                   
-                  {/* 3. Release Year+ AI Fetch +Master Fetch */}
+                  {/* 3. Release Year+ Fetch +Master Fetch */}
                   <div>
                     <label className="block text-xs font-medium text-zinc-500 mb-1">Release Year</label>
                     <div className="flex gap-2">
                       <input type="number" value={year || ''} onChange={(e) => setYear(parseInt(e.target.value) || new Date().getFullYear())} className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:border-emerald-500" />
-                      <button type="button" onClick={handleMasterAutoFetch} disabled={!title} className="bg-emerald-500 hover:bg-emerald-600 disabled:bg-emerald-500/50 text-white px-2 py-1.5 rounded-lg text-xs font-medium transition-colors flex items-center justify-center gap-2 whitespace-nowrap" title="Auto Fetch All with AI">
+                      <button type="button" onClick={() => setIsLinkCheckerOpen(true)} className="bg-emerald-500 hover:bg-emerald-600 text-white px-2 py-1.5 rounded-lg text-xs font-medium transition-colors flex items-center justify-center gap-2 whitespace-nowrap" title="Add Links via Link Checker">
                         <RefreshCw className="w-3.5 h-3.5" />
-                        AI Fetch
+                        Add Links
                       </button>
                       <button
                         type="button"
@@ -2117,6 +2366,35 @@ export default function ContentManagement() {
                           {q.name}
                         </button>
                       ))}
+                    </div>
+                  </div>
+
+                  {/* 11.5 Subtitles */}
+                  <div className="flex items-center gap-4">
+                    <label className="text-xs font-medium text-zinc-500 whitespace-nowrap">Subtitles</label>
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setSubtitles(true)}
+                        className={`px-4 py-1 rounded-full text-xs font-medium transition-colors border ${
+                          subtitles
+                            ? 'bg-emerald-500/20 border-emerald-500 text-emerald-500'
+                            : 'bg-zinc-900 border-zinc-700 text-zinc-400 hover:bg-zinc-800 hover:text-white'
+                        }`}
+                      >
+                        Yes
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setSubtitles(false)}
+                        className={`px-4 py-1 rounded-full text-xs font-medium transition-colors border ${
+                          !subtitles
+                            ? 'bg-emerald-500/20 border-emerald-500 text-emerald-500'
+                            : 'bg-zinc-900 border-zinc-700 text-zinc-400 hover:bg-zinc-800 hover:text-white'
+                        }`}
+                      >
+                        No
+                      </button>
                     </div>
                   </div>
 
@@ -2413,16 +2691,14 @@ export default function ContentManagement() {
         initialImdbId={imdbLink}
         initialTitle={title}
         initialYear={year.toString()}
-        onApply={applyAIFetchedData}
+        onApply={applyFetchedData}
       />
-      <AIFetchModal
-        isOpen={isAIFetchModalOpen}
-        onClose={() => setIsAIFetchModalOpen(false)}
-        initialTitle={title}
-        initialYear={year || ''}
-        initialImdbLink={imdbLink}
-        availableGenres={genres}
-        onApply={applyAIFetchedData}
+      <LinkCheckerModal
+        isOpen={isLinkCheckerOpen}
+        onClose={() => setIsLinkCheckerOpen(false)}
+        onAddLinks={handleAddLinksFromChecker}
+        languages={languages}
+        qualities={qualities}
       />
 
       <ConfirmModal

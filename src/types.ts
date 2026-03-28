@@ -32,6 +32,7 @@ export interface AppNotification {
   type?: 'movie' | 'series';
   createdAt: string;
   createdBy: string;
+  targetUserId?: string;
 }
 
 export interface AnalyticsEvent {
@@ -71,6 +72,11 @@ export interface LinkDef {
   url: string;
   size: string;
   unit: 'MB' | 'GB';
+  tinyUrl?: string;
+  season?: number;
+  episode?: number;
+  isFullSeasonMKV?: boolean;
+  isFullSeasonZIP?: boolean;
 }
 
 export type QualityLinks = LinkDef[];
@@ -126,4 +132,5 @@ export interface Content {
   movieLinks?: string; // JSON stringified QualityLinks
   seasons?: string; // JSON stringified Season[]
   imdbRating?: string; // Added imdbRating
+  subtitles?: boolean; // Added subtitles
 }
