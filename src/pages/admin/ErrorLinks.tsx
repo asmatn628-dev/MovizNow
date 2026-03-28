@@ -258,7 +258,7 @@ export default function ErrorLinks() {
     if (scanning) return;
     const allLinksToScan = getAllLinksToScan();
     if (allLinksToScan.length === 0) return;
-    scannerService.startScan(allLinksToScan);
+    scannerService.startScan(allLinksToScan, false);
   };
 
   const startBackgroundScan = async () => {

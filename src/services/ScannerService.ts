@@ -217,6 +217,9 @@ class ScannerService {
 
         const batch = allLinksToScan.slice(i, i + batchSize);
         
+        // Rate limiting: 5 links per second. Batch size is 50, so 10 seconds delay.
+        await new Promise(resolve => setTimeout(resolve, 10000));
+        
         const response = await fetch('/api/scan-links', {
           method: 'POST',
           headers: {
@@ -309,53 +312,65 @@ class ScannerService {
     }
   }
 
-  public async startScan(allLinksToScan: { info: ErrorLinkInfo, url: string }[]) {
-    console.log("startScan called, current isScanning:", this.isScanning);
+  public async startScan(allLinksToScan: { info: ErrorLinkInfo, url: string }[], useFirebase: boolean = true) {
+    console.log("startScan called, current isScanning:", this.isScanning, "useFirebase:", useFirebase);
     if (this.isScanning) return;
     
     const scanDocRef = doc(db, 'scans', 'current');
     
     // Check if a scan is already running in Firestore
-    try {
-      const scanDoc = await getDoc(scanDocRef);
-      if (scanDoc.exists() && scanDoc.data().status === 'scanning') {
-        // Check if the scan is "stale" (not updated in the last 5 minutes)
-        const lastUpdated = scanDoc.data().lastUpdated?.toDate?.() || new Date(0);
-        const now = new Date();
-        const diffMinutes = (now.getTime() - lastUpdated.getTime()) / (1000 * 60);
-        
-        if (diffMinutes < 5) {
-          console.log("A scan is already running and active.");
-          return;
+    if (useFirebase) {
+      try {
+        const scanDoc = await getDoc(scanDocRef);
+        if (scanDoc.exists() && scanDoc.data().status === 'scanning') {
+          const lastUpdated = scanDoc.data().lastUpdated?.toDate?.() || new Date(0);
+          const now = new Date();
+          const diffMinutes = (now.getTime() - lastUpdated.getTime()) / (1000 * 60);
+          
+          if (diffMinutes < 5) {
+            console.log("A scan is already running and active.");
+            return;
+          }
+          console.log("Found a stale scan, overriding...");
         }
-        console.log("Found a stale scan, overriding...");
+      } catch (e) {
+        console.error("Error checking scan status", e);
       }
-    } catch (e) {
-      console.error("Error checking scan status", e);
     }
 
     this.isScanning = true;
     console.log("isScanning set to true");
 
-    await setDoc(scanDocRef, this.sanitizeForFirestore({
-      id: 'current',
-      status: 'scanning',
-      scannedCount: 0,
-      totalLinks: allLinksToScan.length,
-      errorLinks: [],
-      startedAt: serverTimestamp(),
-      lastUpdated: serverTimestamp()
-    }));
+    if (useFirebase) {
+      await setDoc(scanDocRef, this.sanitizeForFirestore({
+        id: 'current',
+        status: 'scanning',
+        scannedCount: 0,
+        totalLinks: allLinksToScan.length,
+        errorLinks: [],
+        startedAt: serverTimestamp(),
+        lastUpdated: serverTimestamp()
+      }));
+    }
 
-    const concurrency = 10;
+    const concurrency = 5; // Reduced concurrency to help with rate limiting
     const foundErrors: ErrorLinkInfo[] = [];
     const queue = [...allLinksToScan];
     let scannedCount = 0;
+    let lastScanTime = Date.now();
 
     const processNext = async (): Promise<void> => {
       if (queue.length === 0 || !this.isScanning) return;
       
       const item = queue.shift()!;
+      
+      // Rate limiting: 5 links per second = 1 link per 200ms
+      const now = Date.now();
+      const timeSinceLastScan = now - lastScanTime;
+      if (timeSinceLastScan < 200) {
+        await new Promise(resolve => setTimeout(resolve, 200 - timeSinceLastScan));
+      }
+      lastScanTime = Date.now();
       
       try {
         const result = await serverCheckLink(item.url);
@@ -382,13 +397,17 @@ class ScannerService {
 
         scannedCount++;
         
-        // Update Firestore incrementally
-        if (scannedCount % 5 === 0 || scannedCount === allLinksToScan.length) {
-          await updateDoc(scanDocRef, this.sanitizeForFirestore({
-            scannedCount: scannedCount,
-            errorLinks: foundErrors,
-            lastUpdated: serverTimestamp()
-          }));
+        if (useFirebase) {
+          // Update Firestore incrementally
+          if (scannedCount % 20 === 0 || scannedCount === allLinksToScan.length) {
+            await updateDoc(scanDocRef, this.sanitizeForFirestore({
+              scannedCount: scannedCount,
+              errorLinks: foundErrors,
+              lastUpdated: serverTimestamp()
+            }));
+            // Add a small delay to prevent overwhelming the write stream
+            await new Promise(resolve => setTimeout(resolve, 100));
+          }
         }
       } catch (e) {
         console.error(`Error scanning link ${item.url}:`, e);
@@ -401,16 +420,20 @@ class ScannerService {
       const workers = Array.from({ length: Math.min(concurrency, allLinksToScan.length) }, () => processNext());
       await Promise.all(workers);
 
-      await updateDoc(scanDocRef, {
-        status: 'completed',
-        lastUpdated: serverTimestamp()
-      });
+      if (useFirebase) {
+        await updateDoc(scanDocRef, {
+          status: 'completed',
+          lastUpdated: serverTimestamp()
+        });
+      }
     } catch (error) {
       console.error("Error scanning links:", error);
-      await updateDoc(scanDocRef, {
-        status: 'error',
-        lastUpdated: serverTimestamp()
-      });
+      if (useFirebase) {
+        await updateDoc(scanDocRef, {
+          status: 'error',
+          lastUpdated: serverTimestamp()
+        });
+      }
     } finally {
       this.isScanning = false;
       console.log("isScanning set to false in finally");
