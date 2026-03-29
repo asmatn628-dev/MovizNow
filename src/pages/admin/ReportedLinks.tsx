@@ -84,7 +84,7 @@ export default function ReportedLinks() {
           type: report.contentType,
           createdAt: new Date().toISOString(),
           createdBy: 'system',
-          targetUserId: report.userId
+          targetUserId: report.userId // This already targets the specific user
         });
       }
       

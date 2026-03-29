@@ -1301,7 +1301,7 @@ export default function MovieDetails() {
                 ) : (
                   <AlertTriangle className="w-5 h-5" />
                 )}
-                Report Link (if not Working)
+                {isReporting ? 'Sending...' : 'Report Link (if not Working)'}
               </button>
 
               <button
