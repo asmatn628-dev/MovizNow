@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { db } from '../../firebase';
 import { doc, updateDoc } from 'firebase/firestore';
-import { Content } from '../../types';
+import { Content, Role } from '../../types';
 import { useAuth } from '../../contexts/AuthContext';
 import { useContent } from '../../contexts/ContentContext';
 import { Film, Search, Filter, MessageCircle, Clock, Heart, LogOut, User, Users, Lock, LayoutDashboard, X } from 'lucide-react';
@@ -42,7 +42,7 @@ export default function Home({ onOpenMediaModal }: { onOpenMediaModal: () => voi
   };
 
   useEffect(() => {
-    if (profile && profile.phone === undefined && profile.role !== 'admin' && profile.role !== 'content_manager' && profile.role !== 'manager') {
+    if (profile && profile.phone === undefined && profile.role !== 'admin' && profile.role !== 'content_manager' && profile.role !== 'manager' && profile.role !== 'owner') {
       setShowWhatsappPrompt(true);
     }
   }, [profile]);
@@ -91,7 +91,7 @@ export default function Home({ onOpenMediaModal }: { onOpenMediaModal: () => voi
 
   const recentlyAddedContent = useMemo(() => {
     let result = [...contentList];
-    if (profile?.role !== 'admin' && profile?.role !== 'content_manager' && profile?.role !== 'manager') {
+    if (profile?.role !== 'admin' && profile?.role !== 'content_manager' && profile?.role !== 'manager' && profile?.role !== 'owner') {
       result = result.filter(c => {
         if (c.status === 'draft') return false;
         if (c.status === 'selected_content') {
@@ -129,7 +129,7 @@ export default function Home({ onOpenMediaModal }: { onOpenMediaModal: () => voi
     let result = [...contentList];
 
     // Filter out drafts and selected_content for non-admins and non-editors
-    if (profile?.role !== 'admin' && profile?.role !== 'content_manager' && profile?.role !== 'manager') {
+    if (profile?.role !== 'admin' && profile?.role !== 'content_manager' && profile?.role !== 'manager' && profile?.role !== 'owner') {
       result = result.filter(c => {
         if (c.status === 'draft') return false;
         if (c.status === 'selected_content') {
@@ -204,59 +204,63 @@ export default function Home({ onOpenMediaModal }: { onOpenMediaModal: () => voi
               <div className="hidden md:flex items-center gap-2 mr-2">
                 <div className="flex flex-col items-end">
                   <div className="flex items-center gap-1">
-                    <span className="text-sm font-bold text-white">{profile.displayName || 'User'}</span>
-                    <div className="flex items-center gap-1">
-                      <span className={clsx("text-[10px] font-medium px-2 py-0.5 rounded-full border", getRoleColor(profile.role))}>
-                        {profile.role === 'selected_content' ? 'Selected Content' : 
-                         profile.role === 'content_manager' ? 'Content Manager' :
-                         profile.role === 'user_manager' ? 'User Manager' :
-                         profile.role === 'manager' ? 'Manager' :
-                         profile.role.charAt(0).toUpperCase() + profile.role.slice(1).replace('_', ' ')}
-                      </span>
-                      {profile.role !== 'owner' && (
+                    <span className="text-sm font-bold text-white">{profile.displayName || 'User'} {profile.role === 'owner' ? '(Owner)' : ''}</span>
+                    {profile.role !== 'owner' && (
+                      <div className="flex items-center gap-1">
+                        <span className={clsx("text-[10px] font-medium px-2 py-0.5 rounded-full border", getRoleColor(profile.role))}>
+                          {profile.role === 'selected_content' ? 'Selected Content' : 
+                           profile.role === 'content_manager' ? 'Content Manager' :
+                           profile.role === 'user_manager' ? 'User Manager' :
+                           profile.role === 'manager' ? 'Manager' :
+                           profile.role.charAt(0).toUpperCase() + profile.role.slice(1).replace('_', ' ')}
+                        </span>
                         <span className={clsx("text-[10px] font-medium capitalize px-2 py-0.5 rounded-full border", getStatusColor(profile.status))}>
                           {profile.status}
                         </span>
-                      )}
-                    </div>
+                      </div>
+                    )}
                   </div>
                   {profile.phone ? (
                     <span className="text-xs font-medium text-zinc-400">{profile.phone}</span>
-                  ) : (
+                  ) : profile.role !== 'owner' ? (
                     <button onClick={() => setShowWhatsappPrompt(true)} className="text-[10px] font-medium text-emerald-500 hover:underline mt-0.5">
                       + Add WhatsApp
                     </button>
-                  )}
+                  ) : null}
                 </div>
-                <div className="h-8 w-px bg-zinc-800"></div>
-                <div className="flex flex-col items-start">
-                  <span className="text-xs text-zinc-400">Expiry Date</span>
-                  <span className="text-xs font-medium text-zinc-300">
-                    {profile.role === 'owner' ? 'Lifetime' : profile.expiryDate ? (() => {
-                      const expiry = new Date(profile.expiryDate);
-                      const expiryEnd = new Date(expiry.getTime() + 24 * 60 * 60 * 1000);
-                      const now = new Date();
-                      const diffTime = expiryEnd.getTime() - now.getTime();
-                      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-                      const isExpiringSoon = diffDays > 0 && diffDays < 3;
-                      const daysText = diffDays > 0 ? `${diffDays} days left` : 'Expired';
-                      return (
-                        <span className={clsx(isExpiringSoon && "text-red-500 font-bold")}>
-                          {format(expiry, 'MMM dd, yyyy')} ({daysText})
-                        </span>
-                      );
-                    })() : 'No Expiry'}
-                  </span>
-                </div>
-                <a 
-                  href="https://wa.me/923363284466" 
-                  target="_blank" 
-                  rel="noreferrer" 
-                  className="flex items-center gap-1 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-500 px-2 py-1 rounded-lg text-sm font-medium transition-colors ml-1"
-                >
-                  <MessageCircle className="w-4 h-4" />
-                  Support
-                </a>
+                {profile.role !== 'owner' && (
+                  <>
+                    <div className="h-8 w-px bg-zinc-800"></div>
+                    <div className="flex flex-col items-start">
+                      <span className="text-xs text-zinc-400">Expiry Date</span>
+                      <span className="text-xs font-medium text-zinc-300">
+                        {profile.expiryDate ? (() => {
+                          const expiry = new Date(profile.expiryDate);
+                          const expiryEnd = new Date(expiry.getTime() + 24 * 60 * 60 * 1000);
+                          const now = new Date();
+                          const diffTime = expiryEnd.getTime() - now.getTime();
+                          const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+                          const isExpiringSoon = diffDays > 0 && diffDays < 3;
+                          const daysText = diffDays > 0 ? `${diffDays} days left` : 'Expired';
+                          return (
+                            <span className={clsx(isExpiringSoon && "text-red-500 font-bold")}>
+                              {format(expiry, 'MMM dd, yyyy')} ({daysText})
+                            </span>
+                          );
+                        })() : 'No Expiry'}
+                      </span>
+                    </div>
+                    <a 
+                      href="https://wa.me/923363284466" 
+                      target="_blank" 
+                      rel="noreferrer" 
+                      className="flex items-center gap-1 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-500 px-2 py-1 rounded-lg text-sm font-medium transition-colors ml-1"
+                    >
+                      <MessageCircle className="w-4 h-4" />
+                      Support
+                    </a>
+                  </>
+                )}
               </div>
             )}
             
@@ -266,7 +270,7 @@ export default function Home({ onOpenMediaModal }: { onOpenMediaModal: () => voi
             <Link to="/favorites" className="text-zinc-400 hover:text-white transition-colors" title="Favorites">
               <Heart className="w-5 h-5" />
             </Link>
-            {(profile?.role === 'admin' || profile?.role === 'content_manager' || profile?.role === 'manager') && (
+            {(profile?.role === 'admin' || profile?.role === 'owner' || profile?.role === 'content_manager' || profile?.role === 'manager') && (
               <button onClick={onOpenMediaModal} className="text-zinc-400 hover:text-white transition-colors" title="Search Media">
                 <Search className="w-5 h-5" />
               </button>
@@ -275,7 +279,7 @@ export default function Home({ onOpenMediaModal }: { onOpenMediaModal: () => voi
               <MessageCircle className="w-5 h-5" />
             </Link>
             {profile && <NotificationMenu profile={profile} />}
-            {profile?.role === 'admin' && (
+            {(profile?.role === 'admin' || profile?.role === 'owner') && (
               <Link to="/admin" className="text-zinc-400 hover:text-white transition-colors" title="Admin Panel">
                 <LayoutDashboard className="w-5 h-5" />
               </Link>
@@ -305,11 +309,11 @@ export default function Home({ onOpenMediaModal }: { onOpenMediaModal: () => voi
               <span className="font-bold text-white">{profile.displayName || 'User'}</span>
               {profile.phone ? (
                 <span className="text-xs font-medium text-zinc-400">{profile.phone}</span>
-              ) : (
+              ) : profile.role !== 'owner' ? (
                 <button onClick={() => setShowWhatsappPrompt(true)} className="text-[10px] font-medium text-emerald-500 hover:underline text-left mt-0.5">
                   + Add WhatsApp
                 </button>
-              )}
+              ) : null}
             </div>
             <div className="flex items-center gap-1.5">
               <span className={clsx("text-[10px] font-medium px-2 py-0.5 rounded-full border", getRoleColor(profile.role))}>
@@ -326,33 +330,35 @@ export default function Home({ onOpenMediaModal }: { onOpenMediaModal: () => voi
               )}
             </div>
           </div>
-          <div className="flex justify-between items-center">
-            <span className="text-zinc-400 text-xs">
-              {profile.role === 'owner' ? 'Lifetime' : profile.expiryDate ? (() => {
-                const expiry = new Date(profile.expiryDate);
-                const expiryEnd = new Date(expiry.getTime() + 24 * 60 * 60 * 1000);
-                const now = new Date();
-                const diffTime = expiryEnd.getTime() - now.getTime();
-                const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-                const isExpiringSoon = diffDays > 0 && diffDays < 3;
-                const daysText = diffDays > 0 ? `${diffDays}d left` : 'Expired';
-                return (
-                  <span className={clsx(isExpiringSoon && "text-red-500 font-bold")}>
-                    Exp: {format(expiry, 'MMM dd, yyyy')} ({daysText})
-                  </span>
-                );
-              })() : 'No Expiry'}
-            </span>
-            <a 
-              href="https://wa.me/923363284466" 
-              target="_blank" 
-              rel="noreferrer" 
-              className="flex items-center gap-1.5 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-500 px-2 py-1 rounded text-xs font-medium transition-colors"
-            >
-              <MessageCircle className="w-3 h-3" />
-              Support
-            </a>
-          </div>
+          {profile.role !== 'owner' && (
+            <div className="flex justify-between items-center">
+              <span className="text-zinc-400 text-xs">
+                {profile.expiryDate ? (() => {
+                  const expiry = new Date(profile.expiryDate);
+                  const expiryEnd = new Date(expiry.getTime() + 24 * 60 * 60 * 1000);
+                  const now = new Date();
+                  const diffTime = expiryEnd.getTime() - now.getTime();
+                  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+                  const isExpiringSoon = diffDays > 0 && diffDays < 3;
+                  const daysText = diffDays > 0 ? `${diffDays}d left` : 'Expired';
+                  return (
+                    <span className={clsx(isExpiringSoon && "text-red-500 font-bold")}>
+                      Exp: {format(expiry, 'MMM dd, yyyy')} ({daysText})
+                    </span>
+                  );
+                })() : 'No Expiry'}
+              </span>
+              <a 
+                href="https://wa.me/923363284466" 
+                target="_blank" 
+                rel="noreferrer" 
+                className="flex items-center gap-1.5 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-500 px-2 py-1 rounded text-xs font-medium transition-colors"
+              >
+                <MessageCircle className="w-3 h-3" />
+                Support
+              </a>
+            </div>
+          )}
         </div>
       )}
 

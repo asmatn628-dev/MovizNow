@@ -172,7 +172,7 @@ export default function ContentManagement() {
       const managersData: Record<string, string> = {};
       snapshot.docs.forEach(doc => {
         const data = doc.data();
-        if (data.role === 'admin' || data.role === 'content_manager') {
+        if (data.role === 'admin' || data.role === 'owner' || data.role === 'content_manager') {
           managersData[doc.id] = data.displayName || data.email || 'Unknown';
         }
       });
@@ -1939,7 +1939,7 @@ export default function ContentManagement() {
                   className="bg-transparent border-none text-sm focus:outline-none text-emerald-500 font-medium cursor-pointer"
                 >
                   <option value="">Bulk Actions</option>
-                  {profile?.role === 'admin' && (
+                  {(profile?.role === 'admin' || profile?.role === 'owner') && (
                     <>
                       <option value="published">Publish</option>
                       <option value="draft">Draft</option>
@@ -2005,7 +2005,7 @@ export default function ContentManagement() {
               <option value="published">Published</option>
               <option value="draft">Draft</option>
             </select>
-            {profile?.role === 'admin' && (
+            {(profile?.role === 'admin' || profile?.role === 'owner') && (
               <select value={filterAddedBy} onChange={(e) => setFilterAddedBy(e.target.value)} className="bg-zinc-950 border border-zinc-800 rounded-lg px-2 py-1 text-xs focus:border-emerald-500">
                 <option value="all">Added By: All</option>
                 {Object.entries(managers).map(([id, name]) => (
@@ -2081,7 +2081,7 @@ export default function ContentManagement() {
                     <button onClick={() => handleShare(content)} className="text-emerald-500 hover:text-emerald-400 p-1.5 transition-colors" title="Share to WhatsApp" disabled={loadingShareId === content.id}>
                       {loadingShareId === content.id ? <RefreshCw className="w-4 h-4 md:w-5 md:h-5 animate-spin" /> : <Share2 className="w-4 h-4 md:w-5 md:h-5" />}
                     </button>
-                    {profile?.role === 'admin' && (
+                    {(profile?.role === 'admin' || profile?.role === 'owner') && (
                       <button onClick={() => setNotificationModal({ isOpen: true, content, status: 'idle' })} className="text-blue-500 hover:text-blue-400 p-1.5 transition-colors" title="Send Notification">
                         <Bell className="w-4 h-4 md:w-5 md:h-5" />
                       </button>
@@ -2094,7 +2094,7 @@ export default function ContentManagement() {
                     <button onClick={() => handleEdit(content)} className="text-zinc-400 hover:text-white p-1.5 transition-colors">
                       <Edit2 className="w-4 h-4 md:w-5 md:h-5" />
                     </button>
-                    {profile?.role === 'admin' && (
+                    {(profile?.role === 'admin' || profile?.role === 'owner') && (
                       <button onClick={() => setDeleteId(content.id)} className="text-red-500 hover:text-red-400 p-1.5 transition-colors">
                         <Trash2 className="w-4 h-4 md:w-5 md:h-5" />
                       </button>
@@ -2149,7 +2149,7 @@ export default function ContentManagement() {
                       <div className="flex-1">
                         <label className="block text-xs font-medium text-zinc-500 mb-1">Status</label>
                         <div className="flex gap-2">
-                          {profile?.role === 'admin' && (
+                          {(profile?.role === 'admin' || profile?.role === 'owner') && (
                             <>
                               <label className={`flex-1 flex items-center justify-center gap-1 p-1.5 rounded-lg border cursor-pointer transition-colors text-xs ${status === 'published' ? 'bg-emerald-500/10 border-emerald-500 text-emerald-500' : 'bg-zinc-950 border-zinc-800 text-zinc-400'}`}>
                                 <input type="radio" name="status" value="published" checked={status === 'published'} onChange={() => setStatus('published')} className="hidden" />

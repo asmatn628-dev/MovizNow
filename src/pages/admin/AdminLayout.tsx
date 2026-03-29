@@ -77,19 +77,19 @@ export default function AdminLayout() {
              profile?.role === 'owner' ? 'MovizNow Owner' : 'MovizNow Admin'}
           </span>
         </h1>
-        {(profile?.role === 'user_manager' || profile?.role === 'content_manager' || profile?.role === 'manager' || profile?.role === 'owner') ? (
-          <button 
-            onClick={() => navigate('/')}
-            className="p-2 text-zinc-400 hover:text-white"
-          >
-            <X className="w-6 h-6" />
-          </button>
-        ) : (
+        {(profile?.role === 'admin' || profile?.role === 'owner') ? (
           <button 
             onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
             className="p-2 text-zinc-400 hover:text-white"
           >
             {isMobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
+          </button>
+        ) : (
+          <button 
+            onClick={() => navigate('/')}
+            className="p-2 text-zinc-400 hover:text-white"
+          >
+            <X className="w-6 h-6" />
           </button>
         )}
       </div>

@@ -61,7 +61,7 @@ export default function UserManagement() {
     let q = collection(db, 'users') as any;
     if (profile?.role === 'user_manager' || profile?.role === 'manager') {
       q = query(collection(db, 'users'), where('managedBy', '==', profile.uid));
-    } else if (profile?.role === 'admin' && managedByFilter) {
+    } else if ((profile?.role === 'admin' || profile?.role === 'owner') && managedByFilter) {
       q = query(collection(db, 'users'), where('managedBy', '==', managedByFilter));
     }
 
@@ -101,7 +101,7 @@ export default function UserManagement() {
   }, [profile, managedByFilter]);
 
   useEffect(() => {
-    if (profile?.role === 'admin') {
+    if (profile?.role === 'admin' || profile?.role === 'owner') {
       const q = query(collection(db, 'users'), where('isUserManager', '==', true));
       const unsub = onSnapshot(q, (snapshot) => {
         const managersData: Record<string, string> = {};
@@ -533,6 +533,8 @@ export default function UserManagement() {
     let result = [...users];
 
     // Filter
+    result = result.filter(u => u.role !== 'owner');
+    
     if (searchTerm) {
       const lower = searchTerm.toLowerCase();
       result = result.filter(u => 
@@ -728,7 +730,7 @@ export default function UserManagement() {
                 <option value="active">Set Active</option>
                 <option value="pending">Set Pending</option>
                 <option value="expired">Set Expired</option>
-                {profile?.role === 'admin' && (
+                {(profile?.role === 'admin' || profile?.role === 'owner') && (
                   <option value="suspended">Suspend</option>
                 )}
               </select>
@@ -743,7 +745,7 @@ export default function UserManagement() {
             <option value="user">User</option>
             <option value="trial">Trial</option>
             <option value="selected_content">Selected Content</option>
-            {profile?.role === 'admin' && (
+            {(profile?.role === 'admin' || profile?.role === 'owner') && (
               <>
                 <option value="temporary">Temporary</option>
                 <option value="content_manager">Content Manager</option>
@@ -752,9 +754,7 @@ export default function UserManagement() {
                 <option value="admin">Admin</option>
               </>
             )}
-            {profile?.role === 'owner' && (
-              <option value="owner">Owner</option>
-            )}
+            {/* Removed Owner option */}
           </select>
 
           <select
@@ -795,7 +795,7 @@ export default function UserManagement() {
                 <th className="px-4 md:px-6 py-4 cursor-pointer hover:text-white transition-colors" onClick={() => toggleSort('expiryDate')}>
                   Expiry Date <SortIcon field="expiryDate" />
                 </th>
-                {profile?.role === 'admin' && (
+                {(profile?.role === 'admin' || profile?.role === 'owner') && (
                   <th className="px-4 md:px-6 py-4">Managed By</th>
                 )}
                 <th className="px-4 md:px-6 py-4 cursor-pointer hover:text-white transition-colors" onClick={() => toggleSort('createdAt')}>
@@ -875,7 +875,7 @@ export default function UserManagement() {
                       {user.role === 'owner' ? 'Lifetime' : user.expiryDate ? format(new Date(user.expiryDate), 'MMM dd, yyyy') : '-'}
                     </span>
                   </td>
-                  {profile?.role === 'admin' && (
+                  {(profile?.role === 'admin' || profile?.role === 'owner') && (
                     <td className="px-4 md:px-6 py-4">
                       <span className="text-zinc-400 text-sm">
                         {user.managedBy ? managers[user.managedBy] || 'Unknown Manager' : '-'}
@@ -908,7 +908,7 @@ export default function UserManagement() {
                           >
                             <Edit2 className="w-5 h-5" />
                           </button>
-                          {profile?.role === 'admin' && (
+                          {(profile?.role === 'admin' || profile?.role === 'owner') && (
                             <button 
                               onClick={(e) => {
                                 e.stopPropagation();
@@ -987,7 +987,7 @@ export default function UserManagement() {
                         <option value="user">User</option>
                         <option value="trial">Trial</option>
                         <option value="selected_content">Selected Content</option>
-                        {profile?.role === 'admin' && (
+                        {(profile?.role === 'admin' || profile?.role === 'owner') && (
                           <>
                             <option value="temporary">Temporary</option>
                             <option value="content_manager">Content Manager</option>
@@ -996,14 +996,8 @@ export default function UserManagement() {
                             <option value="admin">Admin</option>
                           </>
                         )}
-                        {profile?.role === 'owner' && (
-                          <option value="owner">Owner</option>
-                        )}
                       </select>
                     </div>
-                    
-                    <ArrowRight className="w-4 h-4 text-zinc-600 shrink-0 mt-5" />
-                    
                     <div className="flex-1">
                       <label className="block text-[10px] font-bold text-zinc-500 uppercase mb-1">Status</label>
                       <select
@@ -1439,14 +1433,14 @@ export default function UserManagement() {
         <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4">
           <div className="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-md overflow-hidden flex flex-col max-h-[90vh]">
             <div className="p-4 md:p-6 border-b border-zinc-800 flex justify-between items-center shrink-0">
-              <h2 className="text-xl font-bold">{(profile?.role === 'user_manager' || profile?.role === 'manager') ? 'Search Pending User' : 'Add Pending User'}</h2>
+              <h2 className="text-xl font-bold">{(profile?.role === 'user_manager' || profile?.role === 'manager' || profile?.role === 'owner') ? 'Search Pending User' : 'Add Pending User'}</h2>
               <button onClick={() => { setIsAddUserModalOpen(false); setSearchedPendingUser(null); setSearchPendingQuery(''); setSearchPendingError(null); }} className="text-zinc-400 hover:text-white transition-colors">
                 <X className="w-6 h-6" />
               </button>
             </div>
             
             <div className="p-4 md:p-6 space-y-4 overflow-y-auto">
-              {(profile?.role === 'user_manager' || profile?.role === 'manager') && !searchedPendingUser && (
+              {(profile?.role === 'user_manager' || profile?.role === 'manager' || profile?.role === 'owner') && !searchedPendingUser && (
                 <div className="space-y-4">
                   <div>
                     <label className="block text-sm font-medium text-zinc-400 mb-1">Search by Email or WhatsApp</label>
@@ -1469,7 +1463,7 @@ export default function UserManagement() {
 
               {(!profile || (profile.role !== 'user_manager' && profile.role !== 'manager') || searchedPendingUser) && (
                 <>
-                  {(profile?.role === 'user_manager' || profile?.role === 'manager') && searchedPendingUser && (
+                  {(profile?.role === 'user_manager' || profile?.role === 'manager' || profile?.role === 'owner') && searchedPendingUser && (
                     <div className="bg-zinc-800/50 p-4 rounded-xl mb-4 flex items-center gap-4">
                       {searchedPendingUser.photoURL ? (
                         <img src={searchedPendingUser.photoURL} alt={searchedPendingUser.displayName} className="w-12 h-12 rounded-full object-cover" referrerPolicy="no-referrer" />
@@ -1518,7 +1512,7 @@ export default function UserManagement() {
                         <option value="user">User</option>
                         <option value="trial">Trial</option>
                         <option value="selected_content">Selected Content</option>
-                        {profile?.role === 'admin' && (
+                        {(profile?.role === 'admin' || profile?.role === 'owner') && (
                           <>
                             <option value="temporary">Temporary</option>
                             <option value="content_manager">Content Manager</option>
@@ -1526,9 +1520,6 @@ export default function UserManagement() {
                             <option value="manager">Manager</option>
                             <option value="admin">Admin</option>
                           </>
-                        )}
-                        {profile?.role === 'owner' && (
-                          <option value="owner">Owner</option>
                         )}
                       </select>
                     </div>
@@ -1553,7 +1544,7 @@ export default function UserManagement() {
               >
                 Cancel
               </button>
-              {(profile?.role === 'user_manager' || profile?.role === 'manager') && !searchedPendingUser ? (
+              {(profile?.role === 'user_manager' || profile?.role === 'manager' || profile?.role === 'owner') && !searchedPendingUser ? (
                 <button
                   onClick={handleSearchPendingUser}
                   className="flex-1 bg-emerald-500 hover:bg-emerald-600 text-white py-3 rounded-xl font-bold transition-colors flex items-center justify-center gap-2"
