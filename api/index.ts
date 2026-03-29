@@ -363,8 +363,8 @@ async function startServer() {
     const units = ["B", "KB", "MB", "GB", "TB"];
     let size = bytes;
     let unit = 0;
-    while (size >= 1024 && unit < units.length - 1) {
-      size /= 1024;
+    while (size >= 1000 && unit < units.length - 1) {
+      size /= 1000;
       unit++;
     }
     return `${size >= 100 ? size.toFixed(0) : size >= 10 ? size.toFixed(1) : size.toFixed(2)} ${units[unit]}`;

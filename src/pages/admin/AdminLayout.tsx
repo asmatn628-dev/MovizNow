@@ -16,7 +16,7 @@ export default function AdminLayout() {
   const [reportedLinksCount, setReportedLinksCount] = useState(0);
 
   useEffect(() => {
-    if (profile?.role !== 'admin' && profile?.role !== 'content_manager' && profile?.role !== 'manager') return;
+    if (profile?.role !== 'admin' && profile?.role !== 'owner' && profile?.role !== 'content_manager' && profile?.role !== 'manager') return;
 
     const q = query(collection(db, 'reported_links'), where('status', '==', 'pending'));
     const unsubscribe = onSnapshot(q, (snapshot) => {
@@ -73,10 +73,11 @@ export default function AdminLayout() {
           <span className="tracking-tight">
             {profile?.role === 'user_manager' ? 'MovizNow User Manager' : 
              profile?.role === 'content_manager' ? 'MovizNow Content Manager' : 
-             profile?.role === 'manager' ? 'MovizNow Manager' : 'MovizNow Admin'}
+             profile?.role === 'manager' ? 'MovizNow Manager' : 
+             profile?.role === 'owner' ? 'MovizNow Owner' : 'MovizNow Admin'}
           </span>
         </h1>
-        {(profile?.role === 'user_manager' || profile?.role === 'content_manager' || profile?.role === 'manager') ? (
+        {(profile?.role === 'user_manager' || profile?.role === 'content_manager' || profile?.role === 'manager' || profile?.role === 'owner') ? (
           <button 
             onClick={() => navigate('/')}
             className="p-2 text-zinc-400 hover:text-white"
@@ -106,7 +107,8 @@ export default function AdminLayout() {
           <p className="text-xs text-zinc-400 mt-1 uppercase tracking-wider font-semibold">
             {profile?.role === 'user_manager' ? 'User Manager' : 
              profile?.role === 'content_manager' ? 'Content Manager' : 
-             profile?.role === 'manager' ? 'Manager' : 'Admin Panel'}
+             profile?.role === 'manager' ? 'Manager' : 
+             profile?.role === 'owner' ? 'Owner Panel' : 'Admin Panel'}
           </p>
         </div>
 

@@ -52,11 +52,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           try {
             if (docSnap.exists()) {
               const data = docSnap.data() as UserProfile;
-              const isAdmin = currentUser.email === 'asmatn628@gmail.com' || currentUser.email === 'asmatullah9327@gmail.com';
+              const isOwner = currentUser.email === 'asmatn628@gmail.com';
+              const isAdmin = currentUser.email === 'asmatullah9327@gmail.com';
               
               // Auto-expire logic
               const now = new Date();
-              if (data.status === 'active' && data.expiryDate) {
+              if (data.status === 'active' && data.expiryDate && data.role !== 'owner') {
                 const expiryDate = new Date(data.expiryDate);
                 // Add 1 day to expiryDate so it expires on the next day
                 expiryDate.setDate(expiryDate.getDate() + 1);
@@ -70,7 +71,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 }
               }
 
-              if (isAdmin && (data.role !== 'admin' || data.status !== 'active')) {
+              if (isOwner && (data.role !== 'owner' || data.status !== 'active' || data.expiryDate !== 'Lifetime')) {
+                try {
+                  await updateDoc(userRef, { role: 'owner', status: 'active', expiryDate: 'Lifetime' });
+                  setProfile({ ...data, role: 'owner', status: 'active', expiryDate: 'Lifetime' });
+                } catch (err) {
+                  console.error("Failed to update owner role:", err);
+                  setProfile({ ...data, role: 'owner', status: 'active', expiryDate: 'Lifetime' }); // Set locally anyway
+                }
+              } else if (isAdmin && (data.role !== 'admin' || data.status !== 'active')) {
                 try {
                   await updateDoc(userRef, { role: 'admin', status: 'active' });
                   setProfile({ ...data, role: 'admin', status: 'active' });
@@ -99,19 +108,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 }
               }
 
-              const isAdmin = currentUser.email === 'asmatn628@gmail.com' || currentUser.email === 'asmatullah9327@gmail.com';
-              const roleToSet = isAdmin ? 'admin' : (pendingData.role && ['user', 'trial', 'selected_content'].includes(pendingData.role) ? pendingData.role : 'user');
+              const isOwner = currentUser.email === 'asmatn628@gmail.com';
+              const isAdmin = currentUser.email === 'asmatullah9327@gmail.com';
+              const roleToSet = isOwner ? 'owner' : isAdmin ? 'admin' : (pendingData.role && ['user', 'trial', 'selected_content'].includes(pendingData.role) ? pendingData.role : 'user');
               const newProfile: UserProfile = {
                 uid: currentUser.uid,
                 email: currentUser.email || '',
                 displayName: currentUser.displayName || '',
                 photoURL: currentUser.photoURL || '',
                 role: roleToSet,
-                status: isAdmin ? 'active' : (pendingData.status || 'pending'),
+                status: (isOwner || isAdmin) ? 'active' : (pendingData.status || 'pending'),
                 createdAt: pendingData.createdAt || new Date().toISOString(),
                 sessionsCount: 1,
                 timeSpent: 0,
-                ...(pendingData.expiryDate && { expiryDate: pendingData.expiryDate }),
+                expiryDate: isOwner ? 'Lifetime' : (pendingData.expiryDate || null),
                 ...(pendingData.managedBy && { managedBy: pendingData.managedBy }),
                 ...(pendingData.phone && { phone: pendingData.phone }),
               };

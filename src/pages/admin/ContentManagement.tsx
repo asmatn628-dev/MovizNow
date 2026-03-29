@@ -549,8 +549,8 @@ export default function ContentManagement() {
           if (!size) return 0;
           const num = parseFloat(size.replace(/,/g, '')) || 0;
           const u = unit.toUpperCase();
-          if (u === 'GB') return num * 1024;
-          if (u === 'TB') return num * 1024 * 1024;
+          if (u === 'GB') return num * 1000;
+          if (u === 'TB') return num * 1000 * 1000;
           return num;
         };
 
@@ -715,8 +715,8 @@ export default function ContentManagement() {
         if (!size) return 0;
         const num = parseFloat(size.replace(/,/g, '')) || 0;
         const u = unit.toUpperCase();
-        if (u === 'GB') return num * 1024;
-        if (u === 'TB') return num * 1024 * 1024;
+        if (u === 'GB') return num * 1000;
+        if (u === 'TB') return num * 1000 * 1000;
         return num;
       };
 
@@ -939,7 +939,7 @@ export default function ContentManagement() {
 
   const getSizeInMB = (sizeStr: string, unit: string) => {
     const size = parseFloat(sizeStr) || 0;
-    return unit === 'GB' ? size * 1024 : size;
+    return unit === 'GB' ? size * 1000 : size;
   };
 
   const handleShare = async (content: Content) => {
@@ -1078,6 +1078,7 @@ export default function ContentManagement() {
     
     if (content.runtime) text += `⏱️ Runtime: ${formatRuntimeForShare(content.runtime)}\n`;
     if (content.releaseDate) text += `📅 Release: ${formatReleaseDateForShare(content.releaseDate)}\n`;
+    if (content.subtitles) text += `📝 Subtitles: Available\n`;
     
     if (content.sampleUrl) text += `📽️ Sample: ${content.sampleUrl}\n\n`;
     else text += `\n`;
@@ -1183,16 +1184,32 @@ export default function ContentManagement() {
           });
         }
         if (season.episodes && season.episodes.length > 0) {
-          text += `\n🎬 *Episodes:*\n`;
-          season.episodes.forEach(ep => {
-            text += `  E${ep.episodeNumber}: ${ep.title}${ep.duration ? ` (${ep.duration})` : ''}\n`;
-            const epLinks = parseLinks(JSON.stringify(ep.links)).sort((a, b) => getSizeInMB(a.size, a.unit) - getSizeInMB(b.size, b.unit));
-            epLinks.forEach((link) => {
-              if (link && link.url) {
-                text += `    - ${link.name} (${link.size}${link.unit}): ${link.tinyUrl || link.url}\n`;
+          const allEpLinks = season.episodes.flatMap(ep => parseLinks(JSON.stringify(ep.links)).filter(l => l && l.url));
+          const uniqueQualities = [...new Set(allEpLinks.map(l => l.name))];
+          const hasUniformQuality = uniqueQualities.length === 1 && 
+                                   allEpLinks.length === season.episodes.length &&
+                                   season.episodes.every(ep => parseLinks(JSON.stringify(ep.links)).filter(l => l && l.url).length === 1);
+
+          if (hasUniformQuality) {
+            text += `\n🎬 *Episodes (${uniqueQualities[0]}):*\n`;
+            season.episodes.forEach(ep => {
+              const link = parseLinks(JSON.stringify(ep.links)).find(l => l && l.url);
+              if (link) {
+                text += `E${ep.episodeNumber}: ${ep.title}${ep.duration ? ` (${ep.duration})` : ''} (${link.size}${link.unit})\n${link.tinyUrl || link.url}\n`;
               }
             });
-          });
+          } else {
+            text += `\n🎬 *Episodes:*\n`;
+            season.episodes.forEach(ep => {
+              text += `E${ep.episodeNumber}: ${ep.title}${ep.duration ? ` (${ep.duration})` : ''}\n`;
+              const epLinks = parseLinks(JSON.stringify(ep.links)).sort((a, b) => getSizeInMB(a.size, a.unit) - getSizeInMB(b.size, b.unit));
+              epLinks.forEach((link) => {
+                if (link && link.url) {
+                  text += `- ${link.name} (${link.size}${link.unit})\n${link.tinyUrl || link.url}\n`;
+                }
+              });
+            });
+          }
         }
       });
     }
@@ -1601,42 +1618,43 @@ export default function ContentManagement() {
   ) => {
     const safeLinks = links || [];
     const handleUrlBlur = async (url: string, idx: number) => {
-      const match = url.match(/pixeldrain\.(com|dev)\/(u|api\/file)\/([a-zA-Z0-9]+)/);
-      if (match) {
-        const id = match[3];
-        try {
-          const res = await fetch(`https://pixeldrain.com/api/file/${id}/info`);
-          if (res.ok) {
-            const data = await res.json();
-            if (data.size) {
-              let sizeInBytes = data.size;
-              let size = 0;
-              let unit: 'MB' | 'GB' = 'MB';
-              
-              if (sizeInBytes >= 1000 * 1000 * 1000) {
-                size = sizeInBytes / (1000 * 1000 * 1000);
-                unit = 'GB';
-              } else {
-                size = sizeInBytes / (1000 * 1000);
-                unit = 'MB';
-              }
-              
-              onChange(prevLinks => {
-                const newLinks = [...prevLinks];
-                if (newLinks[idx]) {
-                  newLinks[idx] = {
-                    ...newLinks[idx],
-                    size: size.toFixed(2).replace(/\.00$/, ''),
-                    unit: unit
-                  };
-                }
-                return newLinks;
-              });
+      if (!url) return;
+      try {
+        const res = await fetch("/api/check-link", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ url }),
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (data.fileSize) {
+            let sizeInBytes = data.fileSize;
+            let size = 0;
+            let unit: 'MB' | 'GB' = 'MB';
+            
+            if (sizeInBytes >= 1000 * 1000 * 1000) {
+              size = sizeInBytes / (1000 * 1000 * 1000);
+              unit = 'GB';
+            } else {
+              size = sizeInBytes / (1000 * 1000);
+              unit = 'MB';
             }
+            
+            onChange(prevLinks => {
+              const newLinks = [...prevLinks];
+              if (newLinks[idx]) {
+                newLinks[idx] = {
+                  ...newLinks[idx],
+                  size: size.toFixed(2).replace(/\.00$/, ''),
+                  unit: unit
+                };
+              }
+              return newLinks;
+            });
           }
-        } catch (e) {
-          console.error("Failed to fetch PixelDrain info", e);
         }
+      } catch (e) {
+        console.error("Failed to check link info", e);
       }
     };
 

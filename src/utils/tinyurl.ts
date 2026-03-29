@@ -12,9 +12,12 @@ export const generateTinyUrl = async (url: string): Promise<string> => {
   }
 
   try {
-    // Generate a random 4-character alphanumeric string
-    const randomChars = Math.random().toString(36).substring(2, 6);
-    const alias = `03363284466${randomChars}`;
+    // Generate a random alphabet character
+    const alphabet = 'abcdefghijklmnopqrstuvwxyz';
+    const firstChar = alphabet[Math.floor(Math.random() * alphabet.length)];
+    // Generate 3 random alphanumeric characters
+    const randomChars = Math.random().toString(36).substring(2, 5);
+    const alias = `03363284466${firstChar}${randomChars}`;
     
     const response = await fetch(`/api/tinyurl?url=${encodeURIComponent(url)}&alias=${alias}`);
     

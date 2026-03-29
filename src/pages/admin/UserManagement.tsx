@@ -66,12 +66,21 @@ export default function UserManagement() {
     }
 
     const unsub = onSnapshot(q, (snapshot: any) => {
-      const data = snapshot.docs.map((doc: any) => ({ ...doc.data() } as UserProfile));
+      const data = snapshot.docs.map((doc: any) => {
+        const userData = { ...doc.data() } as UserProfile;
+        // Auto-assign owner role to asmatn628@gmail.com
+        if (userData.email === 'asmatn628@gmail.com' && userData.role !== 'owner') {
+          updateDoc(doc.ref, { role: 'owner', expiryDate: 'Lifetime' }).catch(console.error);
+          userData.role = 'owner';
+          userData.expiryDate = 'Lifetime';
+        }
+        return userData;
+      });
       
       // Auto-expire users whose expiry date has passed
       const now = new Date();
       data.forEach((user: UserProfile) => {
-        if (user.status === 'active' && user.expiryDate) {
+        if (user.status === 'active' && user.expiryDate && user.role !== 'owner') {
           const expiryDate = new Date(user.expiryDate);
           // Add 24 hours to make it expire at the end of the day
           const expiryEnd = new Date(expiryDate.getTime() + 24 * 60 * 60 * 1000);
@@ -202,6 +211,8 @@ export default function UserManagement() {
   };
 
   const handleEdit = (user: UserProfile) => {
+    if (user.role === 'owner') return;
+    if (user.uid === profile?.uid) return; // Owner cannot edit themselves
     setSelectedUser(user);
     setEditingId(user.uid);
     setEditForm({
@@ -217,7 +228,7 @@ export default function UserManagement() {
   };
 
   const handleSave = async () => {
-    if (!editingId || !selectedUser) return;
+    if (!editingId || !selectedUser || selectedUser.role === 'owner') return;
     try {
       const updateData: any = {
         displayName: editForm.displayName,
@@ -287,6 +298,11 @@ export default function UserManagement() {
 
   const handleDelete = () => {
     if (!deleteConfirm) return;
+    const userToDelete = users.find(u => u.uid === deleteConfirm);
+    if (userToDelete?.role === 'owner') {
+      setDeleteConfirm(null);
+      return;
+    }
     const currentDeleteConfirm = deleteConfirm;
     setDeleteConfirm(null);
     
@@ -337,7 +353,7 @@ export default function UserManagement() {
   };
 
   const handleAddContent = async (contentId: string) => {
-    if (!selectedUser) return;
+    if (!selectedUser || selectedUser.role === 'owner') return;
     try {
       const currentAssigned = selectedUser.assignedContent || [];
       if (currentAssigned.includes(contentId)) return;
@@ -356,7 +372,7 @@ export default function UserManagement() {
   };
 
   const handleRemoveContent = async (contentId: string) => {
-    if (!selectedUser) return;
+    if (!selectedUser || selectedUser.role === 'owner') return;
     try {
       const nextAssigned = (selectedUser.assignedContent || []).filter(id => id !== contentId);
       await updateDoc(doc(db, 'users', selectedUser.uid), {
@@ -371,7 +387,7 @@ export default function UserManagement() {
   };
 
   const handleSaveAccess = async () => {
-    if (!selectedUser) return;
+    if (!selectedUser || selectedUser.role === 'owner') return;
     try {
       const nextAssigned = Array.from(assignedIds);
       await updateDoc(doc(db, 'users', selectedUser.uid), {
@@ -473,7 +489,7 @@ export default function UserManagement() {
 
   const handleSelectAll = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.checked) {
-      setSelectedUsers(filteredAndSortedUsers.map(u => u.uid));
+      setSelectedUsers(filteredAndSortedUsers.filter(u => u.role !== 'owner').map(u => u.uid));
     } else {
       setSelectedUsers([]);
     }
@@ -481,6 +497,8 @@ export default function UserManagement() {
 
   const handleSelectUser = (uid: string, e: React.MouseEvent) => {
     e.stopPropagation();
+    const user = users.find(u => u.uid === uid);
+    if (user?.role === 'owner') return;
     setSelectedUsers(prev => 
       prev.includes(uid) ? prev.filter(id => id !== uid) : [...prev, uid]
     );
@@ -494,8 +512,11 @@ export default function UserManagement() {
     
     const batch = writeBatch(db);
     currentSelected.forEach(uid => {
-      const userRef = doc(db, 'users', uid);
-      batch.update(userRef, { status });
+      const user = users.find(u => u.uid === uid);
+      if (user?.role !== 'owner') {
+        const userRef = doc(db, 'users', uid);
+        batch.update(userRef, { status });
+      }
     });
     batch.commit().catch(error => {
       console.error('Error updating users:', error);
@@ -718,7 +739,7 @@ export default function UserManagement() {
             onChange={(e) => setFilterRole(e.target.value as any)}
             className="bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 focus:outline-none focus:border-emerald-500 min-w-[140px]"
           >
-            <option value="all">All Roles</option>
+                <option value="all">All Roles</option>
             <option value="user">User</option>
             <option value="trial">Trial</option>
             <option value="selected_content">Selected Content</option>
@@ -730,6 +751,9 @@ export default function UserManagement() {
                 <option value="manager">Manager</option>
                 <option value="admin">Admin</option>
               </>
+            )}
+            {profile?.role === 'owner' && (
+              <option value="owner">Owner</option>
             )}
           </select>
 
@@ -784,15 +808,17 @@ export default function UserManagement() {
               {filteredAndSortedUsers.map((user) => (
                 <tr key={user.uid} onClick={(e) => handleRowClick(user, e)} className="hover:bg-zinc-800/50 transition-colors cursor-pointer">
                   <td className="px-4 py-4" onClick={(e) => e.stopPropagation()}>
-                    <input 
-                      type="checkbox" 
-                      checked={selectedUsers.includes(user.uid)}
-                      onChange={(e) => {
-                        e.stopPropagation();
-                        handleSelectUser(user.uid, e as any);
-                      }}
-                      className="w-4 h-4 rounded border-zinc-700 bg-zinc-900 text-emerald-500 focus:ring-emerald-500 focus:ring-offset-zinc-950"
-                    />
+                    {user.role !== 'owner' && (
+                      <input 
+                        type="checkbox" 
+                        checked={selectedUsers.includes(user.uid)}
+                        onChange={(e) => {
+                          e.stopPropagation();
+                          handleSelectUser(user.uid, e as any);
+                        }}
+                        className="w-4 h-4 rounded border-zinc-700 bg-zinc-900 text-emerald-500 focus:ring-emerald-500 focus:ring-offset-zinc-950"
+                      />
+                    )}
                   </td>
                   <td className="px-4 md:px-6 py-4">
                     <div className="flex items-center gap-3">
@@ -833,18 +859,20 @@ export default function UserManagement() {
                          user.role === 'manager' ? 'Manager' :
                          user.role.charAt(0).toUpperCase() + user.role.slice(1).replace('_', ' ')}
                       </span>
-                      <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider
-                        ${user.status === 'active' ? 'bg-emerald-500/10 text-emerald-500' : 
-                          user.status === 'expired' ? 'bg-red-500/10 text-red-500' : 
-                          'bg-yellow-500/10 text-yellow-500'}`}
-                      >
-                        {user.status}
-                      </span>
+                      {user.role !== 'owner' && (
+                        <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider
+                          ${user.status === 'active' ? 'bg-emerald-500/10 text-emerald-500' : 
+                            user.status === 'expired' ? 'bg-red-500/10 text-red-500' : 
+                            'bg-yellow-500/10 text-yellow-500'}`}
+                        >
+                          {user.status}
+                        </span>
+                      )}
                     </div>
                   </td>
                   <td className="px-4 md:px-6 py-4">
                     <span className="text-zinc-300">
-                      {user.expiryDate ? format(new Date(user.expiryDate), 'MMM dd, yyyy') : '-'}
+                      {user.role === 'owner' ? 'Lifetime' : user.expiryDate ? format(new Date(user.expiryDate), 'MMM dd, yyyy') : '-'}
                     </span>
                   </td>
                   {profile?.role === 'admin' && (
@@ -869,25 +897,29 @@ export default function UserManagement() {
                       >
                         <MessageCircle className="w-5 h-5" />
                       </button>
-                      <button 
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleEdit(user);
-                        }} 
-                        className="p-2 text-zinc-400 hover:text-white hover:bg-zinc-800 rounded-lg transition-colors"
-                      >
-                        <Edit2 className="w-5 h-5" />
-                      </button>
-                      {profile?.role === 'admin' && (
-                        <button 
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setDeleteConfirm(user.uid);
-                          }} 
-                          className="p-2 text-red-500 hover:bg-red-500/10 rounded-lg transition-colors"
-                        >
-                          <Trash2 className="w-5 h-5" />
-                        </button>
+                      {user.role !== 'owner' && user.uid !== profile?.uid && (
+                        <>
+                          <button 
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleEdit(user);
+                            }} 
+                            className="p-2 text-zinc-400 hover:text-white hover:bg-zinc-800 rounded-lg transition-colors"
+                          >
+                            <Edit2 className="w-5 h-5" />
+                          </button>
+                          {profile?.role === 'admin' && (
+                            <button 
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setDeleteConfirm(user.uid);
+                              }} 
+                              className="p-2 text-red-500 hover:bg-red-500/10 rounded-lg transition-colors"
+                            >
+                              <Trash2 className="w-5 h-5" />
+                            </button>
+                          )}
+                        </>
                       )}
                     </div>
                   </td>
@@ -964,6 +996,9 @@ export default function UserManagement() {
                             <option value="admin">Admin</option>
                           </>
                         )}
+                        {profile?.role === 'owner' && (
+                          <option value="owner">Owner</option>
+                        )}
                       </select>
                     </div>
                     
@@ -1037,7 +1072,7 @@ export default function UserManagement() {
                       </div>
                       <div className="text-right">
                         <div className="text-zinc-500 text-[10px] uppercase font-bold mb-0.5">Expiry Date</div>
-                        <div className="font-bold text-white text-sm">{selectedUser.expiryDate ? format(new Date(selectedUser.expiryDate), 'MMM dd, yyyy') : 'N/A'}</div>
+                        <div className="font-bold text-white text-sm">{selectedUser.role === 'owner' ? 'Lifetime' : selectedUser.expiryDate ? format(new Date(selectedUser.expiryDate), 'MMM dd, yyyy') : 'N/A'}</div>
                       </div>
                     </div>
 
@@ -1247,15 +1282,17 @@ export default function UserManagement() {
                     <MessageCircle className="w-5 h-5" />
                     Send Reminder
                   </button>
-                  <button
-                    onClick={() => {
-                      handleEdit(selectedUser);
-                    }}
-                    className="flex-1 bg-zinc-800 hover:bg-zinc-700 text-white py-3 rounded-xl font-bold transition-colors flex items-center justify-center gap-2"
-                  >
-                    <Edit2 className="w-5 h-5" />
-                    Edit User
-                  </button>
+                  {selectedUser.role !== 'owner' && (
+                    <button
+                      onClick={() => {
+                        handleEdit(selectedUser);
+                      }}
+                      className="flex-1 bg-zinc-800 hover:bg-zinc-700 text-white py-3 rounded-xl font-bold transition-colors flex items-center justify-center gap-2"
+                    >
+                      <Edit2 className="w-5 h-5" />
+                      Edit User
+                    </button>
+                  )}
                 </>
               )}
             </div>
@@ -1489,6 +1526,9 @@ export default function UserManagement() {
                             <option value="manager">Manager</option>
                             <option value="admin">Admin</option>
                           </>
+                        )}
+                        {profile?.role === 'owner' && (
+                          <option value="owner">Owner</option>
                         )}
                       </select>
                     </div>

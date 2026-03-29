@@ -25,8 +25,8 @@ export function ProtectedRoute({ children, requireAdmin = false }: ProtectedRout
     if (loading || !profile) {
       return <div className="min-h-screen bg-zinc-950" />;
     }
-    if (profile.role !== 'admin' && profile.role !== 'content_manager' && profile.role !== 'user_manager' && profile.role !== 'manager') {
-      console.log('ProtectedRoute: Admin required but user is not admin/manager, redirecting to home');
+    if (profile.role !== 'admin' && profile.role !== 'content_manager' && profile.role !== 'user_manager' && profile.role !== 'manager' && profile.role !== 'owner') {
+      console.log('ProtectedRoute: Admin required but user is not admin/manager/owner, redirecting to home');
       return <Navigate to="/" replace />;
     }
   }

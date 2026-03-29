@@ -4,6 +4,7 @@ import { collection, onSnapshot, doc, updateDoc, deleteDoc, getDoc, addDoc } fro
 import { AlertTriangle, Edit2, Trash2, Bell, CheckCircle2, X, Save } from 'lucide-react';
 import { handleFirestoreError, OperationType } from '../../utils/firestoreErrorHandler';
 import { Content, QualityLinks, Season } from '../../types';
+import { LinkCheckerModal } from '../../components/LinkCheckerModal';
 
 interface ReportedLink {
   id: string;
@@ -28,6 +29,7 @@ export default function ReportedLinks() {
   const [editUnit, setEditUnit] = useState<'MB' | 'GB'>('MB');
   const [editName, setEditName] = useState('');
   const [saving, setSaving] = useState(false);
+  const [isLinkCheckerModalOpen, setIsLinkCheckerModalOpen] = useState(false);
 
   useEffect(() => {
     const unsub = onSnapshot(collection(db, 'reported_links'), (snapshot) => {
@@ -73,16 +75,18 @@ export default function ReportedLinks() {
         status: 'resolved'
       });
       
-      // Add a notification to the user's notifications collection
-      await addDoc(collection(db, 'notifications'), {
-        title: 'Reported Link Fixed',
-        body: `The link "${report.linkName}" for ${report.contentTitle} has been fixed and is now working.`,
-        contentId: report.contentId,
-        type: report.contentType,
-        createdAt: new Date().toISOString(),
-        createdBy: 'system',
-        targetUserId: report.userId
-      });
+      if (report.userId) {
+        // Add a notification to the user's notifications collection
+        await addDoc(collection(db, 'notifications'), {
+          title: 'Reported Link Fixed',
+          body: `The link "${report.linkName}" for ${report.contentTitle} has been fixed and is now working.`,
+          contentId: report.contentId,
+          type: report.contentType,
+          createdAt: new Date().toISOString(),
+          createdBy: 'system',
+          targetUserId: report.userId
+        });
+      }
       
       setNotified(report.id);
       setTimeout(() => setNotified(null), 3000); // Reset after 3 seconds
@@ -154,6 +158,38 @@ export default function ReportedLinks() {
     } catch (error) {
       console.error("Error fetching content for edit:", error);
       alert("Failed to fetch content details");
+    }
+  };
+
+  const handleUrlBlur = async (url: string) => {
+    if (!url) return;
+    try {
+      const res = await fetch("/api/check-link", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.fileSize) {
+          let sizeInBytes = data.fileSize;
+          let size = 0;
+          let unit: 'MB' | 'GB' = 'MB';
+          
+          if (sizeInBytes >= 1000 * 1000 * 1000) {
+            size = sizeInBytes / (1000 * 1000 * 1000);
+            unit = 'GB';
+          } else {
+            size = sizeInBytes / (1000 * 1000);
+            unit = 'MB';
+          }
+          
+          setEditSize(size.toFixed(2).replace(/\.00$/, ''));
+          setEditUnit(unit);
+        }
+      }
+    } catch (e) {
+      console.error("Failed to check link info", e);
     }
   };
 
@@ -381,12 +417,21 @@ export default function ReportedLinks() {
 
               <div>
                 <label className="block text-sm font-medium text-zinc-400 mb-1">URL</label>
-                <input
-                  type="url"
-                  value={editUrl}
-                  onChange={(e) => setEditUrl(e.target.value)}
-                  className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
-                />
+                <div className="flex gap-2">
+                  <input
+                    type="url"
+                    value={editUrl}
+                    onChange={(e) => setEditUrl(e.target.value)}
+                    onBlur={(e) => handleUrlBlur(e.target.value)}
+                    className="flex-1 bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
+                  />
+                  <button
+                    onClick={() => setIsLinkCheckerModalOpen(true)}
+                    className="bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500/20 px-4 py-3 rounded-xl font-medium transition-colors whitespace-nowrap"
+                  >
+                    Check Link
+                  </button>
+                </div>
               </div>
 
               <div className="grid grid-cols-2 gap-4">
@@ -438,6 +483,21 @@ export default function ReportedLinks() {
           </div>
         </div>
       )}
+
+      <LinkCheckerModal 
+        isOpen={isLinkCheckerModalOpen} 
+        onClose={() => setIsLinkCheckerModalOpen(false)} 
+        initialInput={editUrl}
+        autoStart={!!editUrl}
+        onAddLinks={(links) => {
+          if (links.length > 0) {
+            setEditUrl(links[0].url);
+            if (links[0].size) setEditSize(links[0].size.toString());
+            if (links[0].unit) setEditUnit(links[0].unit as 'MB' | 'GB');
+          }
+          setIsLinkCheckerModalOpen(false);
+        }}
+      />
     </div>
   );
 }

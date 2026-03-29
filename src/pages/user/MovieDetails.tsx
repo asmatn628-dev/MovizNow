@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useMemo } from 'react';
 import { useParams, Link, useNavigate, useLocation } from 'react-router-dom';
 import { Helmet } from 'react-helmet-async';
 import { db } from '../../firebase';
-import { doc, updateDoc, arrayUnion, arrayRemove, deleteDoc, addDoc, collection, serverTimestamp } from 'firebase/firestore';
+import { doc, updateDoc, arrayUnion, arrayRemove, deleteDoc, addDoc, collection, serverTimestamp, query, where, getDocs } from 'firebase/firestore';
 import { Content, QualityLinks, Season } from '../../types';
 import { useAuth } from '../../contexts/AuthContext';
 import { useContent } from '../../contexts/ContentContext';
@@ -34,6 +34,7 @@ export default function MovieDetails() {
   const [isMediaModalOpen, setIsMediaModalOpen] = useState(false);
   const [expandedEpisodes, setExpandedEpisodes] = useState<Record<string, boolean>>({});
   const [cachedMetadata, setCachedMetadata] = useState<Partial<Content>>({});
+  const [isReporting, setIsReporting] = useState(false);
   const [imdbData, setImdbData] = useState<any>(null);
   const [fetchingImdb, setFetchingImdb] = useState(false);
   const hasLoggedView = useRef(false);
@@ -579,7 +580,28 @@ export default function MovieDetails() {
 
   const handleReportLink = async () => {
     if (!profile || !linkPopup || !content) return;
+    
+    setIsReporting(true);
     try {
+      // Check if already reported by this user
+      const q = query(
+        collection(db, 'reported_links'),
+        where('userId', '==', profile.uid),
+        where('linkId', '==', linkPopup.id),
+        where('status', '==', 'pending')
+      );
+      const snapshot = await getDocs(q);
+      
+      if (!snapshot.empty) {
+        setAlertConfig({ 
+          isOpen: true, 
+          title: 'Already Reported', 
+          message: 'You have already reported this link. We are working on it!' 
+        });
+        setIsReporting(false);
+        return;
+      }
+
       await addDoc(collection(db, 'reported_links'), {
         userId: profile.uid,
         userName: profile.displayName || profile.email || 'Unknown User',
@@ -597,6 +619,8 @@ export default function MovieDetails() {
     } catch (error) {
       console.error("Error reporting link:", error);
       setAlertConfig({ isOpen: true, title: 'Error', message: 'Failed to submit report. Please try again later.' });
+    } finally {
+      setIsReporting(false);
     }
   };
 
@@ -645,13 +669,13 @@ export default function MovieDetails() {
 
     const getBytes = (size: string, unit: string) => {
       const val = parseFloat(size) || 0;
-      return unit === 'GB' ? val * 1024 : val;
+      return unit === 'GB' ? val * 1000 : val;
     };
 
     const sortedLinks = [...validLinks].sort((a, b) => getBytes(a.size, a.unit) - getBytes(b.size, b.unit));
 
     return (
-      <div className="flex flex-wrap gap-3">
+      <div className="flex flex-wrap gap-3 justify-center">
         {sortedLinks.map((link) => {
           const fullName = contextName ? `${contextName} - ${link.name}` : link.name;
           return (
@@ -1173,7 +1197,7 @@ export default function MovieDetails() {
                                               )}
                                             </div>
                                             
-                                            <div className="flex justify-end">
+                                            <div className="flex justify-center">
                                               {renderLinks(ep.links, false, `S${season.seasonNumber} E${ep.episodeNumber}`)}
                                             </div>
                                           </div>
@@ -1269,9 +1293,15 @@ export default function MovieDetails() {
 
               <button
                 onClick={handleReportLink}
-                className="w-full bg-red-600/20 hover:bg-red-600/30 text-red-500 font-bold py-3 px-4 rounded-xl transition-colors flex items-center justify-center gap-2 border border-red-500/30"
+                disabled={isReporting}
+                className="w-full bg-red-600/20 hover:bg-red-600/30 text-red-500 font-bold py-3 px-4 rounded-xl transition-colors flex items-center justify-center gap-2 border border-red-500/30 disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                <AlertTriangle className="w-5 h-5" /> Report Link (if not Working)
+                {isReporting ? (
+                  <Loader2 className="w-5 h-5 animate-spin" />
+                ) : (
+                  <AlertTriangle className="w-5 h-5" />
+                )}
+                Report Link (if not Working)
               </button>
 
               <button

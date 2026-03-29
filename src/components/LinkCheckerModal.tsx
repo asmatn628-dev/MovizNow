@@ -174,19 +174,130 @@ function detectMetadataForLink(text: string, url: string, languages?: Language[]
     if (/dual audio/i.test(lower)) return "Dual Audio";
     const foundLangs = [] as string[];
     
+    const langShortCodes: Record<string, string[]> = {
+      'Hindi': ['hin', 'hi'],
+      'English': ['eng', 'en'],
+      'Punjabi': ['pun', 'pa'],
+      'Tamil': ['tam', 'ta'],
+      'Telugu': ['tel', 'te'],
+      'Urdu': ['urd', 'ur'],
+      'Marathi': ['mar', 'mr'],
+      'Bengali': ['ben', 'bn'],
+      'Gujarati': ['guj', 'gu'],
+      'Kannada': ['kan', 'kn'],
+      'Malayalam': ['mal', 'ml'],
+      'Odia': ['odi', 'or'],
+      'Assamese': ['asm', 'as'],
+      'Spanish': ['spa', 'es'],
+      'French': ['fre', 'fra', 'fr'],
+      'German': ['ger', 'deu', 'de'],
+      'Italian': ['ita', 'it'],
+      'Japanese': ['jpn', 'ja'],
+      'Korean': ['kor', 'ko'],
+      'Chinese': ['chi', 'zho', 'zh'],
+      'Arabic': ['ara', 'ar'],
+      'Russian': ['rus', 'ru'],
+      'Portuguese': ['por', 'pt'],
+      'Dutch': ['dut', 'nld', 'nl'],
+      'Turkish': ['tur', 'tr'],
+      'Vietnamese': ['vie', 'vi'],
+      'Thai': ['tha', 'th'],
+      'Indonesian': ['ind', 'id'],
+      'Malay': ['may', 'msa', 'ms'],
+      'Filipino': ['fil', 'tl'],
+      'Persian': ['per', 'fas', 'fa'],
+      'Polish': ['pol', 'pl'],
+      'Ukrainian': ['ukr', 'uk'],
+      'Greek': ['gre', 'ell', 'el'],
+      'Hebrew': ['heb', 'he'],
+      'Swedish': ['swe', 'sv'],
+      'Danish': ['dan', 'da'],
+      'Norwegian': ['nor', 'no'],
+      'Finnish': ['fin', 'fi'],
+      'Czech': ['cze', 'ces', 'cs'],
+      'Hungarian': ['hun', 'hu'],
+      'Romanian': ['rum', 'ron', 'ro'],
+      'Bulgarian': ['bul', 'bg'],
+      'Serbian': ['srp', 'sr'],
+      'Croatian': ['hrv', 'hr'],
+      'Slovak': ['slo', 'slk', 'sk'],
+      'Slovenian': ['slv', 'sl'],
+      'Lithuanian': ['lit', 'lt'],
+      'Latvian': ['lav', 'lv'],
+      'Estonian': ['est', 'et'],
+      'Icelandic': ['ice', 'isl', 'is'],
+      'Irish': ['gle', 'ga'],
+      'Welsh': ['wel', 'cym', 'cy'],
+      'Scottish Gaelic': ['gla', 'gd'],
+      'Basque': ['baq', 'eus', 'eu'],
+      'Catalan': ['cat', 'ca'],
+      'Galician': ['glg', 'gl'],
+      'Afrikaans': ['afr', 'af'],
+      'Swahili': ['swa', 'sw'],
+      'Zulu': ['zul', 'zu'],
+      'Xhosa': ['xho', 'xh'],
+      'Amharic': ['amh', 'am'],
+      'Somali': ['som', 'so'],
+      'Yoruba': ['yor', 'yo'],
+      'Igbo': ['ibo', 'ig'],
+      'Hausa': ['hau', 'ha'],
+      'Nepali': ['nep', 'ne'],
+      'Sinhala': ['sin', 'si'],
+      'Burmese': ['bur', 'mya', 'my'],
+      'Khmer': ['khm', 'km'],
+      'Lao': ['lao', 'lo'],
+      'Tibetan': ['tib', 'bod', 'bo'],
+      'Mongolian': ['mon', 'mn'],
+      'Uzbek': ['uzb', 'uz'],
+      'Kazakh': ['kaz', 'kk'],
+      'Kyrgyz': ['kir', 'ky'],
+      'Tajik': ['tgk', 'tg'],
+      'Turkmen': ['tuk', 'tk'],
+      'Azerbaijani': ['aze', 'az'],
+      'Armenian': ['arm', 'hye', 'hy'],
+      'Georgian': ['geo', 'kat', 'ka'],
+      'Pashto': ['pus', 'ps'],
+      'Kurdish': ['kur', 'ku'],
+      'Sindhi': ['snd', 'sd'],
+      'Kashmiri': ['kas', 'ks'],
+    };
+
     if (languages && languages.length > 0) {
       languages.forEach(lang => {
         const escaped = lang.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
         const regex = new RegExp(`\\b${escaped}\\b`, 'i');
-        if (regex.test(lower)) foundLangs.push(lang.name);
+        if (regex.test(lower)) {
+          foundLangs.push(lang.name);
+        } else {
+          // Check short codes
+          const codes = langShortCodes[lang.name] || [];
+          for (const code of codes) {
+            const codeRegex = new RegExp(`\\b${code}\\b`, 'i');
+            if (codeRegex.test(lower)) {
+              foundLangs.push(lang.name);
+              break;
+            }
+          }
+        }
       });
     } else {
-      if (/hindi/i.test(lower)) foundLangs.push("Hindi");
-      if (/english/i.test(lower)) foundLangs.push("English");
-      if (/urdu/i.test(lower)) foundLangs.push("Urdu");
-      if (/tamil/i.test(lower)) foundLangs.push("Tamil");
-      if (/telugu/i.test(lower)) foundLangs.push("Telugu");
-      if (/punjabi/i.test(lower)) foundLangs.push("Punjabi");
+      const defaultLangs = ['Hindi', 'English', 'Urdu', 'Tamil', 'Telugu', 'Punjabi'];
+      defaultLangs.forEach(lang => {
+        const regex = new RegExp(`\\b${lang}\\b`, 'i');
+        if (regex.test(lower)) {
+          foundLangs.push(lang);
+        } else {
+          // Check short codes
+          const codes = langShortCodes[lang] || [];
+          for (const code of codes) {
+            const codeRegex = new RegExp(`\\b${code}\\b`, 'i');
+            if (codeRegex.test(lower)) {
+              foundLangs.push(lang);
+              break;
+            }
+          }
+        }
+      });
     }
     
     return foundLangs.length ? foundLangs.join(" / ") : undefined;
@@ -355,7 +466,7 @@ function buildMismatchWarnings(result: LinkCheckResult, all: LinkCheckResult[], 
   }
 
   if (result.fileSize && result.qualityLabel) {
-    const gb = result.fileSize / (1024 * 1024 * 1024);
+    const gb = result.fileSize / (1000 * 1000 * 1000);
     if (result.qualityLabel === "1080P" && gb < 0.5) warnings.push("Suspiciously small for 1080p");
     if (result.qualityLabel === "720P" && gb < 0.25) warnings.push("Suspiciously small for 720p");
     if (result.qualityLabel === "480P" && gb > 3.5) warnings.push("Suspiciously large for 480p");
@@ -486,13 +597,44 @@ export const LinkCheckerModal: React.FC<Props> = ({
         const u = queue.shift()!;
         
         try {
-          const base = await serverCheckLink(u);
+          let base: any = null;
+          let finalUrlToUse = u;
+          
+          // Check if URL has a token parameter
+          if (u.includes('?token=') || u.includes('&token=')) {
+            const urlObj = new URL(u);
+            const token = urlObj.searchParams.get('token');
+            if (token) {
+              urlObj.searchParams.delete('token');
+              const urlWithoutToken = urlObj.toString();
+              
+              try {
+                // Try without token first
+                base = await serverCheckLink(urlWithoutToken);
+                if (base.ok) {
+                  finalUrlToUse = urlWithoutToken;
+                } else {
+                  // If it fails, try with token
+                  base = await serverCheckLink(u);
+                }
+              } catch (e) {
+                // If it throws, try with token
+                base = await serverCheckLink(u);
+              }
+            } else {
+              base = await serverCheckLink(u);
+            }
+          } else {
+            base = await serverCheckLink(u);
+          }
+
           const postMeta = extractedMeta[u] || {};
           const fileMeta = detectFromFilename(base.fileName, base.finalUrl, languages, qualities);
           const hasFileName = !!base.fileName;
 
           const result: LinkCheckResult = {
             ...base,
+            url: finalUrlToUse, // Override the URL with the working one (without token if possible)
             qualityLabel: fileMeta.qualityLabel || postMeta.qualityLabel,
             codecLabel: fileMeta.codecLabel || (hasFileName ? undefined : postMeta.codecLabel),
             audioLabel: fileMeta.audioLabel || (hasFileName ? undefined : postMeta.audioLabel),
@@ -604,19 +746,19 @@ export const LinkCheckerModal: React.FC<Props> = ({
       let finalName = quality;
       
       if (r.codecLabel === "HEVC") finalName += ` HEVC`;
-      if (r.audioLabel && r.audioLabel.includes('Dual')) finalName += ' Dual';
+      if (r.audioLabel && r.audioLabel.includes('Dual') && r.codecLabel !== "HEVC") finalName += ' Dual';
 
       // Determine size and unit
       let sizeStr = '';
       let unit: 'MB' | 'GB' = 'MB';
       
       if (r.fileSize) {
-        const sizeMB = r.fileSize / (1024 * 1024);
-        if (sizeMB >= 1024) {
-          sizeStr = (sizeMB / 1024).toFixed(2);
+        const sizeMB = r.fileSize / (1000 * 1000);
+        if (sizeMB >= 1000) {
+          sizeStr = (sizeMB / 1000).toFixed(2);
           unit = 'GB';
         } else {
-          sizeStr = sizeMB.toFixed(2);
+          sizeStr = sizeMB.toFixed(2).replace(/\.00$/, '');
           unit = 'MB';
         }
       }
@@ -769,7 +911,7 @@ export const LinkCheckerModal: React.FC<Props> = ({
                     // Calculate final name for display
                     let finalName = result.qualityLabel || '720p';
                     if (result.codecLabel === "HEVC") finalName += " HEVC";
-                    if (result.audioLabel && result.audioLabel.includes("Dual")) finalName += " Dual";
+                    if (result.audioLabel && result.audioLabel.includes("Dual") && result.codecLabel !== "HEVC") finalName += " Dual";
 
                     return (
                       <div key={`${result.url}-${result.qualityLabel || "na"}`} className="rounded-2xl border border-zinc-800 bg-zinc-900/50 overflow-hidden">

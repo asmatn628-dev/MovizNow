@@ -1,4 +1,4 @@
-export type Role = 'admin' | 'user' | 'temporary' | 'selected_content' | 'content_manager' | 'trial' | 'user_manager' | 'manager';
+export type Role = 'owner' | 'admin' | 'user' | 'temporary' | 'selected_content' | 'content_manager' | 'trial' | 'user_manager' | 'manager';
 export type Status = 'pending' | 'active' | 'expired';
 
 export interface UserProfile {

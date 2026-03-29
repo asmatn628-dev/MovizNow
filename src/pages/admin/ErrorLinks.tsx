@@ -360,8 +360,8 @@ export default function ErrorLinks() {
 
   const sortLinksBySize = (links: QualityLinks) => {
     return [...links].sort((a, b) => {
-      const sizeA = parseFloat(a.size || '0') * (a.unit === 'GB' ? 1024 : 1);
-      const sizeB = parseFloat(b.size || '0') * (b.unit === 'GB' ? 1024 : 1);
+      const sizeA = parseFloat(a.size || '0') * (a.unit === 'GB' ? 1000 : 1);
+      const sizeB = parseFloat(b.size || '0') * (b.unit === 'GB' ? 1000 : 1);
       return sizeB - sizeA; // Descending
     });
   };
@@ -409,33 +409,34 @@ export default function ErrorLinks() {
   };
 
   const handleUrlBlur = async (url: string) => {
-    const match = url.match(/pixeldrain\.(?:com|dev)\/(?:u|api\/file)\/([a-zA-Z0-9]+)/);
-    if (match) {
-      const id = match[1];
-      try {
-        const res = await fetch(`https://pixeldrain.com/api/file/${id}/info`);
-        if (res.ok) {
-          const data = await res.json();
-          if (data.size) {
-            let sizeInBytes = data.size;
-            let size = 0;
-            let unit: 'MB' | 'GB' = 'MB';
-            
-            if (sizeInBytes >= 1000 * 1000 * 1000) {
-              size = sizeInBytes / (1000 * 1000 * 1000);
-              unit = 'GB';
-            } else {
-              size = sizeInBytes / (1000 * 1000);
-              unit = 'MB';
-            }
-            
-            setEditSize(size.toFixed(2).replace(/\.00$/, ''));
-            setEditUnit(unit);
+    if (!url) return;
+    try {
+      const res = await fetch("/api/check-link", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.fileSize) {
+          let sizeInBytes = data.fileSize;
+          let size = 0;
+          let unit: 'MB' | 'GB' = 'MB';
+          
+          if (sizeInBytes >= 1000 * 1000 * 1000) {
+            size = sizeInBytes / (1000 * 1000 * 1000);
+            unit = 'GB';
+          } else {
+            size = sizeInBytes / (1000 * 1000);
+            unit = 'MB';
           }
+          
+          setEditSize(size.toFixed(2).replace(/\.00$/, ''));
+          setEditUnit(unit);
         }
-      } catch (e) {
-        console.error("Failed to fetch PixelDrain info", e);
       }
+    } catch (e) {
+      console.error("Failed to check link info", e);
     }
   };
 
@@ -542,7 +543,8 @@ export default function ErrorLinks() {
       await updateDoc(doc(db, 'content', editingLink.contentId), updateData);
       
       // Update error list
-      setErrorLinks(prev => {
+      const setErrorList = bgScanning ? setBgErrorLinks : setErrorLinks;
+      setErrorList(prev => {
         const filtered = prev.filter(item => 
           !(item.contentId === editingLink.contentId && 
             item.listType === editingLink.listType && 
@@ -565,8 +567,8 @@ export default function ErrorLinks() {
         return [...filtered, updatedLink];
       });
 
-      // Update scans/current in Firestore
-      const scanDocRef = doc(db, 'scans', 'current');
+      // Update scans/current or scans/background in Firestore
+      const scanDocRef = bgScanning ? doc(db, 'scans', 'background') : doc(db, 'scans', 'current');
       const scanDoc = await getDoc(scanDocRef);
       if (scanDoc.exists()) {
         const scanData = scanDoc.data() as ScanState;

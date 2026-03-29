@@ -213,9 +213,11 @@ export default function Home({ onOpenMediaModal }: { onOpenMediaModal: () => voi
                          profile.role === 'manager' ? 'Manager' :
                          profile.role.charAt(0).toUpperCase() + profile.role.slice(1).replace('_', ' ')}
                       </span>
-                      <span className={clsx("text-[10px] font-medium capitalize px-2 py-0.5 rounded-full border", getStatusColor(profile.status))}>
-                        {profile.status}
-                      </span>
+                      {profile.role !== 'owner' && (
+                        <span className={clsx("text-[10px] font-medium capitalize px-2 py-0.5 rounded-full border", getStatusColor(profile.status))}>
+                          {profile.status}
+                        </span>
+                      )}
                     </div>
                   </div>
                   {profile.phone ? (
@@ -230,7 +232,7 @@ export default function Home({ onOpenMediaModal }: { onOpenMediaModal: () => voi
                 <div className="flex flex-col items-start">
                   <span className="text-xs text-zinc-400">Expiry Date</span>
                   <span className="text-xs font-medium text-zinc-300">
-                    {profile.expiryDate ? (() => {
+                    {profile.role === 'owner' ? 'Lifetime' : profile.expiryDate ? (() => {
                       const expiry = new Date(profile.expiryDate);
                       const expiryEnd = new Date(expiry.getTime() + 24 * 60 * 60 * 1000);
                       const now = new Date();
@@ -317,14 +319,16 @@ export default function Home({ onOpenMediaModal }: { onOpenMediaModal: () => voi
                  profile.role === 'manager' ? 'Manager' :
                  profile.role.charAt(0).toUpperCase() + profile.role.slice(1).replace('_', ' ')}
               </span>
-              <span className={clsx("text-[10px] font-medium capitalize px-2 py-0.5 rounded-full border", getStatusColor(profile.status))}>
-                {profile.status}
-              </span>
+              {profile.role !== 'owner' && (
+                <span className={clsx("text-[10px] font-medium capitalize px-2 py-0.5 rounded-full border", getStatusColor(profile.status))}>
+                  {profile.status}
+                </span>
+              )}
             </div>
           </div>
           <div className="flex justify-between items-center">
             <span className="text-zinc-400 text-xs">
-              {profile.expiryDate ? (() => {
+              {profile.role === 'owner' ? 'Lifetime' : profile.expiryDate ? (() => {
                 const expiry = new Date(profile.expiryDate);
                 const expiryEnd = new Date(expiry.getTime() + 24 * 60 * 60 * 1000);
                 const now = new Date();
