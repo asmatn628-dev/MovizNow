@@ -727,18 +727,18 @@ export default function MovieDetails() {
 
     const contentQuality = qualities.find(q => q.id === content.qualityId)?.name || 'N/A';
     
-    const baseText = `🎬 *${formatContentTitle(content)} (${content.year})*\n\n` +
-                     `🗣️ *Language:* ${contentLangs || 'N/A'}\n` +
-                     `🎭 *Genre:* ${contentGenres || 'N/A'}\n` +
-                     `🖨️ *Print Quality:* ${contentQuality}\n\n`;
+    const baseText = `🎬 ${formatContentTitle(content)} (${content.year})\n\n` +
+                     `🗣️ Language: ${contentLangs || 'N/A'}\n` +
+                     `🎭 Genre: ${contentGenres || 'N/A'}\n` +
+                     `🖨️ Print Quality: ${contentQuality}\n\n` +
+                     `Watch it here: ${shareUrl}\n\n`;
     
     const textForShare = baseText;
-    const textForClipboard = baseText + `Watch it here: ${shareUrl}`;
+    const textForClipboard = baseText;
 
     const shareData: ShareData = {
       title: `${formatContentTitle(content)} (${content.year})`,
       text: textForShare,
-      url: shareUrl, // Use tinyUrl here
     };
 
     try {

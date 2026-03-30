@@ -3,6 +3,7 @@ import { useSearchParams, Link, useLocation } from 'react-router-dom';
 import { db } from '../../firebase';
 import { collection, addDoc, deleteDoc, doc, updateDoc, onSnapshot, writeBatch } from 'firebase/firestore';
 import { useAuth } from '../../contexts/AuthContext';
+import { useContent } from '../../contexts/ContentContext';
 import { Content, Genre, Language, Quality, QualityLinks, Season, Episode, LinkDef, Role } from '../../types';
 import { Plus, Edit2, Trash2, Share2, Film, Tv, X, Save, Upload, Search, Eye, EyeOff, ArrowUp, ArrowDown, Copy, ClipboardPaste, GripVertical, Bell, RefreshCw, ChevronDown, ChevronUp, User, Lock } from 'lucide-react';
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
@@ -16,11 +17,8 @@ import { generateTinyUrl } from '../../utils/tinyurl';
 
 export default function ContentManagement() {
   const { profile, user } = useAuth();
-  const [contentList, setContentList] = useState<Content[]>([]);
+  const { contentList, genres, languages, qualities, loading: contextLoading } = useContent();
   const [loading, setLoading] = useState(true);
-  const [genres, setGenres] = useState<Genre[]>([]);
-  const [languages, setLanguages] = useState<Language[]>([]);
-  const [qualities, setQualities] = useState<Quality[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
@@ -123,52 +121,10 @@ export default function ContentManagement() {
   }, [location.state, genres]); // Added genres as dependency to ensure applyAIFetchedData can match genres
 
   useEffect(() => {
-    const unsubContent = onSnapshot(collection(db, 'content'), (snapshot) => {
-      const data = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() } as Content));
-      setContentList(data);
-      setLoading(false);
-    }, (error) => {
-      console.error("Content snapshot error:", error);
-      setLoading(false);
-      handleFirestoreError(error, OperationType.LIST, 'content');
-    });
-    const unsubGenres = onSnapshot(collection(db, 'genres'), (snapshot) => {
-      const data = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Genre));
-      setGenres(data.sort((a, b) => {
-        if (a.order !== undefined && b.order !== undefined) return a.order - b.order;
-        if (a.order !== undefined) return -1;
-        if (b.order !== undefined) return 1;
-        return a.name.localeCompare(b.name);
-      }));
-    }, (error) => {
-      console.error("Genres snapshot error:", error);
-      handleFirestoreError(error, OperationType.LIST, 'genres');
-    });
-    const unsubLangs = onSnapshot(collection(db, 'languages'), (snapshot) => {
-      const data = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Language));
-      setLanguages(data.sort((a, b) => {
-        if (a.order !== undefined && b.order !== undefined) return a.order - b.order;
-        if (a.order !== undefined) return -1;
-        if (b.order !== undefined) return 1;
-        return a.name.localeCompare(b.name);
-      }));
-    }, (error) => {
-      console.error("Languages snapshot error:", error);
-      handleFirestoreError(error, OperationType.LIST, 'languages');
-    });
-    const unsubQualities = onSnapshot(collection(db, 'qualities'), (snapshot) => {
-      const data = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Quality));
-      setQualities(data.sort((a, b) => {
-        if (a.order !== undefined && b.order !== undefined) return a.order - b.order;
-        if (a.order !== undefined) return -1;
-        if (b.order !== undefined) return 1;
-        return a.name.localeCompare(b.name);
-      }));
-    }, (error) => {
-      console.error("Qualities snapshot error:", error);
-      handleFirestoreError(error, OperationType.LIST, 'qualities');
-    });
+    setLoading(contextLoading);
+  }, [contextLoading]);
 
+  useEffect(() => {
     const unsubManagers = onSnapshot(collection(db, 'users'), (snapshot) => {
       const managersData: Record<string, string> = {};
       snapshot.docs.forEach(doc => {
@@ -181,10 +137,6 @@ export default function ContentManagement() {
     });
 
     return () => { 
-      unsubContent(); 
-      unsubGenres(); 
-      unsubLangs(); 
-      unsubQualities(); 
       unsubManagers();
     };
   }, []);
