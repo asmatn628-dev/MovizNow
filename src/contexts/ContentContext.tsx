@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { db } from '../firebase';
-import { collection, onSnapshot } from 'firebase/firestore';
+import { db, auth } from '../firebase';
+import { collection, onSnapshot, query, where } from 'firebase/firestore';
+import { onAuthStateChanged } from 'firebase/auth';
 import { Content, Genre, Language, Quality } from '../types';
 import { handleFirestoreError, OperationType } from '../utils/firestoreErrorHandler';
 
@@ -35,26 +36,34 @@ export function ContentProvider({ children }: { children: React.ReactNode }) {
     
     if (cachedContent || cachedGenres || cachedLanguages || cachedQualities) setLoading(false);
 
-    const unsubContent = onSnapshot(collection(db, 'content'), (snapshot) => {
-      const rawContent = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() } as Content));
+    let unsubContent: () => void;
+    const unsubAuth = onAuthStateChanged(auth, (user) => {
+      if (unsubContent) unsubContent();
+
+      const q = user ? collection(db, 'content') : query(collection(db, 'content'), where('status', '==', 'published'));
       
-      // Sanitize content for cache (remove links)
-      const sanitizedContent = rawContent.map(c => ({
-        ...c,
-        movieLinks: undefined,
-        fullSeasonZip: undefined,
-        fullSeasonMkv: undefined,
-        seasons: undefined
-      }));
-      
-      localStorage.setItem('content_cache', JSON.stringify(sanitizedContent));
-      setContentList(rawContent);
-      setLoading(false);
-    }, (error) => {
-      console.error("Content snapshot error:", error);
-      setLoading(false);
-      handleFirestoreError(error, OperationType.LIST, 'content');
+      unsubContent = onSnapshot(q, (snapshot) => {
+        const rawContent = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() } as Content));
+        
+        // Sanitize content for cache (remove links)
+        const sanitizedContent = rawContent.map(c => ({
+          ...c,
+          movieLinks: undefined,
+          fullSeasonZip: undefined,
+          fullSeasonMkv: undefined,
+          seasons: undefined
+        }));
+        
+        localStorage.setItem('content_cache', JSON.stringify(sanitizedContent));
+        setContentList(rawContent);
+        setLoading(false);
+      }, (error) => {
+        console.error("Content snapshot error:", error);
+        setLoading(false);
+        handleFirestoreError(error, OperationType.LIST, 'content');
+      });
     });
+
     const unsubGenres = onSnapshot(collection(db, 'genres'), (snapshot) => {
       const data = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Genre));
       data.sort((a, b) => {
@@ -98,7 +107,9 @@ export function ContentProvider({ children }: { children: React.ReactNode }) {
       handleFirestoreError(error, OperationType.LIST, 'qualities');
     });
     return () => { 
-      unsubContent(); unsubGenres(); unsubLangs(); unsubQualities(); 
+      unsubAuth();
+      if (unsubContent) unsubContent();
+      unsubGenres(); unsubLangs(); unsubQualities(); 
     };
   }, []);
 

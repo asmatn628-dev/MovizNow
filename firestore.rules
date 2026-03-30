@@ -84,9 +84,8 @@ service cloud.firestore {
     }
 
     match /content/{contentId} {
-      // Allow read for all authenticated users to prevent listing errors
-      // In a production app, you would use filtered queries and matching rules
-      allow read: if isAuthenticated();
+      // Allow read for all authenticated users, or for unauthenticated users if content is published
+      allow read: if isAuthenticated() || resource.data.status == 'published';
       allow write: if isAdminOrEditor();
     }
 

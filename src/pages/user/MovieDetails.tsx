@@ -20,10 +20,27 @@ export default function MovieDetails() {
   const { id } = useParams<{ id: string }>();
   const { profile, loading: profileLoading } = useAuth();
   const { contentList, genres, languages, qualities, loading: contentLoading } = useContent();
-  const content = useMemo(() => contentList.find(c => c.id === id) || null, [contentList, id]);
+  const content = useMemo(() => {
+    console.log('DEBUG: id=', id, 'contentList length=', contentList.length);
+    if (contentList.length > 0) {
+      console.log('DEBUG: First content id=', contentList[0].id);
+    }
+    const found = contentList.find(c => c.id === id) || null;
+    if (!found) {
+      console.log('DEBUG: Content NOT found for id=', id);
+      console.log('DEBUG: contentList=', contentList);
+    } else {
+      console.log('DEBUG: Content found=', found);
+    }
+    return found;
+  }, [contentList, id]);
   
   const [loading, setLoading] = useState(true);
   const [alertConfig, setAlertConfig] = useState<{ isOpen: boolean; title: string; message: string }>({ isOpen: false, title: '', message: '' });
+
+  useEffect(() => {
+    console.log('DEBUG: contentList changed, length=', contentList.length);
+  }, [contentList]);
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [isWatchLaterLoading, setIsWatchLaterLoading] = useState(false);
   const [isFavoriteLoading, setIsFavoriteLoading] = useState(false);

@@ -12,6 +12,10 @@ export const db = initializeFirestore(app, {
   experimentalForceLongPolling: true,
 }, firebaseConfig.firestoreDatabaseId);
 
+export const auth = getAuth(app);
+export const storage = getStorage(app);
+export const messaging = typeof window !== 'undefined' ? getMessaging(app) : null;
+
 // Enable offline persistence
 if (typeof window !== 'undefined') {
   enableIndexedDbPersistence(db).catch((err) => {
@@ -24,10 +28,6 @@ if (typeof window !== 'undefined') {
     }
   });
 }
-
-export const auth = getAuth(app);
-export const storage = getStorage(app);
-export const messaging = typeof window !== 'undefined' ? getMessaging(app) : null;
 
 // Function to request notification permission and get token
 export const requestNotificationPermission = async () => {
