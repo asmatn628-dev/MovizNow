@@ -19,7 +19,7 @@ import { LazyLoadImage } from 'react-lazy-load-image-component';
 export default function MovieDetails() {
   const { id } = useParams<{ id: string }>();
   const { profile, loading: profileLoading } = useAuth();
-  const { contentList, genres, languages, qualities } = useContent();
+  const { contentList, genres, languages, qualities, loading: contentLoading } = useContent();
   const content = useMemo(() => contentList.find(c => c.id === id) || null, [contentList, id]);
   
   const [loading, setLoading] = useState(true);
@@ -96,9 +96,9 @@ export default function MovieDetails() {
   }, [mergedContent, genres]);
 
   useEffect(() => {
-    if (content) {
+    if (!contentLoading) {
       setLoading(false);
-      if (!hasLoggedView.current && profile?.uid) {
+      if (content && !hasLoggedView.current && profile?.uid) {
         hasLoggedView.current = true;
         logEvent('content_click', profile.uid, {
           contentId: content.id,
@@ -106,7 +106,7 @@ export default function MovieDetails() {
         });
       }
     }
-  }, [content, profile?.uid]);
+  }, [content, contentLoading, profile?.uid]);
 
   useEffect(() => {
     if (linkPopup) {
