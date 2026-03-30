@@ -22,8 +22,33 @@ export function ContentProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    // Load from cache initially
+    const cachedContent = localStorage.getItem('content_cache');
+    const cachedGenres = localStorage.getItem('genres_cache');
+    const cachedLanguages = localStorage.getItem('languages_cache');
+    const cachedQualities = localStorage.getItem('qualities_cache');
+    
+    if (cachedContent) setContentList(JSON.parse(cachedContent));
+    if (cachedGenres) setGenres(JSON.parse(cachedGenres));
+    if (cachedLanguages) setLanguages(JSON.parse(cachedLanguages));
+    if (cachedQualities) setQualities(JSON.parse(cachedQualities));
+    
+    if (cachedContent || cachedGenres || cachedLanguages || cachedQualities) setLoading(false);
+
     const unsubContent = onSnapshot(collection(db, 'content'), (snapshot) => {
-      setContentList(snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() } as Content)));
+      const rawContent = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() } as Content));
+      
+      // Sanitize content for cache (remove links)
+      const sanitizedContent = rawContent.map(c => ({
+        ...c,
+        movieLinks: undefined,
+        fullSeasonZip: undefined,
+        fullSeasonMkv: undefined,
+        seasons: undefined
+      }));
+      
+      localStorage.setItem('content_cache', JSON.stringify(sanitizedContent));
+      setContentList(rawContent);
       setLoading(false);
     }, (error) => {
       console.error("Content snapshot error:", error);
@@ -31,19 +56,25 @@ export function ContentProvider({ children }: { children: React.ReactNode }) {
       handleFirestoreError(error, OperationType.LIST, 'content');
     });
     const unsubGenres = onSnapshot(collection(db, 'genres'), (snapshot) => {
-      setGenres(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Genre)));
+      const data = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Genre));
+      localStorage.setItem('genres_cache', JSON.stringify(data));
+      setGenres(data);
     }, (error) => {
       console.error("Genres snapshot error:", error);
       handleFirestoreError(error, OperationType.LIST, 'genres');
     });
     const unsubLangs = onSnapshot(collection(db, 'languages'), (snapshot) => {
-      setLanguages(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Language)));
+      const data = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Language));
+      localStorage.setItem('languages_cache', JSON.stringify(data));
+      setLanguages(data);
     }, (error) => {
       console.error("Languages snapshot error:", error);
       handleFirestoreError(error, OperationType.LIST, 'languages');
     });
     const unsubQualities = onSnapshot(collection(db, 'qualities'), (snapshot) => {
-      setQualities(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Quality)));
+      const data = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Quality));
+      localStorage.setItem('qualities_cache', JSON.stringify(data));
+      setQualities(data);
     }, (error) => {
       console.error("Qualities snapshot error:", error);
       handleFirestoreError(error, OperationType.LIST, 'qualities');

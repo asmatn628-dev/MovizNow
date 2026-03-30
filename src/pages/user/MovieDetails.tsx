@@ -727,16 +727,18 @@ export default function MovieDetails() {
 
     const contentQuality = qualities.find(q => q.id === content.qualityId)?.name || 'N/A';
     
-    let text = `🎬 *${formatContentTitle(content)} (${content.year})*\n\n` +
-               `🗣️ *Language:* ${contentLangs || 'N/A'}\n` +
-               `🎭 *Genre:* ${contentGenres || 'N/A'}\n` +
-               `🖨️ *Print Quality:* ${contentQuality}\n\n` +
-               `Watch it here: ${shareUrl}`;
+    const baseText = `🎬 *${formatContentTitle(content)} (${content.year})*\n\n` +
+                     `🗣️ *Language:* ${contentLangs || 'N/A'}\n` +
+                     `🎭 *Genre:* ${contentGenres || 'N/A'}\n` +
+                     `🖨️ *Print Quality:* ${contentQuality}\n\n`;
+    
+    const textForShare = baseText;
+    const textForClipboard = baseText + `Watch it here: ${shareUrl}`;
 
     const shareData: ShareData = {
       title: `${formatContentTitle(content)} (${content.year})`,
-      text: text,
-      url: shareUrl,
+      text: textForShare,
+      url: shareUrl, // Use tinyUrl here
     };
 
     try {
@@ -756,7 +758,7 @@ export default function MovieDetails() {
         await navigator.share(shareData);
       } else {
         // Fallback to clipboard
-        await navigator.clipboard.writeText(shareData.text || "");
+        await navigator.clipboard.writeText(textForClipboard);
         setAlertConfig({ isOpen: true, title: 'Success', message: 'Link and details copied to clipboard!' });
       }
     } catch (err) {
@@ -928,11 +930,7 @@ export default function MovieDetails() {
 
       {/* Main Content Area */}
       <div className="max-w-7xl mx-auto px-8 py-12">
-        {profileLoading ? (
-          <div className="flex justify-center py-12">
-            <Loader2 className="w-12 h-12 text-emerald-500 animate-spin" />
-          </div>
-        ) : !profile ? (
+        {!profile ? (
           <div className="bg-emerald-500/10 border border-emerald-500/20 text-emerald-500 p-6 rounded-2xl mb-12 flex items-center justify-between gap-4">
             <div className="flex items-start gap-4">
               <Lock className="w-6 h-6 shrink-0 mt-0.5" />

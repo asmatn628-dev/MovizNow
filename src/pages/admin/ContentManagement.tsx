@@ -189,6 +189,23 @@ export default function ContentManagement() {
     };
   }, []);
 
+  useEffect(() => {
+    const mainElement = document.querySelector('main');
+    
+    // Restore scroll position
+    const savedPosition = sessionStorage.getItem('content_management_scroll_position');
+    if (savedPosition && mainElement) {
+      mainElement.scrollTop = parseInt(savedPosition, 10);
+    }
+
+    return () => {
+      // Save scroll position
+      if (mainElement) {
+        sessionStorage.setItem('content_management_scroll_position', mainElement.scrollTop.toString());
+      }
+    };
+  }, []);
+
   const clearFilters = () => {
     setFilterType('all');
     setFilterGenre('all');

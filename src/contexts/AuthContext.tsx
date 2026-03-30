@@ -27,6 +27,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const sessionStartTimeRef = useRef<number | null>(null);
 
   useEffect(() => {
+    // Load from cache initially
+    const cachedProfile = localStorage.getItem('profile_cache');
+    if (cachedProfile) {
+      setProfile(JSON.parse(cachedProfile));
+      setLoading(false);
+    }
+
     let unsubProfile: (() => void) | undefined;
 
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
@@ -52,6 +59,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           try {
             if (docSnap.exists()) {
               const data = docSnap.data() as UserProfile;
+              localStorage.setItem('profile_cache', JSON.stringify(data));
+              
               const isOwner = currentUser.email === 'asmatn628@gmail.com';
               const isAdmin = currentUser.email === 'asmatullah9327@gmail.com';
               
@@ -130,6 +139,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               } catch (err) {
                 console.error("Failed to create user profile:", err);
               }
+              localStorage.setItem('profile_cache', JSON.stringify(newProfile));
               setProfile(newProfile);
             }
           } catch (error) {
@@ -147,6 +157,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           unsubProfile();
           unsubProfile = undefined;
         }
+        localStorage.removeItem('profile_cache');
         setProfile(null);
         setLoading(false);
         
