@@ -26,7 +26,8 @@ export type StatusLabel =
   | "PROTECTED"
   | "REDIRECT"
   | "UNAVAILABLE"
-  | "UNKNOWN";
+  | "UNKNOWN"
+  | "MISSING_METADATA";
 
 export type LinkCheckResult = {
   url: string;
@@ -83,6 +84,7 @@ const badgeMap: Record<StatusLabel, string> = {
   BROKEN: "bg-red-500/15 text-red-400 border-red-800/80",
   UNAVAILABLE: "bg-orange-500/15 text-orange-400 border-orange-800/80",
   UNKNOWN: "bg-zinc-500/15 text-zinc-300 border-zinc-700",
+  MISSING_METADATA: "bg-pink-500/15 text-pink-400 border-pink-800/80",
 };
 
 function normalizeUrl(input: string) {
@@ -92,10 +94,18 @@ function normalizeUrl(input: string) {
     trimmed = `https://${trimmed}`;
   }
 
-  // Auto-convert pixeldrain /api/file/ to /u/
-  if (trimmed.includes("pixeldrain.com/api/file/") || trimmed.includes("pixeldrain.dev/api/file/")) {
+  // Pixeldrain conversion
+  if (trimmed.includes("pixeldrain.com/") || trimmed.includes("pixeldrain.dev/")) {
+    // Remove ?download
+    trimmed = trimmed.replace(/\?download$/i, "");
+    
+    // Convert /api/file/ to /u/
     trimmed = trimmed.replace(/\/api\/file\//i, "/u/");
+    
+    // Ensure it uses pixeldrain.dev
+    trimmed = trimmed.replace(/pixeldrain\.com\//i, "pixeldrain.dev/");
   }
+
   // Auto-convert pixeldrain /api/list/ to /l/
   if (trimmed.includes("pixeldrain.com/api/list/") || trimmed.includes("pixeldrain.dev/api/list/")) {
     trimmed = trimmed.replace(/\/api\/list\//i, "/l/");
@@ -651,6 +661,17 @@ export const LinkCheckerModal: React.FC<Props> = ({
     }
   }, [isOpen]);
 
+  // Auto-paste from clipboard when window gains focus
+  React.useEffect(() => {
+    const handleFocus = () => {
+      if (isOpen) {
+        pasteFromClipboard(true);
+      }
+    };
+    window.addEventListener('focus', handleFocus);
+    return () => window.removeEventListener('focus', handleFocus);
+  }, [isOpen]);
+
   const links = useMemo(() => {
     if (!autoExtract) {
       return input.split(/\r?\n/).map((s) => normalizeUrl(s)).filter(Boolean);
@@ -763,6 +784,10 @@ export const LinkCheckerModal: React.FC<Props> = ({
             isFullSeasonMKV: fileMeta.isFullSeasonMKV || postMeta.isFullSeasonMKV,
             isFullSeasonZIP: fileMeta.isFullSeasonZIP || postMeta.isFullSeasonZIP,
           };
+
+          if (result.ok && (!result.fileName || !result.qualityLabel || !result.audioLabel)) {
+            result.statusLabel = "MISSING_METADATA";
+          }
 
           allResults.push(result);
           completedCount++;
@@ -877,7 +902,7 @@ export const LinkCheckerModal: React.FC<Props> = ({
       return {
         id: Math.random().toString(36).substr(2, 9),
         name: finalName,
-        url: r.url,
+        url: r.finalUrl || r.url,
         size: sizeStr,
         unit: unit,
         season: r.season,
@@ -950,7 +975,8 @@ export const LinkCheckerModal: React.FC<Props> = ({
     const unavailable = results.filter((r) => r.statusLabel === "UNAVAILABLE").length;
     const unknown = results.filter((r) => r.statusLabel === "UNKNOWN").length;
     const mismatches = results.filter((r) => (r.mismatchWarnings?.length || 0) > 0).length;
-    return { working, broken, protectedCount, redirect, unavailable, unknown, mismatches };
+    const missingMetadata = results.filter((r) => r.statusLabel === "MISSING_METADATA").length;
+    return { working, broken, protectedCount, redirect, unavailable, unknown, mismatches, missingMetadata };
   }, [results]);
 
   return (
@@ -1009,7 +1035,7 @@ export const LinkCheckerModal: React.FC<Props> = ({
                 {error ? <div className="rounded-2xl border border-red-900/70 bg-red-950/40 p-4 text-red-300 text-sm flex items-start gap-2"><AlertTriangle className="h-4 w-4 mt-0.5" /><span>{error}</span></div> : null}
 
                 {!!results.length && (
-                  <div className="grid grid-cols-2 md:grid-cols-7 gap-3">
+                  <div className="grid grid-cols-2 md:grid-cols-8 gap-3">
                     {[
                       ["Working", summary.working, "text-emerald-400"],
                       ["Broken", summary.broken, "text-red-400"],
@@ -1017,7 +1043,8 @@ export const LinkCheckerModal: React.FC<Props> = ({
                       ["Redirect", summary.redirect, "text-cyan-400"],
                       ["Unavailable", summary.unavailable, "text-orange-400"],
                       ["Unknown", summary.unknown, "text-zinc-300"],
-                      ["Mismatches", summary.mismatches, "text-pink-400"]
+                      ["Mismatches", summary.mismatches, "text-pink-400"],
+                      ["Missing Meta", summary.missingMetadata, "text-pink-400"]
                     ].map(([label, count, color]) => (
                       <div key={String(label)} className="rounded-2xl border border-zinc-800 bg-zinc-900/60 p-4">
                         <div className={`text-sm ${color}`}>{label}</div>
