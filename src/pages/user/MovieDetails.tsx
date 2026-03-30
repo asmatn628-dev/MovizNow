@@ -340,11 +340,7 @@ export default function MovieDetails() {
     profile?.role === 'owner' || 
     profile?.role === 'content_manager' || 
     profile?.role === 'manager' || 
-    (content.status !== 'draft' && (
-      content.status !== 'selected_content' || 
-      profile?.assignedContent?.some(id => id === content.id || id.startsWith(`${content.id}:`))
-    )) ||
-    (!profile && content.status !== 'draft' && content.status !== 'selected_content')
+    content.status !== 'draft'
   ) : false;
 
   if (!content || !isAuthorized) {
