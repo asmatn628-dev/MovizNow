@@ -12,6 +12,7 @@ import AlertModal from '../../components/AlertModal';
 import ConfirmModal from '../../components/ConfirmModal';
 import { motion, AnimatePresence } from 'motion/react';
 import { formatContentTitle, formatReleaseDate, formatRuntime } from '../../utils/contentUtils';
+import { generateTinyUrl } from '../../utils/tinyurl';
 import { MediaModal } from '../../components/MediaModal';
 import { LazyLoadImage } from 'react-lazy-load-image-component';
 
@@ -323,16 +324,28 @@ export default function MovieDetails() {
     return (match && match[2].length === 11) ? `https://www.youtube.com/embed/${match[2]}` : null;
   };
 
+  useEffect(() => {
+    return () => {
+      // Set flag when leaving MovieDetails to trigger WhatsApp prompt on Home
+      sessionStorage.setItem('from_movie_details', 'true');
+    };
+  }, []);
+
   if (loading) {
     return <div className="min-h-screen bg-zinc-950 flex items-center justify-center"><div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-emerald-500"></div></div>;
   }
 
-  const isAuthorized = profile?.role === 'admin' || profile?.role === 'owner' || profile?.role === 'content_manager' || (
-    content.status !== 'draft' && (
+  const isAuthorized = content ? (
+    profile?.role === 'admin' || 
+    profile?.role === 'owner' || 
+    profile?.role === 'content_manager' || 
+    profile?.role === 'manager' || 
+    (content.status !== 'draft' && (
       content.status !== 'selected_content' || 
       profile?.assignedContent?.some(id => id === content.id || id.startsWith(`${content.id}:`))
-    )
-  );
+    )) ||
+    (!profile && content.status !== 'draft' && content.status !== 'selected_content')
+  ) : false;
 
   if (!content || !isAuthorized) {
     return <div className="min-h-screen bg-zinc-950 flex items-center justify-center text-white">Content not found</div>;
@@ -343,10 +356,10 @@ export default function MovieDetails() {
   const isTemp = profile?.role === 'temporary';
   const isSelectedContent = profile?.role === 'selected_content';
   const isAssigned = profile?.assignedContent?.some(id => id === content.id || id.startsWith(`${content.id}:`));
-  const canPlay = profile?.role === 'admin' || profile?.role === 'owner' || profile?.role === 'content_manager' || (profile?.status === 'active' && (!(isTemp || isSelectedContent || content.status === 'selected_content') || isAssigned));
+  const canPlay = profile?.role === 'admin' || profile?.role === 'owner' || profile?.role === 'content_manager' || profile?.role === 'manager' || (profile?.status === 'active' && (!(isTemp || isSelectedContent || content.status === 'selected_content') || isAssigned));
 
   const allowedSeasons = profile?.assignedContent?.filter(id => id.startsWith(`${content.id}:`)).map(id => id.split(':')[1]) || [];
-  const hasFullAccess = profile?.role === 'admin' || profile?.role === 'owner' || profile?.role === 'content_manager' || (!(isTemp || isSelectedContent || content.status === 'selected_content')) || profile?.assignedContent?.includes(content.id);
+  const hasFullAccess = profile?.role === 'admin' || profile?.role === 'owner' || profile?.role === 'content_manager' || profile?.role === 'manager' || (!(isTemp || isSelectedContent || content.status === 'selected_content')) || profile?.assignedContent?.includes(content.id);
 
   const toggleWatchLater = async () => {
     if (!profile) return;
@@ -508,7 +521,7 @@ export default function MovieDetails() {
         } else {
           try {
             const { generateTinyUrl } = await import('../../utils/tinyurl');
-            copyUrl = await generateTinyUrl(copyUrl);
+            copyUrl = await generateTinyUrl(copyUrl, false);
           } catch (e) {
             console.error("Failed to generate tinyurl on the fly", e);
           }
@@ -709,33 +722,20 @@ export default function MovieDetails() {
     
     let shareUrl = window.location.href;
     
-    // Try to shorten the URL
-    try {
-      const response = await fetch(`https://tinyurl.com/api-create.php?url=${encodeURIComponent(shareUrl)}`);
-      if (response.ok) {
-        const shortened = await response.text();
-        if (shortened && shortened.startsWith('http')) {
-          shareUrl = shortened;
-        }
-      }
-    } catch (err) {
-      console.error('Error shortening URL:', err);
-    }
+    // Try to shorten the URL without the number alias
+    shareUrl = await generateTinyUrl(shareUrl, false);
 
     const contentQuality = qualities.find(q => q.id === content.qualityId)?.name || 'N/A';
     
     let text = `🎬 *${formatContentTitle(content)} (${content.year})*\n\n` +
                `🗣️ *Language:* ${contentLangs || 'N/A'}\n` +
                `🎭 *Genre:* ${contentGenres || 'N/A'}\n` +
-               `🖨️ *Print Quality:* ${contentQuality}\n`;
-
-    text += (profile?.phone ? `\n📱 *WhatsApp:* ${profile.phone}\n\n` : '\n') +
-            `Watch it here:`;
+               `🖨️ *Print Quality:* ${contentQuality}\n\n` +
+               `Watch it here: ${shareUrl}`;
 
     const shareData = {
       title: `${formatContentTitle(content)} (${content.year})`,
       text: text,
-      url: shareUrl,
     };
 
     try {
@@ -743,7 +743,7 @@ export default function MovieDetails() {
         await navigator.share(shareData);
       } else {
         // Fallback to clipboard
-        await navigator.clipboard.writeText(`${shareData.text} ${shareData.url}`);
+        await navigator.clipboard.writeText(shareData.text);
         setAlertConfig({ isOpen: true, title: 'Success', message: 'Link and details copied to clipboard!' });
       }
     } catch (err) {
@@ -781,7 +781,10 @@ export default function MovieDetails() {
         
         <div className="absolute top-0 left-0 w-full p-4 z-[100] pointer-events-none flex justify-between items-center">
           <button 
-            onClick={() => navigate('/')} 
+            onClick={() => {
+              sessionStorage.setItem('from_movie_details', 'true');
+              navigate('/');
+            }} 
             className="inline-flex items-center gap-2 text-zinc-300 hover:text-white bg-black/40 backdrop-blur-md px-4 py-2 rounded-full transition-colors pointer-events-auto cursor-pointer"
           >
             <ArrowLeft className="w-5 h-5" /> Back
@@ -876,7 +879,7 @@ export default function MovieDetails() {
                   </button>
                 </div>
 
-                {(profile?.role === 'admin' || profile?.role === 'content_manager') && (
+                {(profile?.role === 'admin' || profile?.role === 'owner') && (
                   <div className="flex gap-4">
                     <button
                       onClick={() => setIsMediaModalOpen(true)}

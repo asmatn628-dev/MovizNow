@@ -24,7 +24,7 @@ async function startServer() {
   app.use(express.json({ limit: '50mb' }));
 
   // Background Scan Endpoint
-  app.post("/api/start-background-scan", async (req, res) => {
+  app.post(["/api/start-background-scan", "/start-background-scan"], async (req, res) => {
     console.log("Received request to /api/start-background-scan");
     const { links } = req.body;
     console.log("Links length:", links ? links.length : 'undefined');
@@ -154,7 +154,7 @@ async function startServer() {
   });
 
   // IMDb Fetch Proxy
-  app.get("/api/imdb-fetch", async (req, res) => {
+  app.get(["/api/imdb-fetch", "/imdb-fetch"], async (req, res) => {
     try {
       const { url } = req.query;
       if (!url || typeof url !== 'string') return res.status(400).json({ error: "IMDb URL required" });
@@ -202,7 +202,7 @@ async function startServer() {
   });
 
   // IMDb Suggestion Proxy
-  app.get("/api/imdb/suggestion/:ttId", async (req, res) => {
+  app.get(["/api/imdb/suggestion/:ttId", "/imdb/suggestion/:ttId"], async (req, res) => {
     try {
       const { ttId } = req.params;
       const firstLetter = ttId.charAt(0).toLowerCase();
@@ -226,7 +226,7 @@ async function startServer() {
   });
 
   // IMDb Title Page Proxy
-  app.get("/api/imdb/title/:ttId", async (req, res) => {
+  app.get(["/api/imdb/title/:ttId", "/imdb/title/:ttId"], async (req, res) => {
     try {
       const { ttId } = req.params;
       const response = await fetch(`https://www.imdb.com/title/${ttId}/`, {
@@ -259,7 +259,7 @@ async function startServer() {
   });
 
   // YouTube Search Proxy
-  app.get("/api/youtube/search", async (req, res) => {
+  app.get(["/api/youtube/search", "/youtube/search"], async (req, res) => {
     try {
       const { q } = req.query;
       if (!q) return res.status(400).json({ error: "Query required" });
@@ -289,7 +289,7 @@ async function startServer() {
   });
 
   // TinyURL Proxy
-  app.get("/api/tinyurl", async (req, res) => {
+  app.get(["/api/tinyurl", "/tinyurl"], async (req, res) => {
     try {
       const { url, alias } = req.query;
       if (!url || typeof url !== 'string') return res.status(400).json({ error: "URL required" });
@@ -300,11 +300,12 @@ async function startServer() {
       }
       
       const response = await fetch(fetchUrl);
-      if (!response.ok) {
-        return res.status(response.status).json({ error: "Failed to create TinyURL" });
-      }
-      
       const shortUrl = await response.text();
+      
+      if (!response.ok || shortUrl.toLowerCase().includes('<html') || !shortUrl.startsWith('http')) {
+        console.error("TinyURL error response:", shortUrl);
+        return res.status(500).json({ error: "TinyURL returned invalid response" });
+      }
       res.send(shortUrl);
     } catch (error) {
       console.error("TinyURL Proxy Error:", error);
@@ -313,7 +314,7 @@ async function startServer() {
   });
 
   // Server-side Link Scanner
-  app.post("/api/scan-links", async (req, res) => {
+  app.post(["/api/scan-links", "/scan-links"], async (req, res) => {
     try {
       const { links } = req.body;
       if (!links || !Array.isArray(links)) return res.status(400).json({ error: "Links array required" });
@@ -371,7 +372,7 @@ async function startServer() {
   }
 
   // Advanced Link Checker API
-  app.post("/api/check-link", async (req, res) => {
+  app.post(["/api/check-link", "/check-link"], async (req, res) => {
     try {
       const { url } = req.body;
       if (!url || typeof url !== "string") {
@@ -526,8 +527,8 @@ async function startServer() {
     const protocol = req.get('x-forwarded-proto') || req.protocol || 'https';
     const baseUrl = `${protocol}://${host}`;
     
-    let title = "MovizNow";
-    let description = "Your premium movie and series streaming platform";
+    let title = "MovizNow - Premium Movies & Series";
+    let description = "Watch the latest movies and series on MovizNow. Your ultimate entertainment destination.";
     let image = `${baseUrl}/pwa-512x512.png`; // Use absolute URL for OG image
     
     const movieMatch = urlPath.match(/^\/movie\/([^/?]+)/);
@@ -544,6 +545,7 @@ async function startServer() {
           if (data.fields) {
             const movieTitle = data.fields.title?.stringValue || "";
             const year = data.fields.year?.integerValue || data.fields.year?.stringValue || "";
+            const type = data.fields.type?.stringValue || "movie";
             
             // Fetch genres if available
             let genreNames = "";
@@ -560,7 +562,7 @@ async function startServer() {
                       .map((doc: any) => doc.fields.name?.stringValue)
                       .filter(Boolean);
                     if (matchedGenres.length > 0) {
-                      genreNames = ` | ${matchedGenres.join(', ')}`;
+                      genreNames = matchedGenres.join(', ');
                     }
                   }
                 }
@@ -569,9 +571,38 @@ async function startServer() {
               }
             }
 
-            title = `${movieTitle} ${year ? `(${year})` : ''}${genreNames} - MovizNow`;
+            // Fetch languages if available
+            let languageNames = "";
+            if (data.fields.languageIds?.arrayValue?.values) {
+              try {
+                const langsUrl = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/${dbId}/documents/languages`;
+                const langsResponse = await fetch(langsUrl);
+                if (langsResponse.ok) {
+                  const langsData = await langsResponse.json();
+                  if (langsData.documents) {
+                    const langIds = data.fields.languageIds.arrayValue.values.map((v: any) => v.stringValue);
+                    const matchedLangs = langsData.documents
+                      .filter((doc: any) => langIds.includes(doc.name.split('/').pop()))
+                      .map((doc: any) => doc.fields.name?.stringValue)
+                      .filter(Boolean);
+                    if (matchedLangs.length > 0) {
+                      languageNames = matchedLangs.join(', ');
+                    }
+                  }
+                }
+              } catch (e) {
+                console.error("Error fetching languages for OG tags:", e);
+              }
+            }
+
+            title = `${movieTitle} ${year ? `(${year})` : ''} - MovizNow`;
             
-            description = data.fields.description?.stringValue || description;
+            const descParts = [];
+            if (type) descParts.push(type.charAt(0).toUpperCase() + type.slice(1));
+            if (genreNames) descParts.push(genreNames);
+            if (languageNames) descParts.push(`Languages: ${languageNames}`);
+            
+            description = descParts.join(' | ') + '. ' + (data.fields.description?.stringValue || "");
             
             if (data.fields.posterUrl?.stringValue) {
               image = data.fields.posterUrl.stringValue;
@@ -589,13 +620,14 @@ async function startServer() {
 
     return `
       <meta property="og:title" content="${title.replace(/"/g, '&quot;')}" />
-      <meta property="og:description" content="${description.replace(/"/g, '&quot;')}" />
+      <meta property="og:description" content="${description.replace(/"/g, '&quot;').slice(0, 200)}..." />
       <meta property="og:image" content="${image}" />
-      <meta property="og:type" content="website" />
+      <meta property="og:type" content="video.movie" />
       <meta property="og:url" content="${baseUrl}${urlPath}" />
+      <meta property="og:site_name" content="MovizNow" />
       <meta name="twitter:card" content="summary_large_image" />
       <meta name="twitter:title" content="${title.replace(/"/g, '&quot;')}" />
-      <meta name="twitter:description" content="${description.replace(/"/g, '&quot;')}" />
+      <meta name="twitter:description" content="${description.replace(/"/g, '&quot;').slice(0, 200)}..." />
       <meta name="twitter:image" content="${image}" />
     `;
   };
@@ -614,6 +646,10 @@ async function startServer() {
         const url = req.originalUrl;
         let template = fs.readFileSync(path.resolve(__dirname, '../index.html'), 'utf-8');
         template = await vite.transformIndexHtml(url, template);
+        
+        // Remove any existing OG tags to avoid duplication
+        template = template.replace(/<meta property="og:[^>]+>/g, '');
+        template = template.replace(/<meta name="twitter:[^>]+>/g, '');
         
         const ogTags = await getOgTags(req);
         const html = template.replace('</head>', `${ogTags}</head>`);
@@ -636,6 +672,10 @@ async function startServer() {
           return res.status(404).send("Template not found. Make sure the app is built.");
         }
         let template = fs.readFileSync(templatePath, 'utf-8');
+        
+        // Remove any existing OG tags to avoid duplication
+        template = template.replace(/<meta property="og:[^>]+>/g, '');
+        template = template.replace(/<meta name="twitter:[^>]+>/g, '');
         
         const ogTags = await getOgTags(req);
         const html = template.replace('</head>', `${ogTags}</head>`);

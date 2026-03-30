@@ -135,12 +135,12 @@ function formatQuality(q?: string) {
 
 function normalizePrintQuality(v?: string) {
   if (!v) return undefined;
-  const s = v.toUpperCase().replace(/\s+/g, " ").trim();
-  if (s.includes("WEB DL") || s.includes("WEBDL")) return "WEB-DL";
-  if (s.includes("WEB RIP") || s.includes("WEBRIP")) return "WEBRip";
+  const s = v.toUpperCase().replace(/[\s\.\-_]+/g, "");
+  if (s.includes("WEBDL")) return "WEB-DL";
+  if (s.includes("WEBRIP")) return "WEBRip";
   if (s.includes("HDRIP")) return "HDRip";
-  if (s.includes("BLURAY") || s.includes("BLU RAY")) return "BluRay";
-  if (s.includes("HQ HDTC")) return "HQ HDTC";
+  if (s.includes("BLURAY")) return "BluRay";
+  if (s.includes("HQHDTC")) return "HQ HDTC";
   if (s.includes("HDTC")) return "HDTC";
   if (s.includes("HDCAM")) return "HDCAM";
   if (s.includes("DVDRIP")) return "DVDRip";
@@ -171,7 +171,6 @@ function detectMetadataForLink(text: string, url: string, languages?: Language[]
   );
 
   const audio = (() => {
-    if (/dual audio/i.test(lower)) return "Dual Audio";
     const foundLangs = [] as string[];
     
     const langShortCodes: Record<string, string[]> = {
@@ -262,59 +261,60 @@ function detectMetadataForLink(text: string, url: string, languages?: Language[]
       'Kashmiri': ['kas', 'ks'],
     };
 
-    if (languages && languages.length > 0) {
-      languages.forEach(lang => {
-        const escaped = lang.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-        const regex = new RegExp(`\\b${escaped}\\b`, 'i');
-        if (regex.test(lower)) {
-          foundLangs.push(lang.name);
-        } else {
-          // Check short codes
-          const codes = langShortCodes[lang.name] || [];
-          for (const code of codes) {
-            const codeRegex = new RegExp(`\\b${code}\\b`, 'i');
-            if (codeRegex.test(lower)) {
-              foundLangs.push(lang.name);
-              break;
-            }
+    const checkLang = (langName: string) => {
+      const normalizedLower = lower.replace(/[\.\-\s_]+/g, "");
+      const normalizedLang = langName.replace(/[\.\-\s_]+/g, "").toLowerCase();
+      if (normalizedLower.includes(normalizedLang)) {
+        foundLangs.push(langName);
+      } else {
+        const codes = langShortCodes[langName] || [];
+        for (const code of codes) {
+          const codeRegex = new RegExp(`\\b${code}\\b`, 'i');
+          if (codeRegex.test(lower)) {
+            foundLangs.push(langName);
+            break;
           }
         }
-      });
+      }
+    };
+
+    if (languages && languages.length > 0) {
+      languages.forEach(lang => checkLang(lang.name));
     } else {
       const defaultLangs = ['Hindi', 'English', 'Urdu', 'Tamil', 'Telugu', 'Punjabi'];
-      defaultLangs.forEach(lang => {
-        const regex = new RegExp(`\\b${lang}\\b`, 'i');
-        if (regex.test(lower)) {
-          foundLangs.push(lang);
-        } else {
-          // Check short codes
-          const codes = langShortCodes[lang] || [];
-          for (const code of codes) {
-            const codeRegex = new RegExp(`\\b${code}\\b`, 'i');
-            if (codeRegex.test(lower)) {
-              foundLangs.push(lang);
-              break;
-            }
-          }
+      defaultLangs.forEach(lang => checkLang(lang));
+    }
+    
+    if (/dual audio/i.test(lower)) {
+      if (foundLangs.length > 0) {
+        if (foundLangs.length === 1 && !foundLangs.includes('English')) {
+          foundLangs.push('English');
         }
-      });
+        return foundLangs.join(" / ");
+      } else {
+        return "Hindi / English";
+      }
     }
     
     return foundLangs.length ? foundLangs.join(" / ") : undefined;
   })();
 
-  const subtitle = /subtitles|subs|softsub|hardsub|esub/i.test(lower) ? "Subtitles" : undefined;
+  const subtitle = /subtitles|subs|softsub|hardsub|esub|esubs|msub|msubs/i.test(lower) ? "Subtitles" : undefined;
 
   let printQuality = normalizePrintQuality(
     lower.match(/\b(web[ -]?dl|web[ -]?rip|hdrip|blu[ -]?ray|hq[ - ]?hdtc|hdtc|hdcam|dvdrip|brrip)\b/i)?.[1]
   );
 
   if (!printQuality && qualities && qualities.length > 0) {
-    qualities.forEach(q => {
-      const escaped = q.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      const regex = new RegExp(`\\b${escaped}\\b`, 'i');
-      if (regex.test(lower)) printQuality = q.name;
-    });
+    const normalizedLower = lower.replace(/[\.\-\s_]+/g, "");
+    const sortedQualities = [...qualities].sort((a, b) => b.name.length - a.name.length);
+    for (const q of sortedQualities) {
+      const normalizedQ = q.name.replace(/[\.\-\s_]+/g, "").toLowerCase();
+      if (normalizedQ && normalizedLower.includes(normalizedQ)) {
+        printQuality = q.name;
+        break;
+      }
+    }
   }
 
   const result = {
@@ -360,24 +360,135 @@ function detectFromFilename(fileName?: string, finalUrl?: string, languages?: La
   const codec = normalizeCodec(source.match(/\b(x265|x264|h\.265|h\.264|hevc|av1)\b/i)?.[1]);
   
   const audio = (() => {
-    if (/dual[ ._-]?audio/i.test(source)) return "Dual Audio";
     const foundLangs = [] as string[];
     
+    const langShortCodes: Record<string, string[]> = {
+      'Hindi': ['hin', 'hi'],
+      'English': ['eng', 'en'],
+      'Punjabi': ['pun', 'pa'],
+      'Tamil': ['tam', 'ta'],
+      'Telugu': ['tel', 'te'],
+      'Urdu': ['urd', 'ur'],
+      'Marathi': ['mar', 'mr'],
+      'Bengali': ['ben', 'bn'],
+      'Gujarati': ['guj', 'gu'],
+      'Kannada': ['kan', 'kn'],
+      'Malayalam': ['mal', 'ml'],
+      'Odia': ['odi', 'or'],
+      'Assamese': ['asm', 'as'],
+      'Spanish': ['spa', 'es'],
+      'French': ['fre', 'fra', 'fr'],
+      'German': ['ger', 'deu', 'de'],
+      'Italian': ['ita', 'it'],
+      'Japanese': ['jpn', 'ja'],
+      'Korean': ['kor', 'ko'],
+      'Chinese': ['chi', 'zho', 'zh'],
+      'Arabic': ['ara', 'ar'],
+      'Russian': ['rus', 'ru'],
+      'Portuguese': ['por', 'pt'],
+      'Dutch': ['dut', 'nld', 'nl'],
+      'Turkish': ['tur', 'tr'],
+      'Vietnamese': ['vie', 'vi'],
+      'Thai': ['tha', 'th'],
+      'Indonesian': ['ind', 'id'],
+      'Malay': ['may', 'msa', 'ms'],
+      'Filipino': ['fil', 'tl'],
+      'Persian': ['per', 'fas', 'fa'],
+      'Polish': ['pol', 'pl'],
+      'Ukrainian': ['ukr', 'uk'],
+      'Greek': ['gre', 'ell', 'el'],
+      'Hebrew': ['heb', 'he'],
+      'Swedish': ['swe', 'sv'],
+      'Danish': ['dan', 'da'],
+      'Norwegian': ['nor', 'no'],
+      'Finnish': ['fin', 'fi'],
+      'Czech': ['cze', 'ces', 'cs'],
+      'Hungarian': ['hun', 'hu'],
+      'Romanian': ['rum', 'ron', 'ro'],
+      'Bulgarian': ['bul', 'bg'],
+      'Serbian': ['srp', 'sr'],
+      'Croatian': ['hrv', 'hr'],
+      'Slovak': ['slo', 'slk', 'sk'],
+      'Slovenian': ['slv', 'sl'],
+      'Lithuanian': ['lit', 'lt'],
+      'Latvian': ['lav', 'lv'],
+      'Estonian': ['est', 'et'],
+      'Icelandic': ['ice', 'isl', 'is'],
+      'Irish': ['gle', 'ga'],
+      'Welsh': ['wel', 'cym', 'cy'],
+      'Scottish Gaelic': ['gla', 'gd'],
+      'Basque': ['baq', 'eus', 'eu'],
+      'Catalan': ['cat', 'ca'],
+      'Galician': ['glg', 'gl'],
+      'Afrikaans': ['afr', 'af'],
+      'Swahili': ['swa', 'sw'],
+      'Zulu': ['zul', 'zu'],
+      'Xhosa': ['xho', 'xh'],
+      'Amharic': ['amh', 'am'],
+      'Somali': ['som', 'so'],
+      'Yoruba': ['yor', 'yo'],
+      'Igbo': ['ibo', 'ig'],
+      'Hausa': ['hau', 'ha'],
+      'Nepali': ['nep', 'ne'],
+      'Sinhala': ['sin', 'si'],
+      'Burmese': ['bur', 'mya', 'my'],
+      'Khmer': ['khm', 'km'],
+      'Lao': ['lao', 'lo'],
+      'Tibetan': ['tib', 'bod', 'bo'],
+      'Mongolian': ['mon', 'mn'],
+      'Uzbek': ['uzb', 'uz'],
+      'Kazakh': ['kaz', 'kk'],
+      'Kyrgyz': ['kir', 'ky'],
+      'Tajik': ['tgk', 'tg'],
+      'Turkmen': ['tuk', 'tk'],
+      'Azerbaijani': ['aze', 'az'],
+      'Armenian': ['arm', 'hye', 'hy'],
+      'Georgian': ['geo', 'kat', 'ka'],
+      'Pashto': ['pus', 'ps'],
+      'Kurdish': ['kur', 'ku'],
+      'Sindhi': ['snd', 'sd'],
+      'Kashmiri': ['kas', 'ks'],
+    };
+
+    const checkLang = (langName: string) => {
+      const normalizedLower = source.replace(/[\.\-\s_]+/g, "");
+      const normalizedLang = langName.replace(/[\.\-\s_]+/g, "").toLowerCase();
+      if (normalizedLower.includes(normalizedLang)) {
+        foundLangs.push(langName);
+      } else {
+        const codes = langShortCodes[langName] || [];
+        for (const code of codes) {
+          const codeRegex = new RegExp(`\\b${code}\\b`, 'i');
+          if (codeRegex.test(source)) {
+            foundLangs.push(langName);
+            break;
+          }
+        }
+      }
+    };
+
     if (languages && languages.length > 0) {
-      languages.forEach(lang => {
-        const escaped = lang.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-        const regex = new RegExp(`\\b${escaped}\\b`, 'i');
-        if (regex.test(source)) foundLangs.push(lang.name);
-      });
+      languages.forEach(lang => checkLang(lang.name));
     } else {
-      ["hindi", "english", "urdu", "tamil", "telugu", "punjabi"].forEach(l => {
-        if (source.includes(l)) foundLangs.push(l[0].toUpperCase() + l.slice(1));
-      });
+      const defaultLangs = ['Hindi', 'English', 'Urdu', 'Tamil', 'Telugu', 'Punjabi'];
+      defaultLangs.forEach(lang => checkLang(lang));
     }
+    
+    if (/dual[ ._-]?audio/i.test(source)) {
+      if (foundLangs.length > 0) {
+        if (foundLangs.length === 1 && !foundLangs.includes('English')) {
+          foundLangs.push('English');
+        }
+        return foundLangs.join(" / ");
+      } else {
+        return "Hindi / English";
+      }
+    }
+    
     return foundLangs.length ? foundLangs.join(" / ") : undefined;
   })();
 
-  const subtitle = /subtitles|subs|softsub|hardsub|esub/i.test(source) ? "Subtitles" : undefined;
+  const subtitle = /subtitles|subs|softsub|hardsub|esub|esubs|msub|msubs/i.test(source) ? "Subtitles" : undefined;
   
   let printQuality = normalizePrintQuality(source.match(/\b(web[ -]?dl|web[ -]?rip|hdrip|blu[ -]?ray|hq[ - ]?hdtc|hdtc|hdcam|dvdrip|brrip)\b/i)?.[1]);
 
@@ -532,6 +643,13 @@ export const LinkCheckerModal: React.FC<Props> = ({
       handleCheck();
     }
   }, [isOpen, autoStart, initialInput]);
+
+  // Auto-paste from clipboard when modal opens
+  React.useEffect(() => {
+    if (isOpen) {
+      pasteFromClipboard(true);
+    }
+  }, [isOpen]);
 
   const links = useMemo(() => {
     if (!autoExtract) {
@@ -702,19 +820,12 @@ export const LinkCheckerModal: React.FC<Props> = ({
       const source = `${r.fileName || ""} ${r.finalUrl || ""} ${input}`.toLowerCase();
       
       if (r.audioLabel) {
-        // audioLabel can be "Hindi / English" or "Dual Audio"
-        if (r.audioLabel === "Dual Audio") {
-          detectedLangs.add("Dual Audio");
-          detectedLangs.add("Hindi");
-          detectedLangs.add("English");
-        } else {
-          r.audioLabel.split(" / ").forEach(l => detectedLangs.add(l));
-        }
+        r.audioLabel.split(" / ").forEach(l => detectedLangs.add(l));
       }
       if (r.printQualityLabel && !detectedPrintQuality) {
         detectedPrintQuality = r.printQualityLabel;
       }
-      if (r.subtitleLabel || /subtitles|subs|softsub|hardsub|esub/i.test(source)) {
+      if (r.subtitleLabel || /subtitles|subs|softsub|hardsub|esub|esubs|msub|msubs/i.test(source)) {
         detectedSubtitles = true;
       }
 
@@ -787,15 +898,28 @@ export const LinkCheckerModal: React.FC<Props> = ({
     onClose();
   };
 
-  const pasteFromClipboard = async () => {
+  const pasteFromClipboard = async (isAuto = false) => {
     try {
       const text = await navigator.clipboard.readText();
-      setInput(text);
-      setError(null);
+      if (text) {
+        setInput((prev) => {
+          if (!prev) return text;
+          // Check if text is already in input to avoid duplicates
+          if (prev.includes(text)) return prev;
+          return prev + (prev.endsWith('\n') ? '' : '\n') + text;
+        });
+        if (!isAuto) setError(null);
+      }
     } catch {
-      setError("Clipboard access was blocked by the browser.");
+      if (!isAuto) setError("Clipboard access was blocked by the browser.");
     }
   };
+
+  React.useEffect(() => {
+    if (isOpen) {
+      pasteFromClipboard(true);
+    }
+  }, [isOpen]);
 
   const reset = () => {
     setInput("");
@@ -859,7 +983,7 @@ export const LinkCheckerModal: React.FC<Props> = ({
                   </div>
 
                   <div className="flex flex-wrap gap-2">
-                    <button onClick={pasteFromClipboard} className="inline-flex items-center justify-center rounded-2xl border border-zinc-700 bg-zinc-950 px-4 py-2 text-sm font-medium text-zinc-100 hover:bg-zinc-900 gap-2 transition-colors"><ClipboardPaste className="h-4 w-4" />Paste</button>
+                    <button onClick={() => pasteFromClipboard(false)} className="inline-flex items-center justify-center rounded-2xl border border-zinc-700 bg-zinc-950 px-4 py-2 text-sm font-medium text-zinc-100 hover:bg-zinc-900 gap-2 transition-colors"><ClipboardPaste className="h-4 w-4" />Paste</button>
                   </div>
 
                   <div className="flex flex-wrap items-center justify-between gap-3 text-sm text-zinc-400">

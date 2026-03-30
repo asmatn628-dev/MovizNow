@@ -15,6 +15,7 @@ export interface ErrorLinkInfo {
   errorDetail: string;
   fetchedSize?: string;
   fetchedUnit?: 'MB' | 'GB';
+  createdAt?: string;
 }
 
 export interface ScanState {
@@ -63,7 +64,7 @@ class ScannerService {
     return getFallbackError(status, data);
   }
 
-  private async checkPixeldrainLink(url: string): Promise<{ error: string | null; size?: string; unit?: 'MB' | 'GB' }> {
+  public async checkPixeldrainLink(url: string): Promise<{ error: string | null; size?: string; unit?: 'MB' | 'GB' }> {
     if (!url || url.trim() === '') return { error: "Empty link" };
     
     const fileMatch = url.match(/pixeldrain\.(?:com|dev)\/(?:u|api\/file)\/([a-zA-Z0-9]+)/);

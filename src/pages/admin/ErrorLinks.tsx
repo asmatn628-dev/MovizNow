@@ -7,6 +7,26 @@ import { handleFirestoreError, OperationType } from '../../utils/firestoreErrorH
 import { scannerService, ErrorLinkInfo, ScanState } from '../../services/ScannerService';
 import { LinkCheckerModal } from '../../components/LinkCheckerModal';
 
+const parseLinks = (linksStr: string | undefined): QualityLinks => {
+  if (!linksStr) return [];
+  try {
+    const parsed = JSON.parse(linksStr);
+    if (Array.isArray(parsed)) return parsed;
+    if (typeof parsed === 'object') {
+      return Object.entries(parsed).map(([name, link]: [string, any]) => ({
+        id: Math.random().toString(36).substr(2, 9),
+        name,
+        url: link?.url || '',
+        size: link?.size || '',
+        unit: 'MB' as 'MB' | 'GB'
+      })).filter(l => l.url);
+    }
+  } catch (e) {
+    console.error("Error parsing links", e);
+  }
+  return [];
+};
+
 export default function ErrorLinks() {
   const [contentList, setContentList] = useState<Content[]>([]);
   const [loading, setLoading] = useState(true);
@@ -38,23 +58,69 @@ export default function ErrorLinks() {
   const [saving, setSaving] = useState(false);
 
   const [filterErrorType, setFilterErrorType] = useState<string>('all');
-  const [sortBy, setSortBy] = useState<'title' | 'error'>('title');
-  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
+  const [sortBy, setSortBy] = useState<'title' | 'error' | 'date'>('date');
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
 
   const [isAddLinksModalOpen, setIsAddLinksModalOpen] = useState(false);
   const [addLinksContent, setAddLinksContent] = useState<Content | null>(null);
   const [addLinksInput, setAddLinksInput] = useState('');
   const [addingLinks, setAddingLinks] = useState(false);
 
-  const activeErrorLinks = bgScanning ? bgErrorLinks : errorLinks;
-  const activeScannedCount = bgScanning ? bgScannedCount : scannedCount;
-  const activeTotalLinks = bgScanning ? bgTotalLinks : totalLinks;
-  const activeScanStatus = bgScanning ? bgScanStatus : scanStatus;
+  const [activeTab, setActiveTab] = useState<'current' | 'background'>('current');
+  const activeErrorLinks = activeTab === 'background' ? bgErrorLinks : errorLinks;
+  const activeScannedCount = activeTab === 'background' ? bgScannedCount : scannedCount;
+  const activeTotalLinks = activeTab === 'background' ? bgTotalLinks : totalLinks;
+  const activeScanStatus = activeTab === 'background' ? bgScanStatus : scanStatus;
   const isAnyScanning = scanning || bgScanning;
 
-  const uniqueErrorTypes = Array.from(new Set(activeErrorLinks.map(link => link.errorDetail))).sort();
+  const liveErrorLinks = React.useMemo(() => {
+    return activeErrorLinks.map(info => {
+      const content = contentList.find(c => c.id === info.contentId);
+      if (!content) return info;
 
-  const filteredAndSortedLinks = [...activeErrorLinks]
+      let currentLink = info.link;
+      try {
+        if (info.contentType === 'movie') {
+          if (info.listType === 'movie') {
+            const links = parseLinks(content.movieLinks);
+            if (links[info.linkIndex]) currentLink = links[info.linkIndex];
+          } else if (info.listType === 'zip') {
+            const links = parseLinks(content.fullSeasonZip);
+            if (links[info.linkIndex]) currentLink = links[info.linkIndex];
+          } else if (info.listType === 'mkv') {
+            const links = parseLinks(content.fullSeasonMkv);
+            if (links[info.linkIndex]) currentLink = links[info.linkIndex];
+          }
+        } else if (content.type === 'series' && content.seasons) {
+          const seasons: Season[] = JSON.parse(content.seasons);
+          const sIdx = info.seasonIndex!;
+          if (seasons[sIdx]) {
+            if (info.listType === 'zip') {
+              const links = parseLinks(JSON.stringify(seasons[sIdx].zipLinks));
+              if (links[info.linkIndex]) currentLink = links[info.linkIndex];
+            } else if (info.listType === 'mkv') {
+              const links = parseLinks(JSON.stringify(seasons[sIdx].mkvLinks || []));
+              if (links[info.linkIndex]) currentLink = links[info.linkIndex];
+            } else if (info.listType === 'episode') {
+              const eIdx = info.episodeIndex!;
+              if (seasons[sIdx].episodes && seasons[sIdx].episodes[eIdx]) {
+                const links = parseLinks(JSON.stringify(seasons[sIdx].episodes[eIdx].links));
+                if (links[info.linkIndex]) currentLink = links[info.linkIndex];
+              }
+            }
+          }
+        }
+      } catch (e) {
+        console.error("Error getting current link", e);
+      }
+
+      return { ...info, link: currentLink };
+    });
+  }, [activeErrorLinks, contentList]);
+
+  const uniqueErrorTypes = Array.from(new Set(liveErrorLinks.map(link => link.errorDetail))).sort();
+
+  const filteredAndSortedLinks = [...liveErrorLinks]
     .filter(link => filterErrorType === 'all' || link.errorDetail === filterErrorType)
     .sort((a, b) => {
       let comparison = 0;
@@ -62,6 +128,10 @@ export default function ErrorLinks() {
         comparison = a.contentTitle.localeCompare(b.contentTitle);
       } else if (sortBy === 'error') {
         comparison = a.errorDetail.localeCompare(b.errorDetail);
+      } else if (sortBy === 'date') {
+        const dateA = new Date(a.createdAt || 0).getTime();
+        const dateB = new Date(b.createdAt || 0).getTime();
+        comparison = dateA - dateB;
       }
       return sortOrder === 'asc' ? comparison : -comparison;
     });
@@ -106,30 +176,89 @@ export default function ErrorLinks() {
     };
   }, []);
 
-  const parseLinks = (linksStr: string | undefined): QualityLinks => {
-    if (!linksStr) return [];
-    try {
-      const parsed = JSON.parse(linksStr);
-      if (Array.isArray(parsed)) return parsed;
-      if (typeof parsed === 'object') {
-        return Object.entries(parsed).map(([name, link]: [string, any]) => ({
-          id: Math.random().toString(36).substr(2, 9),
-          name,
-          url: link?.url || '',
-          size: link?.size || '',
-          unit: 'MB' as 'MB' | 'GB'
-        })).filter(l => l.url);
+  // Auto-recheck links if they change
+  useEffect(() => {
+    if (isAnyScanning || loading) return;
+
+    const checkChangedLinks = async () => {
+      const changedLinks = liveErrorLinks.filter(live => {
+        const original = activeErrorLinks.find(o => 
+          o.contentId === live.contentId && 
+          o.listType === live.listType && 
+          o.linkIndex === live.linkIndex &&
+          o.seasonIndex === live.seasonIndex &&
+          o.episodeIndex === live.episodeIndex
+        );
+        // If the URL in contentList is different from what we scanned, it's "changed"
+        return original && live.link.url !== original.link.url;
+      });
+
+      if (changedLinks.length === 0) return;
+
+      for (const item of changedLinks) {
+        try {
+          const result = await scannerService.checkPixeldrainLink(item.link.url);
+          if (!result.error) {
+            // Link is now working! Remove from Firestore error list
+            const scanDocRef = doc(db, 'scans', activeTab);
+            const scanDoc = await getDoc(scanDocRef);
+            if (scanDoc.exists()) {
+              const scanData = scanDoc.data() as ScanState;
+              const updatedErrorLinks = scanData.errorLinks.filter(err => 
+                !(err.contentId === item.contentId && 
+                  err.listType === item.listType && 
+                  err.linkIndex === item.linkIndex &&
+                  err.seasonIndex === item.seasonIndex &&
+                  err.episodeIndex === item.episodeIndex)
+              );
+              await updateDoc(scanDocRef, { errorLinks: updatedErrorLinks });
+            }
+          } else {
+            // Link still has error, update the error detail and the link snapshot in Firestore
+            const scanDocRef = doc(db, 'scans', activeTab);
+            const scanDoc = await getDoc(scanDocRef);
+            if (scanDoc.exists()) {
+              const scanData = scanDoc.data() as ScanState;
+              const updatedErrorLinks = scanData.errorLinks.map(err => {
+                if (err.contentId === item.contentId && 
+                    err.listType === item.listType && 
+                    err.linkIndex === item.linkIndex &&
+                    err.seasonIndex === item.seasonIndex &&
+                    err.episodeIndex === item.episodeIndex) {
+                  return {
+                    ...err,
+                    link: item.link,
+                    errorDetail: result.error,
+                    fetchedSize: result.size,
+                    fetchedUnit: result.unit
+                  };
+                }
+                return err;
+              });
+              await updateDoc(scanDocRef, { errorLinks: updatedErrorLinks });
+            }
+          }
+        } catch (e) {
+          console.error("Error auto-rechecking link", e);
+        }
       }
-    } catch (e) {
-      console.error("Error parsing links", e);
-    }
-    return [];
-  };
+    };
+
+    checkChangedLinks();
+  }, [liveErrorLinks, activeErrorLinks, isAnyScanning, loading, activeTab]);
+
 
   const getAllLinksToScan = (): { info: ErrorLinkInfo, url: string }[] => {
     let allLinksToScan: { info: ErrorLinkInfo, url: string }[] = [];
 
-    contentList.forEach(content => {
+    // Sort contentList by createdAt descending (newest first)
+    const sortedContent = [...contentList].sort((a, b) => {
+      const dateA = new Date(a.createdAt || 0).getTime();
+      const dateB = new Date(b.createdAt || 0).getTime();
+      return dateB - dateA;
+    });
+
+    sortedContent.forEach(content => {
       if (content.type === 'movie') {
         if (content.movieLinks) {
           const links = parseLinks(content.movieLinks);
@@ -143,7 +272,8 @@ export default function ErrorLinks() {
                 link,
                 linkIndex: idx,
                 listType: 'movie',
-                errorDetail: ''
+                errorDetail: '',
+                createdAt: content.createdAt
               },
               url: link.url || ''
             });
@@ -161,7 +291,8 @@ export default function ErrorLinks() {
                 link,
                 linkIndex: idx,
                 listType: 'zip',
-                errorDetail: ''
+                errorDetail: '',
+                createdAt: content.createdAt
               },
               url: link.url || ''
             });
@@ -179,7 +310,8 @@ export default function ErrorLinks() {
                 link,
                 linkIndex: idx,
                 listType: 'mkv',
-                errorDetail: ''
+                errorDetail: '',
+                createdAt: content.createdAt
               },
               url: link.url || ''
             });
@@ -201,12 +333,13 @@ export default function ErrorLinks() {
                   linkIndex: idx,
                   seasonIndex: sIdx,
                   listType: 'zip',
-                  errorDetail: ''
+                  errorDetail: '',
+                  createdAt: content.createdAt
                 },
                 url: link.url || ''
               });
             });
-
+ 
             const mkvLinks = parseLinks(JSON.stringify(season.mkvLinks || []));
             mkvLinks.forEach((link, idx) => {
               allLinksToScan.push({
@@ -219,12 +352,13 @@ export default function ErrorLinks() {
                   linkIndex: idx,
                   seasonIndex: sIdx,
                   listType: 'mkv',
-                  errorDetail: ''
+                  errorDetail: '',
+                  createdAt: content.createdAt
                 },
                 url: link.url || ''
               });
             });
-
+ 
             season.episodes?.forEach((ep, eIdx) => {
               const epLinks = parseLinks(JSON.stringify(ep.links));
               epLinks.forEach((link, idx) => {
@@ -239,7 +373,8 @@ export default function ErrorLinks() {
                     seasonIndex: sIdx,
                     episodeIndex: eIdx,
                     listType: 'episode',
-                    errorDetail: ''
+                    errorDetail: '',
+                    createdAt: content.createdAt
                   },
                   url: link.url || ''
                 });
@@ -542,6 +677,15 @@ export default function ErrorLinks() {
 
       await updateDoc(doc(db, 'content', editingLink.contentId), updateData);
       
+      // Re-check the link after saving
+      const checkRes = await fetch("/api/check-link", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url: editUrl }),
+      });
+      const checkData = await checkRes.json().catch(() => ({ ok: false }));
+      const isWorking = !!checkData.ok;
+
       // Update error list
       const setErrorList = bgScanning ? setBgErrorLinks : setErrorLinks;
       setErrorList(prev => {
@@ -553,6 +697,10 @@ export default function ErrorLinks() {
             item.episodeIndex === editingLink.episodeIndex)
         );
         
+        if (isWorking) {
+          return filtered;
+        }
+
         const updatedLink: ErrorLinkInfo = {
           ...editingLink,
           link: {
@@ -568,29 +716,41 @@ export default function ErrorLinks() {
       });
 
       // Update scans/current or scans/background in Firestore
-      const scanDocRef = bgScanning ? doc(db, 'scans', 'background') : doc(db, 'scans', 'current');
+      const scanDocRef = doc(db, 'scans', activeTab);
       const scanDoc = await getDoc(scanDocRef);
       if (scanDoc.exists()) {
         const scanData = scanDoc.data() as ScanState;
-        const updatedErrorLinks = scanData.errorLinks.map(item => {
-          if (item.contentId === editingLink.contentId && 
+        let updatedErrorLinks = scanData.errorLinks;
+        
+        if (isWorking) {
+          updatedErrorLinks = updatedErrorLinks.filter(item => 
+            !(item.contentId === editingLink.contentId && 
               item.listType === editingLink.listType && 
               item.linkIndex === editingLink.linkIndex &&
               item.seasonIndex === editingLink.seasonIndex &&
-              item.episodeIndex === editingLink.episodeIndex) {
-            return {
-              ...item,
-              link: {
-                ...item.link,
-                url: editUrl,
-                size: editSize,
-                unit: editUnit,
-                name: editName
-              }
-            };
-          }
-          return item;
-        });
+              item.episodeIndex === editingLink.episodeIndex)
+          );
+        } else {
+          updatedErrorLinks = updatedErrorLinks.map(item => {
+            if (item.contentId === editingLink.contentId && 
+                item.listType === editingLink.listType && 
+                item.linkIndex === editingLink.linkIndex &&
+                item.seasonIndex === editingLink.seasonIndex &&
+                item.episodeIndex === editingLink.episodeIndex) {
+              return {
+                ...item,
+                link: {
+                  ...item.link,
+                  url: editUrl,
+                  size: editSize,
+                  unit: editUnit,
+                  name: editName
+                }
+              };
+            }
+            return item;
+          });
+        }
         await updateDoc(scanDocRef, { errorLinks: updatedErrorLinks });
       }
       
@@ -614,6 +774,25 @@ export default function ErrorLinks() {
           <p className="text-zinc-400 mt-1">Deep Scan using multiple algorithms to find broken links.</p>
         </div>
         <div className="flex flex-col gap-2 items-end">
+          {/* Tab Switcher */}
+          <div className="flex bg-zinc-900 p-1 rounded-lg border border-zinc-800 mb-2">
+            <button
+              onClick={() => setActiveTab('current')}
+              className={`px-4 py-1.5 rounded-md text-sm font-medium transition-colors ${
+                activeTab === 'current' ? 'bg-emerald-500 text-white' : 'text-zinc-400 hover:text-white'
+              }`}
+            >
+              Current Scan
+            </button>
+            <button
+              onClick={() => setActiveTab('background')}
+              className={`px-4 py-1.5 rounded-md text-sm font-medium transition-colors ${
+                activeTab === 'background' ? 'bg-purple-500 text-white' : 'text-zinc-400 hover:text-white'
+              }`}
+            >
+              Server Scan
+            </button>
+          </div>
           {/* Line 1: Main Scan Buttons */}
           <div className="flex items-center gap-2">
             {scanStatus === 'completed' && (
@@ -789,9 +968,10 @@ export default function ErrorLinks() {
                   <ArrowUpDown className="w-4 h-4 text-zinc-400" />
                   <select
                     value={sortBy}
-                    onChange={(e) => setSortBy(e.target.value as 'title' | 'error')}
+                    onChange={(e) => setSortBy(e.target.value as 'title' | 'error' | 'date')}
                     className="bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-emerald-500 w-full sm:w-auto"
                   >
+                    <option value="date">Sort by Date</option>
                     <option value="title">Sort by Title</option>
                     <option value="error">Sort by Error Type</option>
                   </select>
@@ -807,6 +987,7 @@ export default function ErrorLinks() {
                 <table className="w-full text-left text-sm">
                   <thead className="bg-zinc-950 text-zinc-400">
                     <tr>
+                      <th className="px-6 py-4 font-medium">Date</th>
                       <th className="px-6 py-4 font-medium">Content</th>
                       <th className="px-6 py-4 font-medium">Location</th>
                       <th className="px-6 py-4 font-medium">Link Name</th>
@@ -817,6 +998,14 @@ export default function ErrorLinks() {
                   <tbody className="divide-y divide-zinc-800">
                     {filteredAndSortedLinks.map((info, i) => (
                       <tr key={i} className="hover:bg-zinc-800/50 transition-colors">
+                      <td className="px-6 py-4">
+                        <div className="text-zinc-300">
+                          {info.createdAt ? new Date(info.createdAt).toLocaleDateString() : 'N/A'}
+                        </div>
+                        <div className="text-[10px] text-zinc-500">
+                          {info.createdAt ? new Date(info.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}
+                        </div>
+                      </td>
                       <td className="px-6 py-4">
                         <div className="font-medium text-white">{info.contentTitle}</div>
                         <div className="text-xs text-zinc-500 uppercase">{info.contentType}</div>

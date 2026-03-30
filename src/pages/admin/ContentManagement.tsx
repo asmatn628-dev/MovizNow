@@ -84,6 +84,7 @@ export default function ContentManagement() {
   const [selectedImdbSeasons, setSelectedImdbSeasons] = useState<number[]>([]);
   const [shareSeasonModal, setShareSeasonModal] = useState<{ isOpen: boolean; content: Content | null; seasons: Season[] }>({ isOpen: false, content: null, seasons: [] });
   const [notificationModal, setNotificationModal] = useState<{ isOpen: boolean; content: Content | null; status: 'idle' | 'sending' | 'success' | 'error' }>({ isOpen: false, content: null, status: 'idle' });
+  const [shareAnywayConfig, setShareAnywayConfig] = useState<{ isOpen: boolean; content: Content | null }>({ isOpen: false, content: null });
   const [selectedShareSeasons, setSelectedShareSeasons] = useState<number[]>([]);
   const location = useLocation();
 
@@ -172,7 +173,7 @@ export default function ContentManagement() {
       const managersData: Record<string, string> = {};
       snapshot.docs.forEach(doc => {
         const data = doc.data();
-        if (data.role === 'admin' || data.role === 'owner' || data.role === 'content_manager') {
+        if (data.role === 'admin' || data.role === 'owner' || data.role === 'content_manager' || data.role === 'manager') {
           managersData[doc.id] = data.displayName || data.email || 'Unknown';
         }
       });
@@ -229,12 +230,15 @@ export default function ContentManagement() {
     if (editId && contentList.length > 0) {
       const content = contentList.find(c => c.id === editId);
       if (content) {
-        handleEdit(content);
+        const canEdit = profile?.role === 'admin' || profile?.role === 'owner' || content.status === 'draft';
+        if (canEdit) {
+          handleEdit(content);
+        }
         // Clear the param so it doesn't reopen on refresh if we close it
         setSearchParams({}, { replace: true });
       }
     }
-  }, [searchParams, contentList]);
+  }, [searchParams, contentList, profile]);
 
   const resetForm = () => {
     setType('movie');
@@ -382,7 +386,7 @@ export default function ContentManagement() {
 
       const data: Partial<Content> = {
         type,
-        status: profile?.role === 'content_manager' ? 'draft' : status,
+        status: (profile?.role === 'content_manager' || profile?.role === 'manager') ? 'draft' : status,
         title,
         description,
         posterUrl,
@@ -943,7 +947,7 @@ export default function ContentManagement() {
   };
 
   const handleShare = async (content: Content) => {
-    const isMissingData = !content.runtime || !content.releaseDate || !content.genreIds || content.genreIds.length === 0 || !content.description;
+    const isMissingData = !content.runtime || !content.releaseDate || !content.genreIds || content.genreIds.length === 0;
     
     if (isMissingData) {
       setLoadingShareId(content.id);
@@ -1020,18 +1024,16 @@ export default function ContentManagement() {
                     }
                 } catch (e) {
                     console.error("Error parsing/updating seasons for share:", e);
-                    setAlertConfig({ isOpen: true, title: 'Error', message: 'Failed to parse content data.' });
-                    setLoadingShareId(null);
-                    return;
                 }
             }
             executeShare(updatedContent);
         } else {
-            setAlertConfig({ isOpen: true, title: 'Error', message: 'Failed to fetch missing data.' });
+            // Failed to find TMDB item, show share anyway option
+            setShareAnywayConfig({ isOpen: true, content });
         }
       } catch (error) {
         console.error("Share Fetch Error:", error);
-        setAlertConfig({ isOpen: true, title: 'Error', message: 'Failed to fetch missing data.' });
+        setShareAnywayConfig({ isOpen: true, content });
       } finally {
         setLoadingShareId(null);
       }
@@ -1080,19 +1082,31 @@ export default function ContentManagement() {
     if (content.releaseDate) text += `📅 Release: ${formatReleaseDateForShare(content.releaseDate)}\n`;
     if (content.subtitles) text += `📝 Subtitles: Available\n`;
     
-    if (content.sampleUrl) text += `📽️ Sample: ${content.sampleUrl}\n\n`;
-    else text += `\n`;
+    if (content.sampleUrl) text += `📽️ Sample: ${content.sampleUrl}\n`;
+    text += `\n`;
 
     let hasUpdates = false;
     let updatedContent = { ...content };
 
     const processLink = async (link: LinkDef) => {
       if (!link.url) return link;
-      if (!link.url.includes('pixeldrain.com') && !link.url.includes('pixeldrain.dev') && !link.tinyUrl) {
+      
+      // If the original URL is HTML, it's broken
+      if (link.url.toLowerCase().includes('<html')) {
+        return { ...link, url: '', tinyUrl: '' };
+      }
+
+      const isBadTinyUrl = link.tinyUrl && link.tinyUrl.toLowerCase().includes('<html');
+      
+      if (!link.url.includes('pixeldrain.com') && !link.url.includes('pixeldrain.dev') && (!link.tinyUrl || isBadTinyUrl)) {
         const tinyUrl = await generateTinyUrl(link.url);
-        if (tinyUrl !== link.url) {
+        if (tinyUrl && tinyUrl !== link.url && !tinyUrl.toLowerCase().includes('<html')) {
           hasUpdates = true;
           return { ...link, tinyUrl };
+        } else if (isBadTinyUrl) {
+          // If we had a bad tinyUrl and couldn't generate a new one, clear it
+          hasUpdates = true;
+          return { ...link, tinyUrl: '' };
         }
       }
       return link;
@@ -1121,15 +1135,30 @@ export default function ContentManagement() {
 
       if (zipLinks.length > 0) {
         text += `\n📦 *ZIP Files:*\n`;
-        zipLinks.forEach(l => { if (l.url) text += `▪️ ${l.name} (${l.size}${l.unit})\n${l.tinyUrl || l.url}\n`; });
+        zipLinks.forEach(l => { 
+          const finalUrl = l.tinyUrl || l.url;
+          if (finalUrl && !finalUrl.toLowerCase().includes('<html')) {
+            text += `▪️ ${l.name} (${l.size}${l.unit})\n${finalUrl}\n`; 
+          }
+        });
       }
       if (mkvLinks.length > 0) {
         text += `\n🎞️ *MKV Files:*\n`;
-        mkvLinks.forEach(l => { if (l.url) text += `▪️ ${l.name} (${l.size}${l.unit})\n${l.tinyUrl || l.url}\n`; });
+        mkvLinks.forEach(l => { 
+          const finalUrl = l.tinyUrl || l.url;
+          if (finalUrl && !finalUrl.toLowerCase().includes('<html')) {
+            text += `▪️ ${l.name} (${l.size}${l.unit})\n${finalUrl}\n`; 
+          }
+        });
       }
       if (otherLinks.length > 0) {
         if (zipLinks.length > 0 || mkvLinks.length > 0) text += `\n📄 *Other Files:*\n`;
-        otherLinks.forEach(l => { if (l.url) text += `▪️ ${l.name} (${l.size}${l.unit})\n${l.tinyUrl || l.url}\n`; });
+        otherLinks.forEach(l => { 
+          const finalUrl = l.tinyUrl || l.url;
+          if (finalUrl && !finalUrl.toLowerCase().includes('<html')) {
+            text += `▪️ ${l.name} (${l.size}${l.unit})\n${finalUrl}\n`; 
+          }
+        });
       }
     } else if (updatedContent.type === 'series' && updatedContent.seasons) {
       const parsedSeasons: Season[] = JSON.parse(updatedContent.seasons);
@@ -1174,13 +1203,19 @@ export default function ContentManagement() {
         if (zipLinks.length > 0) {
           text += `📦 *Full Season ZIP:*\n`;
           zipLinks.forEach((link) => {
-            text += `  ▪️ ${link.name} (${link.size}${link.unit})\n  ${link.tinyUrl || link.url}\n`;
+            const finalUrl = link.tinyUrl || link.url;
+            if (finalUrl && !finalUrl.toLowerCase().includes('<html')) {
+              text += `  ▪️ ${link.name} (${link.size}${link.unit})\n  ${finalUrl}\n`;
+            }
           });
         }
         if (mkvLinks.length > 0) {
           text += `\n🎞️ *Full Season MKV:*\n`;
           mkvLinks.forEach((link) => {
-            text += `  ▪️ ${link.name} (${link.size}${link.unit})\n  ${link.tinyUrl || link.url}\n`;
+            const finalUrl = link.tinyUrl || link.url;
+            if (finalUrl && !finalUrl.toLowerCase().includes('<html')) {
+              text += `  ▪️ ${link.name} (${link.size}${link.unit})\n  ${finalUrl}\n`;
+            }
           });
         }
         if (season.episodes && season.episodes.length > 0) {
@@ -1195,7 +1230,10 @@ export default function ContentManagement() {
             season.episodes.forEach(ep => {
               const link = parseLinks(JSON.stringify(ep.links)).find(l => l && l.url);
               if (link) {
-                text += `E${ep.episodeNumber}: ${ep.title}${ep.duration ? ` (${ep.duration})` : ''} (${link.size}${link.unit})\n${link.tinyUrl || link.url}\n`;
+                const finalUrl = link.tinyUrl || link.url;
+                if (finalUrl && !finalUrl.toLowerCase().includes('<html')) {
+                  text += `E${ep.episodeNumber}: ${ep.title}${ep.duration ? ` (${ep.duration})` : ''} (${link.size}${link.unit})\n${finalUrl}\n`;
+                }
               }
             });
           } else {
@@ -1205,7 +1243,10 @@ export default function ContentManagement() {
               const epLinks = parseLinks(JSON.stringify(ep.links)).sort((a, b) => getSizeInMB(a.size, a.unit) - getSizeInMB(b.size, b.unit));
               epLinks.forEach((link) => {
                 if (link && link.url) {
-                  text += `- ${link.name} (${link.size}${link.unit})\n${link.tinyUrl || link.url}\n`;
+                  const finalUrl = link.tinyUrl || link.url;
+                  if (finalUrl && !finalUrl.toLowerCase().includes('<html')) {
+                    text += `- ${link.name} (${link.size}${link.unit})\n${finalUrl}\n`;
+                  }
                 }
               });
             });
@@ -1225,7 +1266,8 @@ export default function ContentManagement() {
       }
     }
 
-    text += `\n🍿 Enjoy watching on MovizNow!\n📞 WhatsApp: 03363284466`;
+    text += `\n🍿 Enjoy watching on MovizNow!\n`;
+    text += `📞 WhatsApp: 03363284466`;
     
     if (navigator.share) {
       try {
@@ -1235,13 +1277,26 @@ export default function ContentManagement() {
         });
       } catch (err) {
         if ((err as Error).name !== 'AbortError') {
-          const encodedText = encodeURIComponent(text);
-          window.open(`https://wa.me/?text=${encodedText}`, '_blank');
+          // Fallback to clipboard
+          try {
+            await navigator.clipboard.writeText(text);
+            setAlertConfig({ isOpen: true, title: 'Success', message: 'Share content copied to clipboard! You can now paste it in WhatsApp.' });
+          } catch (clipErr) {
+            // Last resort: WhatsApp direct link
+            const encodedText = encodeURIComponent(text);
+            window.open(`https://wa.me/?text=${encodedText}`, '_blank');
+          }
         }
       }
     } else {
-      const encodedText = encodeURIComponent(text);
-      window.open(`https://wa.me/?text=${encodedText}`, '_blank');
+      // Fallback for browsers without navigator.share
+      try {
+        await navigator.clipboard.writeText(text);
+        setAlertConfig({ isOpen: true, title: 'Success', message: 'Share content copied to clipboard! You can now paste it in WhatsApp.' });
+      } catch (clipErr) {
+        const encodedText = encodeURIComponent(text);
+        window.open(`https://wa.me/?text=${encodedText}`, '_blank');
+      }
     }
     setLoadingShareId(null);
   };
@@ -1569,6 +1624,11 @@ export default function ContentManagement() {
           name = `Link ${count}`;
         }
 
+        // Skip if URL is actually HTML
+        if (url.toLowerCase().includes('<html')) {
+          return;
+        }
+
         const link: LinkDef = {
           id: Math.random().toString(36).substr(2, 9),
           name,
@@ -1804,7 +1864,7 @@ export default function ContentManagement() {
     let result = contentList;
     
     // Content Manager restriction: only see their own content
-    if (profile?.role === 'content_manager') {
+    if (profile?.role === 'content_manager' || profile?.role === 'manager') {
       result = result.filter(c => c.addedBy === user?.uid);
     }
 
@@ -1826,7 +1886,7 @@ export default function ContentManagement() {
     if (filterStatus !== 'all') {
       result = result.filter(c => (c.status || 'published') === filterStatus);
     }
-    if (profile?.role === 'content_manager') {
+    if (profile?.role === 'content_manager' || profile?.role === 'manager') {
       result = result.filter(c => c.addedBy === user?.uid);
     }
 
@@ -1882,8 +1942,15 @@ export default function ContentManagement() {
     
     const batch = writeBatch(db);
     currentSelected.forEach(id => {
-      const contentRef = doc(db, 'content', id);
-      batch.update(contentRef, { status });
+      const content = contentList.find(c => c.id === id);
+      if (content) {
+        // Prevent managers from modifying published content
+        if ((profile?.role === 'content_manager' || profile?.role === 'manager') && content.status === 'published') {
+          return;
+        }
+        const contentRef = doc(db, 'content', id);
+        batch.update(contentRef, { status });
+      }
     });
     batch.commit().catch(error => {
       console.error('Error updating content:', error);
@@ -1947,7 +2014,7 @@ export default function ContentManagement() {
                       <option value="delete">Delete</option>
                     </>
                   )}
-                  {profile?.role === 'content_manager' && (
+                  {(profile?.role === 'content_manager' || profile?.role === 'manager') && (
                     <option value="draft">Draft</option>
                   )}
                 </select>
@@ -2086,14 +2153,18 @@ export default function ContentManagement() {
                         <Bell className="w-4 h-4 md:w-5 md:h-5" />
                       </button>
                     )}
-                    <button onClick={() => handleCopyData(content)} className="text-zinc-400 hover:text-white p-1.5 transition-colors" title="Copy Data">
-                      <Copy className="w-4 h-4 md:w-5 md:h-5" />
-                    </button>
+                    {(profile?.role === 'admin' || profile?.role === 'owner') && (
+                      <button onClick={() => handleCopyData(content)} className="text-zinc-400 hover:text-white p-1.5 transition-colors" title="Copy Data">
+                        <Copy className="w-4 h-4 md:w-5 md:h-5" />
+                      </button>
+                    )}
                   </div>
                   <div className="flex gap-1">
-                    <button onClick={() => handleEdit(content)} className="text-zinc-400 hover:text-white p-1.5 transition-colors">
-                      <Edit2 className="w-4 h-4 md:w-5 md:h-5" />
-                    </button>
+                    {(profile?.role === 'admin' || profile?.role === 'owner' || content.status === 'draft') && (
+                      <button onClick={() => handleEdit(content)} className="text-zinc-400 hover:text-white p-1.5 transition-colors">
+                        <Edit2 className="w-4 h-4 md:w-5 md:h-5" />
+                      </button>
+                    )}
                     {(profile?.role === 'admin' || profile?.role === 'owner') && (
                       <button onClick={() => setDeleteId(content.id)} className="text-red-500 hover:text-red-400 p-1.5 transition-colors">
                         <Trash2 className="w-4 h-4 md:w-5 md:h-5" />
@@ -2161,7 +2232,7 @@ export default function ContentManagement() {
                               </label>
                             </>
                           )}
-                          {profile?.role === 'content_manager' && (
+                          {(profile?.role === 'content_manager' || profile?.role === 'manager') && (
                             <label className={`flex-1 flex items-center justify-center gap-1 p-1.5 rounded-lg border cursor-pointer transition-colors text-xs bg-yellow-500/10 border-yellow-500 text-yellow-500`}>
                               <EyeOff className="w-3.5 h-3.5" /> Draft
                             </label>
@@ -2963,6 +3034,21 @@ export default function ContentManagement() {
           </div>
         </div>
       )}
+
+      <ConfirmModal
+        isOpen={shareAnywayConfig.isOpen}
+        title="Missing Data"
+        message="Failed to fetch missing metadata from TMDB. Would you like to share with available data anyway?"
+        confirmText="Share Anyway"
+        cancelText="Cancel"
+        onConfirm={() => {
+          if (shareAnywayConfig.content) {
+            executeShare(shareAnywayConfig.content);
+            setShareAnywayConfig({ isOpen: false, content: null });
+          }
+        }}
+        onCancel={() => setShareAnywayConfig({ isOpen: false, content: null })}
+      />
 
     </div>
   );

@@ -1,21 +1,33 @@
-import React, { useState, useEffect } from 'react';
-import { collection, query, orderBy, onSnapshot, deleteDoc, doc } from 'firebase/firestore';
-import { db } from '../../firebase';
-import { AppNotification } from '../../types';
-import { Bell, Trash2, Search, Calendar } from 'lucide-react';
-import { format, isToday } from 'date-fns';
-import ConfirmModal from '../../components/ConfirmModal';
+import React, { useState, useEffect } from "react";
+import {
+  collection,
+  query,
+  orderBy,
+  onSnapshot,
+  deleteDoc,
+  doc,
+} from "firebase/firestore";
+import { db } from "../../firebase";
+import { AppNotification } from "../../types";
+import { Bell, Trash2, Search, Calendar } from "lucide-react";
+import { format, isToday } from "date-fns";
+import ConfirmModal from "../../components/ConfirmModal";
 
 export default function Notifications() {
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [loading, setLoading] = useState(true);
-  const [searchTerm, setSearchTerm] = useState('');
+  const [searchTerm, setSearchTerm] = useState("");
   const [deleteId, setDeleteId] = useState<string | null>(null);
 
   useEffect(() => {
-    const q = query(collection(db, 'notifications'), orderBy('createdAt', 'desc'));
+    const q = query(
+      collection(db, "notifications"),
+      orderBy("createdAt", "desc"),
+    );
     const unsubscribe = onSnapshot(q, (snapshot) => {
-      const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as AppNotification));
+      const data = snapshot.docs
+        .map((doc) => ({ id: doc.id, ...doc.data() }) as AppNotification)
+        .filter((n) => !n.targetUserId); // Only show global notifications in the admin panel
       setNotifications(data);
       setLoading(false);
     });
@@ -26,22 +38,29 @@ export default function Notifications() {
   const handleDelete = async () => {
     if (!deleteId) return;
     try {
-      await deleteDoc(doc(db, 'notifications', deleteId));
+      await deleteDoc(doc(db, "notifications", deleteId));
       setDeleteId(null);
     } catch (error) {
-      console.error('Error deleting notification:', error);
+      console.error("Error deleting notification:", error);
     }
   };
 
-  const filteredNotifications = notifications.filter(n => 
-    n.title.toLowerCase().includes(searchTerm.toLowerCase()) || 
-    n.body.toLowerCase().includes(searchTerm.toLowerCase())
+  const filteredNotifications = notifications.filter(
+    (n) =>
+      n.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      n.body.toLowerCase().includes(searchTerm.toLowerCase()),
   );
 
-  const notificationsToday = notifications.filter(n => isToday(new Date(n.createdAt))).length;
+  const notificationsToday = notifications.filter((n) =>
+    isToday(new Date(n.createdAt)),
+  ).length;
 
   if (loading) {
-    return <div className="p-8 text-center text-zinc-500">Loading notifications...</div>;
+    return (
+      <div className="p-8 text-center text-zinc-500">
+        Loading notifications...
+      </div>
+    );
   }
 
   return (
@@ -52,16 +71,22 @@ export default function Notifications() {
             <Bell className="w-8 h-8 text-blue-500" />
             Notifications
           </h1>
-          <p className="text-zinc-400 mt-1">Manage push notifications sent to users</p>
+          <p className="text-zinc-400 mt-1">
+            Manage push notifications sent to users
+          </p>
         </div>
-        
+
         <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4 flex items-center gap-4">
           <div className="w-12 h-12 bg-blue-500/10 rounded-full flex items-center justify-center shrink-0">
             <Calendar className="w-6 h-6 text-blue-500" />
           </div>
           <div>
-            <div className="text-2xl font-bold text-white">{notificationsToday}</div>
-            <div className="text-xs text-zinc-400 uppercase tracking-wider font-bold">Sent Today</div>
+            <div className="text-2xl font-bold text-white">
+              {notificationsToday}
+            </div>
+            <div className="text-xs text-zinc-400 uppercase tracking-wider font-bold">
+              Sent Today
+            </div>
           </div>
         </div>
       </div>
@@ -87,12 +112,15 @@ export default function Notifications() {
               <p>No notifications found</p>
             </div>
           ) : (
-            filteredNotifications.map(notification => (
-              <div key={notification.id} className="bg-zinc-950 border border-zinc-800 rounded-xl p-4 flex flex-col sm:flex-row gap-4 items-start sm:items-center">
+            filteredNotifications.map((notification) => (
+              <div
+                key={notification.id}
+                className="bg-zinc-950 border border-zinc-800 rounded-xl p-4 flex flex-col sm:flex-row gap-4 items-start sm:items-center"
+              >
                 {notification.posterUrl ? (
-                  <img 
-                    src={notification.posterUrl} 
-                    alt="Poster" 
+                  <img
+                    src={notification.posterUrl}
+                    alt="Poster"
                     className="w-16 h-24 object-cover rounded-lg shrink-0 border border-zinc-800"
                     referrerPolicy="no-referrer"
                   />
@@ -101,15 +129,22 @@ export default function Notifications() {
                     <Bell className="w-6 h-6 text-zinc-600" />
                   </div>
                 )}
-                
+
                 <div className="flex-1 min-w-0">
                   <div className="flex items-start justify-between gap-4 mb-2">
-                    <h3 className="font-bold text-lg text-white leading-tight">{notification.title}</h3>
+                    <h3 className="font-bold text-lg text-white leading-tight">
+                      {notification.title}
+                    </h3>
                     <span className="text-xs text-zinc-500 whitespace-nowrap bg-zinc-900 px-2 py-1 rounded-md">
-                      {format(new Date(notification.createdAt), 'MMM dd, yyyy HH:mm')}
+                      {format(
+                        new Date(notification.createdAt),
+                        "MMM dd, yyyy HH:mm",
+                      )}
                     </span>
                   </div>
-                  <p className="text-zinc-400 text-sm mb-3">{notification.body}</p>
+                  <p className="text-zinc-400 text-sm mb-3">
+                    {notification.body}
+                  </p>
                   <div className="flex items-center gap-2">
                     <span className="text-[10px] font-bold uppercase tracking-wider bg-blue-500/10 text-blue-500 px-2 py-1 rounded">
                       Push Notification

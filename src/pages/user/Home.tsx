@@ -30,6 +30,7 @@ export default function Home({ onOpenMediaModal }: { onOpenMediaModal: () => voi
   const [isLogoutModalOpen, setIsLogoutModalOpen] = useState(false);
   const [showWhatsappPrompt, setShowWhatsappPrompt] = useState(false);
   const [whatsappNumber, setWhatsappNumber] = useState('');
+  const [hasDismissedSession, setHasDismissedSession] = useState(false);
 
   const clearFilters = () => {
     setSort('newest');
@@ -42,10 +43,18 @@ export default function Home({ onOpenMediaModal }: { onOpenMediaModal: () => voi
   };
 
   useEffect(() => {
-    if (profile && profile.phone === undefined && profile.role !== 'admin' && profile.role !== 'content_manager' && profile.role !== 'manager' && profile.role !== 'owner') {
-      setShowWhatsappPrompt(true);
+    if (profile && !profile.phone && profile.role !== 'admin' && profile.role !== 'content_manager' && profile.role !== 'manager' && profile.role !== 'owner' && !hasDismissedSession) {
+      // Check if we just came back from MovieDetails
+      const cameFromDetails = sessionStorage.getItem('from_movie_details') === 'true';
+      if (cameFromDetails) {
+        setShowWhatsappPrompt(true);
+        sessionStorage.removeItem('from_movie_details');
+      } else if (profile.phone === undefined) {
+        // Initial prompt for new users who haven't even dismissed it once
+        setShowWhatsappPrompt(true);
+      }
     }
-  }, [profile]);
+  }, [profile, hasDismissedSession]);
 
   const handleSaveWhatsapp = () => {
     if (!profile) return;
@@ -56,10 +65,16 @@ export default function Home({ onOpenMediaModal }: { onOpenMediaModal: () => voi
   };
 
   const handleDismissWhatsapp = () => {
+    setShowWhatsappPrompt(false);
+    setHasDismissedSession(true);
+  };
+
+  const handleNeverShowAgain = () => {
     if (!profile) return;
     setShowWhatsappPrompt(false);
+    setHasDismissedSession(true);
     updateDoc(doc(db, 'users', profile.uid), {
-      phone: '' // Save empty string to indicate dismissed
+      phone: '' // Save empty string to indicate never show again
     }).catch(error => console.error("Failed to dismiss WhatsApp prompt", error));
   };
 
@@ -723,19 +738,27 @@ export default function Home({ onOpenMediaModal }: { onOpenMediaModal: () => voi
                 onChange={(e) => setWhatsappNumber(e.target.value)}
                 className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-3 focus:outline-none focus:border-emerald-500"
               />
-              <div className="flex gap-3">
+              <div className="flex flex-col gap-2">
+                <div className="flex gap-3">
+                  <button
+                    onClick={handleDismissWhatsapp}
+                    className="flex-1 bg-zinc-800 hover:bg-zinc-700 text-white font-bold py-3 px-4 rounded-xl transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleSaveWhatsapp}
+                    disabled={!whatsappNumber.trim()}
+                    className="flex-1 bg-emerald-500 hover:bg-emerald-600 disabled:bg-emerald-500/50 disabled:cursor-not-allowed text-white font-bold py-3 px-4 rounded-xl transition-colors"
+                  >
+                    Save
+                  </button>
+                </div>
                 <button
-                  onClick={handleDismissWhatsapp}
-                  className="flex-1 bg-zinc-800 hover:bg-zinc-700 text-white font-bold py-3 px-4 rounded-xl transition-colors"
+                  onClick={handleNeverShowAgain}
+                  className="text-[10px] text-zinc-500 hover:text-zinc-400 transition-colors"
                 >
-                  Cancel
-                </button>
-                <button
-                  onClick={handleSaveWhatsapp}
-                  disabled={!whatsappNumber.trim()}
-                  className="flex-1 bg-emerald-500 hover:bg-emerald-600 disabled:bg-emerald-500/50 disabled:cursor-not-allowed text-white font-bold py-3 px-4 rounded-xl transition-colors"
-                >
-                  Save
+                  Don't show again
                 </button>
               </div>
             </div>

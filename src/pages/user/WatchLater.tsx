@@ -14,7 +14,7 @@ export default function WatchLater() {
 
   const watchLaterContent = contentList.filter(c => 
     profile?.watchLater?.includes(c.id) && 
-    (profile?.role === 'admin' || profile?.role === 'owner' || profile?.role === 'content_manager' || (
+    (profile?.role === 'admin' || profile?.role === 'owner' || profile?.role === 'content_manager' || profile?.role === 'manager' || (
       c.status !== 'draft' && (
         c.status !== 'selected_content' || 
         profile?.assignedContent?.some(id => id === c.id || id.startsWith(`${c.id}:`))
