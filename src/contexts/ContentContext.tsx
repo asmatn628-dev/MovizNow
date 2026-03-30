@@ -57,6 +57,12 @@ export function ContentProvider({ children }: { children: React.ReactNode }) {
     });
     const unsubGenres = onSnapshot(collection(db, 'genres'), (snapshot) => {
       const data = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Genre));
+      data.sort((a, b) => {
+        if (a.order !== undefined && b.order !== undefined) return a.order - b.order;
+        if (a.order !== undefined) return -1;
+        if (b.order !== undefined) return 1;
+        return a.name.localeCompare(b.name);
+      });
       localStorage.setItem('genres_cache', JSON.stringify(data));
       setGenres(data);
     }, (error) => {
@@ -65,6 +71,12 @@ export function ContentProvider({ children }: { children: React.ReactNode }) {
     });
     const unsubLangs = onSnapshot(collection(db, 'languages'), (snapshot) => {
       const data = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Language));
+      data.sort((a, b) => {
+        if (a.order !== undefined && b.order !== undefined) return a.order - b.order;
+        if (a.order !== undefined) return -1;
+        if (b.order !== undefined) return 1;
+        return a.name.localeCompare(b.name);
+      });
       localStorage.setItem('languages_cache', JSON.stringify(data));
       setLanguages(data);
     }, (error) => {
@@ -73,6 +85,12 @@ export function ContentProvider({ children }: { children: React.ReactNode }) {
     });
     const unsubQualities = onSnapshot(collection(db, 'qualities'), (snapshot) => {
       const data = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Quality));
+      data.sort((a, b) => {
+        if (a.order !== undefined && b.order !== undefined) return a.order - b.order;
+        if (a.order !== undefined) return -1;
+        if (b.order !== undefined) return 1;
+        return a.name.localeCompare(b.name);
+      });
       localStorage.setItem('qualities_cache', JSON.stringify(data));
       setQualities(data);
     }, (error) => {

@@ -33,6 +33,8 @@ export default function MovieDetails() {
   const [isPosterExpanded, setIsPosterExpanded] = useState(false);
   const [isTrailerPopupOpen, setIsTrailerPopupOpen] = useState(false);
   const [isMediaModalOpen, setIsMediaModalOpen] = useState(false);
+  const [isShareModalOpen, setIsShareModalOpen] = useState(false);
+  const [shareUrl, setShareUrl] = useState('');
   const [expandedEpisodes, setExpandedEpisodes] = useState<Record<string, boolean>>({});
   const [cachedMetadata, setCachedMetadata] = useState<Partial<Content>>({});
   const [isReporting, setIsReporting] = useState(false);
@@ -720,49 +722,16 @@ export default function MovieDetails() {
     if (!content) return;
     setIsShareLoading(true);
     
-    let shareUrl = window.location.href;
-    
-    // Try to shorten the URL without the number alias
-    shareUrl = await generateTinyUrl(shareUrl, false);
-
-    const contentQuality = qualities.find(q => q.id === content.qualityId)?.name || 'N/A';
-    
-    const baseText = `🎬 ${formatContentTitle(content)} (${content.year})\n\n` +
-                     `🗣️ Language: ${contentLangs || 'N/A'}\n` +
-                     `🎭 Genre: ${contentGenres || 'N/A'}\n` +
-                     `🖨️ Print Quality: ${contentQuality}\n\n` +
-                     `Watch it here: ${shareUrl}\n\n`;
-    
-    const textForShare = baseText;
-    const textForClipboard = baseText;
-
-    const shareData: ShareData = {
-      title: `${formatContentTitle(content)} (${content.year})`,
-      text: textForShare,
-    };
-
     try {
-      // Try to include poster image
-      if (content.posterUrl && navigator.canShare && navigator.canShare({ files: [] })) {
-        try {
-          const response = await fetch(content.posterUrl);
-          const blob = await response.blob();
-          const file = new File([blob], 'poster.jpg', { type: blob.type });
-          shareData.files = [file];
-        } catch (e) {
-          console.error('Failed to fetch poster for sharing', e);
-        }
-      }
-
-      if (navigator.share && navigator.canShare(shareData)) {
-        await navigator.share(shareData);
-      } else {
-        // Fallback to clipboard
-        await navigator.clipboard.writeText(textForClipboard);
-        setAlertConfig({ isOpen: true, title: 'Success', message: 'Link and details copied to clipboard!' });
-      }
+      let url = window.location.href;
+      // Shorten the URL
+      const shortUrl = await generateTinyUrl(url, false);
+      setShareUrl(shortUrl);
+      setIsShareModalOpen(true);
     } catch (err) {
-      console.error('Error sharing:', err);
+      console.error('Error preparing share:', err);
+      setShareUrl(window.location.href);
+      setIsShareModalOpen(true);
     } finally {
       setIsShareLoading(false);
     }

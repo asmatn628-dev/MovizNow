@@ -144,19 +144,34 @@ export default function ContentManagement() {
   useEffect(() => {
     const mainElement = document.querySelector('main');
     
-    // Restore scroll position
-    const savedPosition = sessionStorage.getItem('content_management_scroll_position');
-    if (savedPosition && mainElement) {
-      mainElement.scrollTop = parseInt(savedPosition, 10);
-    }
-
-    return () => {
-      // Save scroll position
+    const handleScroll = () => {
       if (mainElement) {
         sessionStorage.setItem('content_management_scroll_position', mainElement.scrollTop.toString());
       }
     };
+
+    if (mainElement) {
+      mainElement.addEventListener('scroll', handleScroll, { passive: true });
+    }
+
+    return () => {
+      if (mainElement) {
+        mainElement.removeEventListener('scroll', handleScroll);
+      }
+    };
   }, []);
+
+  useEffect(() => {
+    if (!loading && contentList.length > 0) {
+      const mainElement = document.querySelector('main');
+      const savedPosition = sessionStorage.getItem('content_management_scroll_position');
+      if (savedPosition && mainElement) {
+        setTimeout(() => {
+          mainElement.scrollTop = parseInt(savedPosition, 10);
+        }, 100);
+      }
+    }
+  }, [loading, contentList.length]);
 
   const clearFilters = () => {
     setFilterType('all');
