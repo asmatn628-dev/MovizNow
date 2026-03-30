@@ -672,6 +672,15 @@ export const LinkCheckerModal: React.FC<Props> = ({
     return () => window.removeEventListener('focus', handleFocus);
   }, [isOpen]);
 
+  // Periodic clipboard check while modal is open
+  React.useEffect(() => {
+    if (!isOpen) return;
+    const interval = setInterval(() => {
+      pasteFromClipboard(true);
+    }, 5000); // Check every 5 seconds
+    return () => clearInterval(interval);
+  }, [isOpen]);
+
   const links = useMemo(() => {
     if (!autoExtract) {
       return input.split(/\r?\n/).map((s) => normalizeUrl(s)).filter(Boolean);

@@ -733,17 +733,30 @@ export default function MovieDetails() {
                `🖨️ *Print Quality:* ${contentQuality}\n\n` +
                `Watch it here: ${shareUrl}`;
 
-    const shareData = {
+    const shareData: ShareData = {
       title: `${formatContentTitle(content)} (${content.year})`,
       text: text,
+      url: shareUrl,
     };
 
     try {
-      if (navigator.share) {
+      // Try to include poster image
+      if (content.posterUrl && navigator.canShare && navigator.canShare({ files: [] })) {
+        try {
+          const response = await fetch(content.posterUrl);
+          const blob = await response.blob();
+          const file = new File([blob], 'poster.jpg', { type: blob.type });
+          shareData.files = [file];
+        } catch (e) {
+          console.error('Failed to fetch poster for sharing', e);
+        }
+      }
+
+      if (navigator.share && navigator.canShare(shareData)) {
         await navigator.share(shareData);
       } else {
         // Fallback to clipboard
-        await navigator.clipboard.writeText(shareData.text);
+        await navigator.clipboard.writeText(shareData.text || "");
         setAlertConfig({ isOpen: true, title: 'Success', message: 'Link and details copied to clipboard!' });
       }
     } catch (err) {
