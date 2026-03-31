@@ -59,6 +59,7 @@ const badgeMap: Record<StatusLabel, string> = {
   BROKEN: "bg-red-500/15 text-red-400 border-red-800/80",
   UNAVAILABLE: "bg-orange-500/15 text-orange-400 border-orange-800/80",
   UNKNOWN: "bg-zinc-500/15 text-zinc-300 border-zinc-700",
+  MISSING_FILENAME: "bg-pink-500/15 text-pink-400 border-pink-800/80",
   MISSING_METADATA: "bg-pink-500/15 text-pink-400 border-pink-800/80",
 };
 
@@ -236,8 +237,11 @@ export const LinkCheckerModal: React.FC<Props> = ({
   const handleAddLinks = () => {
     if (!onAddLinks || results.length === 0) return;
     
-    const workingResults = results.filter(r => selectedUrls.has(r.url) && r.statusLabel === "WORKING");
-    if (workingResults.length === 0) return;
+    const validResults = results.filter(r => 
+      (r.statusLabel === "WORKING" && selectedUrls.has(r.url)) || 
+      (r.statusLabel === "MISSING_METADATA")
+    );
+    if (validResults.length === 0) return;
 
     // Collect metadata to pass back
     const detectedLangs = new Set<string>();
@@ -247,7 +251,7 @@ export const LinkCheckerModal: React.FC<Props> = ({
     let detectedSeason: number | undefined;
     let detectedEpisode: number | undefined;
 
-    workingResults.forEach(r => {
+    validResults.forEach(r => {
       const source = `${r.fileName || ""} ${r.finalUrl || ""} ${input}`.toLowerCase();
       
       if (r.audioLabel) {
@@ -280,7 +284,7 @@ export const LinkCheckerModal: React.FC<Props> = ({
       }
     });
 
-    const qualityLinks: QualityLinks = workingResults.map(r => {
+    const qualityLinks: QualityLinks = validResults.map(r => {
       // Use detected quality or fallback
       const quality = r.qualityLabel || '720p';
 
@@ -398,8 +402,9 @@ export const LinkCheckerModal: React.FC<Props> = ({
     const unavailable = results.filter((r) => r.statusLabel === "UNAVAILABLE").length;
     const unknown = results.filter((r) => r.statusLabel === "UNKNOWN").length;
     const mismatches = results.filter((r) => (r.mismatchWarnings?.length || 0) > 0).length;
+    const missingFilename = results.filter((r) => r.statusLabel === "MISSING_FILENAME").length;
     const missingMetadata = results.filter((r) => r.statusLabel === "MISSING_METADATA").length;
-    return { working, broken, protectedCount, redirect, unavailable, unknown, mismatches, missingMetadata };
+    return { working, broken, protectedCount, redirect, unavailable, unknown, mismatches, missingFilename, missingMetadata };
   }, [results]);
 
   return (
@@ -453,10 +458,10 @@ export const LinkCheckerModal: React.FC<Props> = ({
                     </button>
                   )}
 
-                  {onAddLinks && results.some(r => r.statusLabel === "WORKING") && !loading && (
+                  {onAddLinks && results.some(r => r.statusLabel === "WORKING" || r.statusLabel === "MISSING_METADATA") && !loading && (
                     <button onClick={handleAddLinks} className="inline-flex items-center justify-center rounded-2xl bg-emerald-600 px-4 py-2 text-sm font-bold text-white hover:bg-emerald-700 gap-2 ml-auto transition-colors">
                       <Plus className="h-4 w-4" />
-                      Add {selectedUrls.size} Selected Link(s)
+                      Add {results.filter(r => (r.statusLabel === "WORKING" && selectedUrls.has(r.url)) || r.statusLabel === "MISSING_METADATA").length} Link(s)
                     </button>
                   )}
                 </div>
@@ -464,7 +469,7 @@ export const LinkCheckerModal: React.FC<Props> = ({
                 {error ? <div className="rounded-2xl border border-red-900/70 bg-red-950/40 p-4 text-red-300 text-sm flex items-start gap-2"><AlertTriangle className="h-4 w-4 mt-0.5" /><span>{error}</span></div> : null}
 
                 {!!results.length && (
-                  <div className="grid grid-cols-2 md:grid-cols-8 gap-3">
+                  <div className="grid grid-cols-2 md:grid-cols-9 gap-3">
                     {[
                       ["Working", summary.working, "text-emerald-400"],
                       ["Broken", summary.broken, "text-red-400"],
@@ -473,7 +478,8 @@ export const LinkCheckerModal: React.FC<Props> = ({
                       ["Unavailable", summary.unavailable, "text-orange-400"],
                       ["Unknown", summary.unknown, "text-zinc-300"],
                       ["Mismatches", summary.mismatches, "text-pink-400"],
-                      ["Missing Meta", summary.missingMetadata, "text-pink-400"]
+                      ["Missing Filename", summary.missingFilename, "text-pink-400"],
+                      ["Missing Metadata", summary.missingMetadata, "text-pink-400"]
                     ].map(([label, count, color]) => (
                       <div key={String(label)} className="rounded-2xl border border-zinc-800 bg-zinc-900/60 p-4">
                         <div className={`text-sm ${color}`}>{label}</div>

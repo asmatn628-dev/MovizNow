@@ -68,6 +68,20 @@ export default function ErrorLinks() {
   const [addLinksInput, setAddLinksInput] = useState('');
   const [addingLinks, setAddingLinks] = useState(false);
 
+  const categorizeError = (detail: string): string => {
+    const d = detail.toLowerCase();
+    if (d.includes('broken') || d.includes('404')) return 'Broken';
+    if (d.includes('protected') || d.includes('password')) return 'Protected';
+    if (d.includes('redirect')) return 'Redirect';
+    if (d.includes('unavailable') || d.includes('503') || d.includes('500')) return 'Unavailable';
+    if (d.includes('size mismatch')) return 'Size Mismatch';
+    if (d.includes('mismatch')) return 'Mismatches';
+    if (d.includes('missing filename')) return 'Missing Filename';
+    if (d.includes('missing url')) return 'Missing URL';
+    if (d.includes('missing quality') || d.includes('missing language')) return 'Missing Metadata';
+    return 'Unknown';
+  };
+
   const liveErrorLinks = React.useMemo(() => {
     return errorLinks.map(info => {
       const content = contentList.find(c => c.id === info.contentId);
@@ -98,7 +112,7 @@ export default function ErrorLinks() {
               if (links[info.linkIndex]) currentLink = links[info.linkIndex];
             } else if (info.listType === 'episode') {
               const eIdx = info.episodeIndex!;
-              if (seasons[sIdx].episodes && seasons[sIdx].episodes[eIdx]) {
+              if (seasons[sIdx].episodes && seasons[seasons[sIdx].episodes ? eIdx : -1]) {
                 const links = parseLinks(JSON.stringify(seasons[sIdx].episodes[eIdx].links));
                 if (links[info.linkIndex]) currentLink = links[info.linkIndex];
               }
@@ -109,11 +123,11 @@ export default function ErrorLinks() {
         console.error("Error getting current link", e);
       }
 
-      return { ...info, link: currentLink };
+      return { ...info, link: currentLink, errorCategory: categorizeError(info.errorDetail) };
     });
   }, [errorLinks, contentList]);
 
-  const uniqueErrorTypes = Array.from(new Set(liveErrorLinks.map(link => link.errorDetail))).sort();
+  const uniqueErrorTypes = Array.from(new Set(liveErrorLinks.map(link => link.errorCategory || 'Unknown'))).sort();
 
   const filteredAndSortedLinks = [...liveErrorLinks]
     .filter(link => filterErrorType === 'all' || link.errorDetail === filterErrorType)
@@ -377,7 +391,7 @@ export default function ErrorLinks() {
     const newErrorLinks: ErrorLinkInfo[] = [];
 
     results.forEach(res => {
-      if (!res.ok || res.statusLabel === "BROKEN" || res.statusLabel === "MISSING_METADATA") {
+      if (!res.ok || res.statusLabel === "BROKEN" || res.statusLabel === "MISSING_FILENAME") {
         const original = allLinksToScan.find(l => l.url === res.url);
         if (original) {
           newErrorLinks.push({
@@ -429,11 +443,19 @@ export default function ErrorLinks() {
       
       const item = queue.shift()!;
       try {
-        const res = await performFullLinkScan(item.url, {}, languages, qualities, controller.signal);
+        const res = await performFullLinkScan(
+          item.url, 
+          {}, 
+          languages, 
+          qualities, 
+          controller.signal,
+          item.link?.size,
+          item.link?.unit
+        );
         results.push(res);
         
         // Show new results as they are found
-        if (!res.ok || res.statusLabel === "BROKEN" || res.statusLabel === "MISSING_METADATA") {
+        if (!res.ok || res.statusLabel === "BROKEN" || res.statusLabel === "MISSING_FILENAME") {
           setErrorLinks(prev => {
             const newError: ErrorLinkInfo = {
               ...item.info,
@@ -978,7 +1000,7 @@ export default function ErrorLinks() {
                       <th className="px-6 py-4 font-medium">Content</th>
                       <th className="px-6 py-4 font-medium">Location</th>
                       <th className="px-6 py-4 font-medium">Link Name</th>
-                      <th className="px-6 py-4 font-medium">Error Detail</th>
+                      <th className="px-6 py-4 font-medium">Error Type</th>
                       <th className="px-6 py-4 font-medium text-right">Actions</th>
                     </tr>
                   </thead>
@@ -1008,7 +1030,8 @@ export default function ErrorLinks() {
                         </a>
                       </td>
                       <td className="px-6 py-4">
-                        <div className="text-red-400 font-medium">{info.errorDetail}</div>
+                        <div className="text-red-400 font-medium">{info.errorCategory}</div>
+                        <div className="text-[10px] text-zinc-500 mt-1">{info.errorDetail}</div>
                         {info.fetchedSize && (
                           <div className="text-[10px] text-zinc-500 mt-1 flex items-center gap-1">
                             <RefreshCw className="w-3 h-3" /> Server reports: {info.fetchedSize} {info.fetchedUnit}

@@ -7,6 +7,7 @@ export type StatusLabel =
   | "REDIRECT"
   | "UNAVAILABLE"
   | "UNKNOWN"
+  | "MISSING_FILENAME"
   | "MISSING_METADATA";
 
 export type LinkCheckResult = {
@@ -223,7 +224,7 @@ export function detectMetadataForLink(text: string, url: string, languages?: Lan
       } else {
         const codes = langShortCodes[langName] || [];
         for (const code of codes) {
-          const codeRegex = new RegExp(`\\b${code}\\b`, 'i');
+          const codeRegex = new RegExp(`(?<=^|[^a-zA-Z0-9])${code}(?![a-zA-Z0-9])`, 'i');
           if (codeRegex.test(lower)) {
             foundLangs.push(langName);
             break;
@@ -386,7 +387,7 @@ export function detectFromFilename(fileName?: string, finalUrl?: string, languag
       } else {
         const codes = langShortCodes[langName] || [];
         for (const code of codes) {
-          const codeRegex = new RegExp(`\\b${code}\\b`, 'i');
+          const codeRegex = new RegExp(`(?<=^|[^a-zA-Z0-9])${code}(?![a-zA-Z0-9])`, 'i');
           if (codeRegex.test(source)) {
             foundLangs.push(langName);
             break;
@@ -467,7 +468,9 @@ export async function performFullLinkScan(
   extractedMeta: Record<string, any> = {}, 
   languages: Language[] = [], 
   qualities: Quality[] = [],
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  expectedSize?: string,
+  expectedUnit?: 'MB' | 'GB'
 ): Promise<LinkCheckResult> {
   let base: LinkCheckResult;
   let finalUrlToUse = url;
@@ -522,13 +525,24 @@ export async function performFullLinkScan(
     isFullSeasonZIP: fileMeta.isFullSeasonZIP || postMeta.isFullSeasonZIP,
   };
 
-  if (result.ok && (!result.fileName || !result.qualityLabel || !result.audioLabel)) {
-    result.statusLabel = "MISSING_METADATA";
+  if (result.ok && !result.fileName) {
+    result.statusLabel = "MISSING_FILENAME";
+    result.message = "Missing filename";
   }
   
   if (result.ok && result.fileSize && result.fileSize < 20 * 1000 * 1000) {
     result.statusLabel = "BROKEN";
     result.message = "File size too small (< 20MB)";
+  }
+
+  // Size mismatch validation
+  if (result.ok && result.fileSize && expectedSize && expectedUnit) {
+    const expectedSizeBytes = parseFloat(expectedSize) * (expectedUnit === 'GB' ? 1000 * 1000 * 1000 : 1000 * 1000);
+    const diff = Math.abs(result.fileSize - expectedSizeBytes);
+    if (diff > 50 * 1000 * 1000) { // 50MB tolerance
+      result.statusLabel = "BROKEN";
+      result.message = `Size mismatch: Expected ${expectedSize}${expectedUnit}, got ${result.fileSizeText}`;
+    }
   }
 
   // Filename validation

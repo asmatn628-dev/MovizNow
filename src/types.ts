@@ -149,6 +149,7 @@ export interface ErrorLinkInfo {
   episodeIndex?: number;
   listType?: 'movie' | 'zip' | 'mkv' | 'episode';
   errorDetail: string;
+  errorCategory?: string;
   fetchedSize?: string;
   fetchedUnit?: 'MB' | 'GB';
   createdAt?: string;
