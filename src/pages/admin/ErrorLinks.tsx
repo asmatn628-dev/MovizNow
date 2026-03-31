@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { db } from '../../firebase';
 import { collection, onSnapshot, doc, updateDoc, getDoc } from 'firebase/firestore';
-import { Content, Season, QualityLinks, LinkDef, ErrorLinkInfo, ScanState, Language, Quality } from '../../types';
+import { Content, Season, QualityLinks, LinkDef, ErrorLinkInfo, Language, Quality } from '../../types';
 import { AlertTriangle, Edit2, ExternalLink, RefreshCw, X, Save, CheckCircle2, Filter, ArrowUpDown, Search, Trash2, Plus, ClipboardPaste, StopCircle } from 'lucide-react';
 import { handleFirestoreError, OperationType } from '../../utils/firestoreErrorHandler';
 import { LinkCheckerModal } from '../../components/LinkCheckerModal';
@@ -34,11 +34,16 @@ export default function ErrorLinks() {
   
   // Client-side/Deep Scan State
   const [scanning, setScanning] = useState(false);
-  const [scanStatus, setScanStatus] = useState<'idle' | 'scanning' | 'completed' | 'error'>('idle');
+  const [scanStatus, setScanStatus] = useState<'idle' | 'scanning' | 'completed' | 'error'>(() => {
+    return (localStorage.getItem('moviznow_scan_status') as any) || 'idle';
+  });
   const [scanProgress, setScanProgress] = useState(0);
   const [scanTotal, setScanTotal] = useState(0);
   const [abortController, setAbortController] = useState<AbortController | null>(null);
-  const [errorLinks, setErrorLinks] = useState<ErrorLinkInfo[]>([]);
+  const [errorLinks, setErrorLinks] = useState<ErrorLinkInfo[]>(() => {
+    const cached = localStorage.getItem('moviznow_error_links');
+    return cached ? JSON.parse(cached) : [];
+  });
   const [languages, setLanguages] = useState<Language[]>([]);
   const [qualities, setQualities] = useState<Quality[]>([]);
 
@@ -145,21 +150,22 @@ export default function ErrorLinks() {
       setQualities(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Quality)));
     });
 
-    // Load initial error links from Firestore
-    getDoc(doc(db, 'scans', 'current')).then(snapshot => {
-      if (snapshot.exists()) {
-        const data = snapshot.data() as ScanState;
-        setErrorLinks(data.errorLinks || []);
-        setScanStatus(data.status || 'idle');
-      }
-    });
-
     return () => {
       unsubContent();
       unsubLanguages();
       unsubQualities();
     };
   }, []);
+
+  // Sync errorLinks to localStorage
+  useEffect(() => {
+    localStorage.setItem('moviznow_error_links', JSON.stringify(errorLinks));
+  }, [errorLinks]);
+
+  // Sync scanStatus to localStorage
+  useEffect(() => {
+    localStorage.setItem('moviznow_scan_status', scanStatus);
+  }, [scanStatus]);
 
   // Auto-recheck links if they change
   useEffect(() => {
@@ -184,44 +190,32 @@ export default function ErrorLinks() {
         try {
           const result = await performFullLinkScan(item.link.url, {}, languages, qualities);
           if (result.ok) {
-            // Link is now working! Remove from Firestore error list
-            const scanDocRef = doc(db, 'scans', 'current');
-            const scanDoc = await getDoc(scanDocRef);
-            if (scanDoc.exists()) {
-              const scanData = scanDoc.data() as ScanState;
-              const updatedErrorLinks = scanData.errorLinks.filter(err => 
-                !(err.contentId === item.contentId && 
+            // Link is now working! Remove from local error list
+            setErrorLinks(prev => prev.filter(err => 
+              !(err.contentId === item.contentId && 
+                err.listType === item.listType && 
+                err.linkIndex === item.linkIndex &&
+                err.seasonIndex === item.seasonIndex &&
+                err.episodeIndex === item.episodeIndex)
+            ));
+          } else {
+            // Link still has error, update the error detail in local state
+            setErrorLinks(prev => prev.map(err => {
+              if (err.contentId === item.contentId && 
                   err.listType === item.listType && 
                   err.linkIndex === item.linkIndex &&
                   err.seasonIndex === item.seasonIndex &&
-                  err.episodeIndex === item.episodeIndex)
-              );
-              await updateDoc(scanDocRef, { errorLinks: updatedErrorLinks });
-            }
-          } else {
-            // Link still has error, update the error detail and the link snapshot in Firestore
-            const scanDocRef = doc(db, 'scans', 'current');
-            const scanDoc = await getDoc(scanDocRef);
-            if (scanDoc.exists()) {
-              const scanData = scanDoc.data() as ScanState;
-              const updatedErrorLinks = scanData.errorLinks.map(err => {
-                if (err.contentId === item.contentId && 
-                    err.listType === item.listType && 
-                    err.linkIndex === item.linkIndex &&
-                    err.seasonIndex === item.seasonIndex &&
-                    err.episodeIndex === item.episodeIndex) {
-                  return {
-                    ...err,
-                    link: item.link,
-                    errorDetail: result.message || result.statusLabel || "Unknown Error",
-                    fetchedSize: result.fileSizeText?.split(' ')[0],
-                    fetchedUnit: result.fileSizeText?.split(' ')[1] as 'MB' | 'GB'
-                  };
-                }
-                return err;
-              });
-              await updateDoc(scanDocRef, { errorLinks: updatedErrorLinks });
-            }
+                  err.episodeIndex === item.episodeIndex) {
+                return {
+                  ...err,
+                  link: item.link,
+                  errorDetail: result.message || result.statusLabel || "Unknown Error",
+                  fetchedSize: result.fileSizeText?.split(' ')[0],
+                  fetchedUnit: result.fileSizeText?.split(' ')[1] as 'MB' | 'GB'
+                };
+              }
+              return err;
+            }));
           }
         } catch (e) {
           console.error("Error auto-rechecking link", e);
@@ -398,17 +392,6 @@ export default function ErrorLinks() {
     });
 
     setErrorLinks(newErrorLinks);
-    
-    // Save to Firestore once to avoid many writes
-    try {
-      await updateDoc(doc(db, 'scans', 'current'), {
-        errorLinks: newErrorLinks,
-        status: 'completed',
-        lastUpdated: new Date()
-      });
-    } catch (e) {
-      console.error("Error saving scan results", e);
-    }
   };
 
   const scanLinks = async (onlyFiltered = false) => {
@@ -430,17 +413,8 @@ export default function ErrorLinks() {
     
     // Clear previous results when starting a new scan
     setErrorLinks([]);
-    
-    // Clear Firestore results too to ensure fresh state
-    try {
-      await updateDoc(doc(db, 'scans', 'current'), {
-        errorLinks: [],
-        status: 'scanning',
-        lastUpdated: new Date()
-      });
-    } catch (e) {
-      console.error("Error clearing scan results in Firestore", e);
-    }
+    localStorage.removeItem('moviznow_error_links');
+    localStorage.setItem('moviznow_scan_status', 'scanning');
     
     const controller = new AbortController();
     setAbortController(controller);
@@ -789,45 +763,6 @@ export default function ErrorLinks() {
         return [...filtered, updatedLink];
       });
 
-      // Update scans/current in Firestore
-      const scanDocRef = doc(db, 'scans', 'current');
-      const scanDoc = await getDoc(scanDocRef);
-      if (scanDoc.exists()) {
-        const scanData = scanDoc.data() as ScanState;
-        let updatedErrorLinks = scanData.errorLinks;
-        
-        if (isWorking) {
-          updatedErrorLinks = updatedErrorLinks.filter(item => 
-            !(item.contentId === editingLink.contentId && 
-              item.listType === editingLink.listType && 
-              item.linkIndex === editingLink.linkIndex &&
-              item.seasonIndex === editingLink.seasonIndex &&
-              item.episodeIndex === editingLink.episodeIndex)
-          );
-        } else {
-          updatedErrorLinks = updatedErrorLinks.map(item => {
-            if (item.contentId === editingLink.contentId && 
-                item.listType === editingLink.listType && 
-                item.linkIndex === editingLink.linkIndex &&
-                item.seasonIndex === editingLink.seasonIndex &&
-                item.episodeIndex === editingLink.episodeIndex) {
-              return {
-                ...item,
-                link: {
-                  ...item.link,
-                  url: editUrl,
-                  size: editSize,
-                  unit: editUnit,
-                  name: editName
-                }
-              };
-            }
-            return item;
-          });
-        }
-        await updateDoc(scanDocRef, { errorLinks: updatedErrorLinks });
-      }
-      
       setEditingLink(null);
     } catch (error) {
       console.error("Error updating link:", error);

@@ -1,47 +1,24 @@
-import React, { useEffect, useState } from 'react';
+import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Download, Home, Smartphone, Monitor, ShieldCheck, Zap } from 'lucide-react';
+import { usePWA } from '../contexts/PWAContext';
 
 export default function InstallApp() {
   const navigate = useNavigate();
-  const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
-  const [isInstallable, setIsInstallable] = useState(false);
-  const [isInstalled, setIsInstalled] = useState(false);
-
-  useEffect(() => {
-    // Check if already installed
-    if (window.matchMedia('(display-mode: standalone)').matches || (window.navigator as any).standalone === true) {
-      setIsInstalled(true);
-    }
-
-    const handleBeforeInstallPrompt = (e: Event) => {
-      e.preventDefault();
-      setDeferredPrompt(e);
-      setIsInstallable(true);
-    };
-
-    const handleAppInstalled = () => {
-      setIsInstalled(true);
-      setIsInstallable(false);
-      setDeferredPrompt(null);
-    };
-
-    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
-    window.addEventListener('appinstalled', handleAppInstalled);
-
-    return () => {
-      window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
-      window.removeEventListener('appinstalled', handleAppInstalled);
-    };
-  }, []);
+  const { isInstallable, isInstalled, installApp } = usePWA();
 
   const handleInstall = async () => {
-    if (!deferredPrompt) return;
-    deferredPrompt.prompt();
-    const { outcome } = await deferredPrompt.userChoice;
-    if (outcome === 'accepted') {
-      setDeferredPrompt(null);
-      setIsInstallable(false);
+    console.log('InstallApp: handleInstall called, isInstallable:', isInstallable);
+    if (isInstallable) {
+      await installApp();
+    } else {
+      console.log('InstallApp: Direct installation not available, scrolling to instructions');
+      const el = document.getElementById('install-instructions');
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth' });
+      } else {
+        alert('To install this app, please use the "Add to Home Screen" option in your browser menu.');
+      }
     }
   };
 
@@ -78,27 +55,29 @@ export default function InstallApp() {
 
           <div className="space-y-3 pt-4 border-t border-zinc-800">
             {isInstalled ? (
-              <div className="bg-emerald-500/10 text-emerald-400 p-4 rounded-xl text-center font-medium">
+              <div className="bg-emerald-500/10 text-emerald-400 p-4 rounded-xl text-center font-medium border border-emerald-500/20">
                 App is already installed!
               </div>
             ) : (
-              <button
-                onClick={handleInstall}
-                disabled={!isInstallable}
-                className={`w-full py-4 rounded-xl font-bold flex items-center justify-center gap-2 transition-all ${
-                  isInstallable 
-                    ? 'bg-emerald-500 hover:bg-emerald-600 text-white shadow-lg shadow-emerald-500/20' 
-                    : 'bg-zinc-800 text-zinc-500 cursor-not-allowed'
-                }`}
-              >
-                <Download className="w-5 h-5" />
-                {isInstallable ? 'Install Now' : 'Install Not Available'}
-              </button>
+              <>
+                <button
+                  onClick={handleInstall}
+                  className="w-full py-4 rounded-xl font-bold flex items-center justify-center gap-2 transition-all bg-emerald-500 hover:bg-emerald-600 text-white shadow-lg shadow-emerald-500/20"
+                >
+                  <Download className="w-5 h-5" />
+                  Install app
+                </button>
+                {!isInstallable && (
+                  <p className="text-[10px] text-zinc-500 text-center">
+                    Direct installation not supported by your browser. Use the instructions below.
+                  </p>
+                )}
+              </>
             )}
             
             <button
               onClick={() => navigate('/')}
-              className="w-full py-4 rounded-xl font-bold flex items-center justify-center gap-2 bg-zinc-800 hover:bg-zinc-700 text-white transition-all"
+              className="w-full py-4 rounded-xl font-bold flex items-center justify-center gap-2 bg-zinc-800 hover:bg-zinc-700 text-white transition-all border border-zinc-700"
             >
               <Home className="w-5 h-5" />
               Go to Home
@@ -106,9 +85,20 @@ export default function InstallApp() {
           </div>
           
           {!isInstallable && !isInstalled && (
-            <p className="text-xs text-center text-zinc-500 mt-4">
-              To install, open this page in Safari on iOS and tap "Share" &gt; "Add to Home Screen", or use Chrome on Android/Desktop.
-            </p>
+            <div id="install-instructions" className="pt-4 border-t border-zinc-800 mt-4">
+              <h3 className="text-sm font-bold mb-2 text-zinc-300">Installation Instructions:</h3>
+              <ul className="text-xs text-zinc-500 space-y-2 list-disc pl-4">
+                <li>
+                  <span className="text-zinc-400 font-medium">iOS (Safari):</span> Tap the <span className="text-emerald-500">Share</span> button and select <span className="text-emerald-500">"Add to Home Screen"</span>.
+                </li>
+                <li>
+                  <span className="text-zinc-400 font-medium">Android (Chrome):</span> Tap the <span className="text-emerald-500">three dots</span> and select <span className="text-emerald-500">"Install app"</span>.
+                </li>
+                <li>
+                  <span className="text-zinc-400 font-medium">Desktop (Chrome/Edge):</span> Look for the <span className="text-emerald-500">Install icon</span> in the address bar.
+                </li>
+              </ul>
+            </div>
           )}
         </div>
       </div>

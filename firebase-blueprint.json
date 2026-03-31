@@ -116,21 +116,6 @@
       },
       "required": ["token", "userId", "updatedAt"]
     },
-    "Scan": {
-      "title": "Scan",
-      "description": "A link scanning session.",
-      "type": "object",
-      "properties": {
-        "id": { "type": "string" },
-        "status": { "type": "string", "enum": ["idle", "scanning", "completed", "error"] },
-        "scannedCount": { "type": "number" },
-        "totalLinks": { "type": "number" },
-        "errorLinks": { "type": "array", "items": { "type": "object" } },
-        "lastUpdated": { "type": "string", "format": "date-time" },
-        "startedAt": { "type": "string", "format": "date-time" }
-      },
-      "required": ["id", "status", "scannedCount", "totalLinks", "lastUpdated", "startedAt"]
-    },
     "MovieRequest": {
       "title": "MovieRequest",
       "description": "A request for a movie or series from a user.",
@@ -186,10 +171,6 @@
     "/fcm_tokens/{tokenId}": {
       "schema": { "$ref": "#/entities/FCMToken" },
       "description": "Stores FCM tokens for push notifications."
-    },
-    "/scans/{scanId}": {
-      "schema": { "$ref": "#/entities/Scan" },
-      "description": "Stores link scanning sessions."
     }
   }
 }

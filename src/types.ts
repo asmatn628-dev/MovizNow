@@ -153,13 +153,3 @@ export interface ErrorLinkInfo {
   fetchedUnit?: 'MB' | 'GB';
   createdAt?: string;
 }
-
-export interface ScanState {
-  id: string;
-  status: 'idle' | 'scanning' | 'completed' | 'error';
-  scannedCount: number;
-  totalLinks: number;
-  errorLinks: ErrorLinkInfo[];
-  lastUpdated: any;
-  startedAt: any;
-}
