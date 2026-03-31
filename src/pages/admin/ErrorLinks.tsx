@@ -1,12 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { db } from '../../firebase';
 import { collection, onSnapshot, doc, updateDoc, getDoc } from 'firebase/firestore';
-import { Content, Season, QualityLinks, LinkDef, ErrorLinkInfo, ScanState } from '../../types';
-import { AlertTriangle, Edit2, ExternalLink, RefreshCw, X, Save, CheckCircle2, Filter, ArrowUpDown, Search, Trash2, Plus, ClipboardPaste } from 'lucide-react';
+import { Content, Season, QualityLinks, LinkDef, ErrorLinkInfo, ScanState, Language, Quality } from '../../types';
+import { AlertTriangle, Edit2, ExternalLink, RefreshCw, X, Save, CheckCircle2, Filter, ArrowUpDown, Search, Trash2, Plus, ClipboardPaste, StopCircle } from 'lucide-react';
 import { handleFirestoreError, OperationType } from '../../utils/firestoreErrorHandler';
-import { scannerService } from '../../services/ScannerService';
 import { LinkCheckerModal } from '../../components/LinkCheckerModal';
 import { motion, AnimatePresence } from 'framer-motion';
+import { performFullLinkScan, LinkCheckResult } from '../../utils/linkScanner';
 
 const parseLinks = (linksStr: string | undefined): QualityLinks => {
   if (!linksStr) return [];
@@ -35,7 +35,12 @@ export default function ErrorLinks() {
   // Client-side/Deep Scan State
   const [scanning, setScanning] = useState(false);
   const [scanStatus, setScanStatus] = useState<'idle' | 'scanning' | 'completed' | 'error'>('idle');
+  const [scanProgress, setScanProgress] = useState(0);
+  const [scanTotal, setScanTotal] = useState(0);
+  const [abortController, setAbortController] = useState<AbortController | null>(null);
   const [errorLinks, setErrorLinks] = useState<ErrorLinkInfo[]>([]);
+  const [languages, setLanguages] = useState<Language[]>([]);
+  const [qualities, setQualities] = useState<Quality[]>([]);
 
   const [isLinkCheckerModalOpen, setIsLinkCheckerModalOpen] = useState(false);
   const [modalInput, setModalInput] = useState('');
@@ -132,6 +137,14 @@ export default function ErrorLinks() {
       handleFirestoreError(error, OperationType.LIST, 'content');
     });
 
+    const unsubLanguages = onSnapshot(collection(db, 'languages'), (snapshot) => {
+      setLanguages(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Language)));
+    });
+
+    const unsubQualities = onSnapshot(collection(db, 'qualities'), (snapshot) => {
+      setQualities(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Quality)));
+    });
+
     // Load initial error links from Firestore
     getDoc(doc(db, 'scans', 'current')).then(snapshot => {
       if (snapshot.exists()) {
@@ -143,6 +156,8 @@ export default function ErrorLinks() {
 
     return () => {
       unsubContent();
+      unsubLanguages();
+      unsubQualities();
     };
   }, []);
 
@@ -167,8 +182,8 @@ export default function ErrorLinks() {
 
       for (const item of changedLinks) {
         try {
-          const result = await scannerService.checkPixeldrainLink(item.link.url);
-          if (!result.error) {
+          const result = await performFullLinkScan(item.link.url, {}, languages, qualities);
+          if (result.ok) {
             // Link is now working! Remove from Firestore error list
             const scanDocRef = doc(db, 'scans', 'current');
             const scanDoc = await getDoc(scanDocRef);
@@ -198,9 +213,9 @@ export default function ErrorLinks() {
                   return {
                     ...err,
                     link: item.link,
-                    errorDetail: result.error,
-                    fetchedSize: result.size,
-                    fetchedUnit: result.unit
+                    errorDetail: result.message || result.statusLabel || "Unknown Error",
+                    fetchedSize: result.fileSizeText?.split(' ')[0],
+                    fetchedUnit: result.fileSizeText?.split(' ')[1] as 'MB' | 'GB'
                   };
                 }
                 return err;
@@ -410,11 +425,87 @@ export default function ErrorLinks() {
     
     setScanning(true);
     setScanStatus('scanning');
-    const allUrls = linksToScan.map(l => l.url).join('\n');
-    setModalInput(allUrls);
-    setModalTitle(onlyFiltered ? 'Re-checking Filtered Links' : 'Deep Link Scan');
-    setModalAutoStart(true);
-    setIsLinkCheckerModalOpen(true);
+    setScanProgress(0);
+    setScanTotal(linksToScan.length);
+    
+    // Clear previous results when starting a new scan
+    setErrorLinks([]);
+    
+    // Clear Firestore results too to ensure fresh state
+    try {
+      await updateDoc(doc(db, 'scans', 'current'), {
+        errorLinks: [],
+        status: 'scanning',
+        lastUpdated: new Date()
+      });
+    } catch (e) {
+      console.error("Error clearing scan results in Firestore", e);
+    }
+    
+    const controller = new AbortController();
+    setAbortController(controller);
+
+    const concurrency = 5;
+    const results: any[] = [];
+    const queue = [...linksToScan];
+    let completed = 0;
+
+    const processNext = async () => {
+      if (queue.length === 0 || controller.signal.aborted) return;
+      
+      const item = queue.shift()!;
+      try {
+        const res = await performFullLinkScan(item.url, {}, languages, qualities, controller.signal);
+        results.push(res);
+        
+        // Show new results as they are found
+        if (!res.ok || res.statusLabel === "BROKEN" || res.statusLabel === "MISSING_METADATA") {
+          setErrorLinks(prev => {
+            const newError: ErrorLinkInfo = {
+              ...item.info,
+              errorDetail: res.message || res.statusLabel || "Unknown Error",
+              fetchedSize: res.fileSizeText?.split(' ')[0],
+              fetchedUnit: res.fileSizeText?.split(' ')[1] as 'MB' | 'GB',
+              createdAt: new Date().toISOString()
+            };
+            return [...prev, newError];
+          });
+        }
+      } catch (e) {
+        if (e instanceof Error && e.name === 'AbortError') return;
+        console.error("Scan error for", item.url, e);
+      } finally {
+        completed++;
+        setScanProgress(completed);
+        await processNext();
+      }
+    };
+
+    try {
+      const workers = Array.from({ length: Math.min(concurrency, queue.length) }, () => processNext());
+      await Promise.all(workers);
+      
+      if (!controller.signal.aborted) {
+        await handleScanResults(results);
+      }
+    } catch (e) {
+      console.error("Scan failed", e);
+      setScanStatus('error');
+    } finally {
+      if (!controller.signal.aborted) {
+        setScanning(false);
+        setAbortController(null);
+      }
+    }
+  };
+
+  const cancelScan = () => {
+    if (abortController) {
+      abortController.abort();
+      setAbortController(null);
+      setScanning(false);
+      setScanStatus('idle');
+    }
   };
 
   const handleDeleteLink = async (info: ErrorLinkInfo) => {
@@ -748,53 +839,46 @@ export default function ErrorLinks() {
 
   return (
     <div className="p-4 md:p-8">
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
-        <div>
+      <div className="flex flex-col lg:flex-row lg:items-start justify-between gap-6 mb-8">
+        <div className="max-w-2xl">
           <h1 className="text-2xl md:text-3xl font-bold flex items-center gap-3">
             <AlertTriangle className="w-8 h-8 text-yellow-500" />
             Error Links
           </h1>
-          <p className="text-zinc-400 mt-1">Deep Scan using multiple algorithms to find broken links.</p>
+          <p className="text-zinc-400 mt-1">Deep Scan using multiple algorithms to find broken links across your entire content library.</p>
         </div>
-        <div className="flex flex-col gap-2 items-end">
-          <div className="flex items-center gap-2">
+        
+        <div className="flex flex-col gap-3 items-start lg:items-end w-full lg:w-auto">
+          <div className="flex flex-wrap items-center gap-2 w-full lg:justify-end">
             {scanStatus === 'completed' && (
-              <span className="text-emerald-500 text-sm font-medium flex items-center gap-1">
-                <CheckCircle2 className="w-4 h-4" /> Deep Scan complete
+              <span className="bg-emerald-500/10 text-emerald-500 text-xs px-3 py-1.5 rounded-full font-medium flex items-center gap-1.5 border border-emerald-500/20">
+                <CheckCircle2 className="w-3.5 h-3.5" /> Deep Scan complete
               </span>
             )}
             {scanStatus === 'error' && (
-              <span className="text-red-500 text-sm font-medium flex items-center gap-1">
-                <AlertTriangle className="w-4 h-4" /> Deep Scan failed
+              <span className="bg-red-500/10 text-red-500 text-xs px-3 py-1.5 rounded-full font-medium flex items-center gap-1.5 border border-red-500/20">
+                <AlertTriangle className="w-3.5 h-3.5" /> Deep Scan failed
               </span>
             )}
-            <button
-              onClick={() => scanLinks(false)}
-              disabled={scanning || loading}
-              className="bg-emerald-500 hover:bg-emerald-600 disabled:bg-emerald-500/50 text-white px-4 py-2 rounded-lg text-sm font-medium flex items-center justify-center gap-2 transition-colors whitespace-nowrap"
-            >
-              {scanning ? (
-                <>
-                  <RefreshCw className="w-4 h-4 animate-spin" />
-                  Scanning...
-                </>
-              ) : (
-                <>
-                  <RefreshCw className="w-4 h-4" />
-                  {scanStatus === 'idle' ? 'Start Deep Scan' : 'Restart Deep Scan'}
-                </>
-              )}
-            </button>
-            {errorLinks.length > 0 && (
+            
+            {scanning ? (
+              <div className="bg-zinc-800/50 px-4 py-2 rounded-lg border border-zinc-700 flex items-center gap-3">
+                <div className="flex flex-col items-end">
+                  <div className="text-[10px] text-zinc-500 uppercase font-bold tracking-wider">Scanning Progress</div>
+                  <div className="text-sm font-mono text-emerald-500">{scanProgress} / {scanTotal}</div>
+                </div>
+              </div>
+            ) : (
               <button
-                onClick={() => scanLinks(true)}
-                disabled={scanning || loading}
-                className="bg-zinc-800 hover:bg-zinc-700 text-white px-4 py-2 rounded-lg text-sm font-medium flex items-center justify-center gap-2 transition-colors whitespace-nowrap"
+                onClick={() => scanLinks(false)}
+                disabled={loading}
+                className="bg-emerald-500 hover:bg-emerald-600 disabled:bg-emerald-500/50 text-white px-4 py-2 rounded-lg text-sm font-medium flex items-center justify-center gap-2 transition-all active:scale-95 whitespace-nowrap shadow-lg shadow-emerald-500/20"
               >
-                <RefreshCw className="w-4 h-4" />
-                Re-check Filtered
+                <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+                {scanStatus === 'idle' ? 'Start Deep Scan' : 'Restart Deep Scan'}
               </button>
             )}
+            
             <button
               onClick={() => {
                 setModalInput('');
@@ -802,11 +886,34 @@ export default function ErrorLinks() {
                 setModalTitle('Manual Link Checker');
                 setIsLinkCheckerModalOpen(true);
               }}
-              className="bg-zinc-800 hover:bg-zinc-700 text-white px-4 py-2 rounded-lg text-sm font-medium flex items-center justify-center gap-2 transition-colors whitespace-nowrap"
+              className="bg-zinc-800 hover:bg-zinc-700 text-white px-4 py-2 rounded-lg text-sm font-medium flex items-center justify-center gap-2 transition-all active:scale-95 whitespace-nowrap border border-zinc-700"
             >
               <Search className="w-4 h-4" />
               Manual Check
             </button>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2 w-full lg:justify-end">
+            {scanning ? (
+              <button
+                onClick={cancelScan}
+                className="bg-red-500/10 hover:bg-red-500/20 text-red-500 px-4 py-2 rounded-lg text-sm font-medium flex items-center justify-center gap-2 transition-all active:scale-95 whitespace-nowrap border border-red-500/20"
+              >
+                <StopCircle className="w-4 h-4" />
+                Cancel Scan
+              </button>
+            ) : (
+              errorLinks.length > 0 && (
+                <button
+                  onClick={() => scanLinks(true)}
+                  disabled={loading}
+                  className="bg-zinc-800 hover:bg-zinc-700 text-white px-4 py-2 rounded-lg text-sm font-medium flex items-center justify-center gap-2 transition-all active:scale-95 whitespace-nowrap border border-zinc-700"
+                >
+                  <RefreshCw className="w-4 h-4" />
+                  Re-check Filtered ({filteredAndSortedLinks.length})
+                </button>
+              )
+            )}
           </div>
         </div>
       </div>
@@ -821,6 +928,8 @@ export default function ErrorLinks() {
         autoStart={modalAutoStart}
         title={modalTitle}
         onResults={handleScanResults}
+        languages={languages}
+        qualities={qualities}
       />
 
       {loading ? (
@@ -829,13 +938,47 @@ export default function ErrorLinks() {
         </div>
       ) : (
         <div className="bg-zinc-900 border border-zinc-800 rounded-2xl overflow-hidden">
+          {scanning && errorLinks.length > 0 && (
+            <div className="p-6 border-b border-zinc-800 bg-zinc-900/80 backdrop-blur-sm">
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-3">
+                  <RefreshCw className="w-5 h-5 animate-spin text-emerald-500" />
+                  <div>
+                    <div className="text-white font-medium">Scanning in progress...</div>
+                    <div className="text-xs text-zinc-500">Checking links: {scanProgress} / {scanTotal}</div>
+                  </div>
+                </div>
+                <div className="text-emerald-500 font-bold font-mono">{Math.round((scanProgress / scanTotal) * 100)}%</div>
+              </div>
+              <div className="w-full bg-zinc-800 h-1.5 rounded-full overflow-hidden">
+                <motion.div 
+                  className="bg-emerald-500 h-full"
+                  initial={{ width: 0 }}
+                  animate={{ width: `${(scanProgress / scanTotal) * 100}%` }}
+                />
+              </div>
+            </div>
+          )}
           {errorLinks.length === 0 ? (
             <div className="text-center py-20 text-zinc-500">
               {scanning ? (
                 <div className="flex flex-col items-center">
-                  <RefreshCw className="w-12 h-12 animate-spin mb-4 text-emerald-500" />
-                  <p className="text-xl text-white">Scanning links... Please wait.</p>
-                  <p className="text-sm mt-2">Checking all Pixeldrain links in your content library.</p>
+                  <div className="relative w-24 h-24 mb-6">
+                    <RefreshCw className="w-24 h-24 animate-spin text-emerald-500/20" />
+                    <div className="absolute inset-0 flex items-center justify-center">
+                      <span className="text-xl font-bold text-emerald-500">{Math.round((scanProgress / scanTotal) * 100)}%</span>
+                    </div>
+                  </div>
+                  <p className="text-xl text-white font-medium">Scanning links... {scanProgress} / {scanTotal}</p>
+                  <p className="text-sm text-zinc-400 mt-2">Checking all Pixeldrain links in your content library.</p>
+                  
+                  <div className="w-full max-w-md bg-zinc-800 h-2 rounded-full mt-8 overflow-hidden">
+                    <motion.div 
+                      className="bg-emerald-500 h-full"
+                      initial={{ width: 0 }}
+                      animate={{ width: `${(scanProgress / scanTotal) * 100}%` }}
+                    />
+                  </div>
                 </div>
               ) : scanStatus === 'completed' ? (
                 <div className="flex flex-col items-center">

@@ -1,0 +1,605 @@
+import { Language, Quality } from '../types';
+
+export type StatusLabel =
+  | "WORKING"
+  | "BROKEN"
+  | "PROTECTED"
+  | "REDIRECT"
+  | "UNAVAILABLE"
+  | "UNKNOWN"
+  | "MISSING_METADATA";
+
+export type LinkCheckResult = {
+  url: string;
+  ok: boolean;
+  status?: number;
+  statusLabel?: StatusLabel;
+  message?: string;
+  finalUrl?: string;
+  contentType?: string;
+  isDirectDownload?: boolean;
+  fileName?: string;
+  fileSize?: number;
+  fileSizeText?: string;
+  host?: string;
+  source?: string;
+  qualityLabel?: string;
+  audioLabel?: string;
+  codecLabel?: string;
+  subtitleLabel?: string;
+  printQualityLabel?: string;
+  season?: number;
+  episode?: number;
+  isFullSeasonMKV?: boolean;
+  isFullSeasonZIP?: boolean;
+  mismatchWarnings?: string[];
+  confidenceScore?: number;
+};
+
+export function normalizeUrl(input: string) {
+  let trimmed = input.trim();
+  if (!trimmed) return "";
+  if (!/^https?:\/\//i.test(trimmed)) {
+    trimmed = `https://${trimmed}`;
+  }
+
+  // Pixeldrain conversion
+  if (trimmed.includes("pixeldrain.com/") || trimmed.includes("pixeldrain.dev/")) {
+    trimmed = trimmed.replace(/\?download$/i, "");
+    trimmed = trimmed.replace(/\/api\/file\//i, "/u/");
+    trimmed = trimmed.replace(/pixeldrain\.com\//i, "pixeldrain.dev/");
+  }
+
+  if (trimmed.includes("pixeldrain.com/api/list/") || trimmed.includes("pixeldrain.dev/api/list/")) {
+    trimmed = trimmed.replace(/\/api\/list\//i, "/l/");
+  }
+
+  return trimmed;
+}
+
+export function splitLinks(text: string) {
+  const matches = text.match(/https?:\/\/[^\s)\]}>"']+/g) || [];
+  return [...new Set(matches.map((s) => s.trim()))];
+}
+
+export function guessLinkType(url: string) {
+  const lower = url.toLowerCase();
+  if (lower.includes("pixeldrain.com") || lower.includes("pixeldrain.dev")) return "Pixeldrain";
+  if (lower.includes("raj.lat") || lower.includes("hub.")) return "Direct download gate";
+  if (/\.(zip|rar|7z|tar|gz|mp4|mkv|avi|mov|pdf|docx?|xlsx?|pptx?|apk|exe|srt|ass|mp3|wav|png|jpe?g|webp)(\?|#|$)/i.test(lower)) {
+    return "Direct file";
+  }
+  return "General link";
+}
+
+export function normalizeCodec(v?: string) {
+  if (!v) return undefined;
+  const s = v.toUpperCase().replace(/\./g, "").replace(/\s+/g, "");
+  if (s === "H265" || s === "X265" || s === "HEVC") return "HEVC";
+  return undefined;
+}
+
+export function formatQuality(q?: string) {
+  if (!q) return undefined;
+  const lower = q.toLowerCase();
+  if (lower === '4k') return '4K';
+  return lower;
+}
+
+export function normalizePrintQuality(v?: string, fileName?: string) {
+  if (!v && !fileName) return undefined;
+  if (fileName && /\bHD\b/i.test(fileName)) return "WEB-DL";
+  if (!v) return undefined;
+  const s = v.toUpperCase().replace(/[\s\.\-_]+/g, "");
+  if (s.includes("WEBDL")) return "WEB-DL";
+  if (s.includes("WEBRIP")) return "WEBRip";
+  if (s.includes("HDRIP")) return "HDRip";
+  if (s.includes("BLURAY")) return "BluRay";
+  if (s.includes("HQHDTC")) return "HQ HDTC";
+  if (s.includes("HDTC")) return "HDTC";
+  if (s.includes("HDCAM")) return "HDCAM";
+  if (s.includes("DVDRIP")) return "DVDRip";
+  if (s.includes("BRRIP")) return "BRRip";
+  return s;
+}
+
+export function detectMetadataForLink(text: string, url: string, languages?: Language[], qualities?: Quality[]) {
+  const lines = text.split(/\r?\n/);
+  const idx = lines.findIndex((line) => line.includes(url));
+  const windowLines = [
+    lines[idx - 3] || "",
+    lines[idx - 2] || "",
+    lines[idx - 1] || "",
+    lines[idx] || "",
+    lines[idx + 1] || "",
+    lines[idx + 2] || "",
+    lines[idx + 3] || "",
+  ].join(" ");
+
+  const lower = windowLines.toLowerCase();
+
+  const qualityMatch = lower.match(/\b(2160p|4k|1440p|1080p|720p|480p|360p|540p)\b/i)?.[1];
+  const quality = formatQuality(qualityMatch);
+
+  const codec = normalizeCodec(
+    lower.match(/\b(x265|x264|h\.265|h\.264|hevc|av1)\b/i)?.[1]
+  );
+
+  const audio = (() => {
+    const foundLangs = [] as string[];
+    const langShortCodes: Record<string, string[]> = {
+      'Hindi': ['hin', 'hi'],
+      'English': ['eng', 'en'],
+      'Punjabi': ['pun', 'pa'],
+      'Tamil': ['tam', 'ta'],
+      'Telugu': ['tel', 'te'],
+      'Urdu': ['urd', 'ur'],
+      'Marathi': ['mar', 'mr'],
+      'Bengali': ['ben', 'bn'],
+      'Gujarati': ['guj', 'gu'],
+      'Kannada': ['kan', 'kn'],
+      'Malayalam': ['mal', 'ml'],
+      'Odia': ['odi', 'or'],
+      'Assamese': ['asm', 'as'],
+      'Spanish': ['spa', 'es'],
+      'French': ['fre', 'fra', 'fr'],
+      'German': ['ger', 'deu', 'de'],
+      'Italian': ['ita', 'it'],
+      'Japanese': ['jpn', 'ja'],
+      'Korean': ['kor', 'ko'],
+      'Chinese': ['chi', 'zho', 'zh'],
+      'Arabic': ['ara', 'ar'],
+      'Russian': ['rus', 'ru'],
+      'Portuguese': ['por', 'pt'],
+      'Dutch': ['dut', 'nld', 'nl'],
+      'Turkish': ['tur', 'tr'],
+      'Vietnamese': ['vie', 'vi'],
+      'Thai': ['tha', 'th'],
+      'Indonesian': ['ind', 'id'],
+      'Malay': ['may', 'msa', 'ms'],
+      'Filipino': ['fil', 'tl'],
+      'Persian': ['per', 'fas', 'fa'],
+      'Polish': ['pol', 'pl'],
+      'Ukrainian': ['ukr', 'uk'],
+      'Greek': ['gre', 'ell', 'el'],
+      'Hebrew': ['heb', 'he'],
+      'Swedish': ['swe', 'sv'],
+      'Danish': ['dan', 'da'],
+      'Norwegian': ['nor', 'no'],
+      'Finnish': ['fin', 'fi'],
+      'Czech': ['cze', 'ces', 'cs'],
+      'Hungarian': ['hun', 'hu'],
+      'Romanian': ['rum', 'ron', 'ro'],
+      'Bulgarian': ['bul', 'bg'],
+      'Serbian': ['srp', 'sr'],
+      'Croatian': ['hrv', 'hr'],
+      'Slovak': ['slo', 'slk', 'sk'],
+      'Slovenian': ['slv', 'sl'],
+      'Lithuanian': ['lit', 'lt'],
+      'Latvian': ['lav', 'lv'],
+      'Estonian': ['est', 'et'],
+      'Icelandic': ['ice', 'isl', 'is'],
+      'Irish': ['gle', 'ga'],
+      'Welsh': ['wel', 'cym', 'cy'],
+      'Scottish Gaelic': ['gla', 'gd'],
+      'Basque': ['baq', 'eus', 'eu'],
+      'Catalan': ['cat', 'ca'],
+      'Galician': ['glg', 'gl'],
+      'Afrikaans': ['afr', 'af'],
+      'Swahili': ['swa', 'sw'],
+      'Zulu': ['zul', 'zu'],
+      'Xhosa': ['xho', 'xh'],
+      'Amharic': ['amh', 'am'],
+      'Somali': ['som', 'so'],
+      'Yoruba': ['yor', 'yo'],
+      'Igbo': ['ibo', 'ig'],
+      'Hausa': ['hau', 'ha'],
+      'Nepali': ['nep', 'ne'],
+      'Sinhala': ['sin', 'si'],
+      'Burmese': ['bur', 'mya', 'my'],
+      'Khmer': ['khm', 'km'],
+      'Lao': ['lao', 'lo'],
+      'Tibetan': ['tib', 'bod', 'bo'],
+      'Mongolian': ['mon', 'mn'],
+      'Uzbek': ['uzb', 'uz'],
+      'Kazakh': ['kaz', 'kk'],
+      'Kyrgyz': ['kir', 'ky'],
+      'Tajik': ['tgk', 'tg'],
+      'Turkmen': ['tuk', 'tk'],
+      'Azerbaijani': ['aze', 'az'],
+      'Armenian': ['arm', 'hye', 'hy'],
+      'Georgian': ['geo', 'kat', 'ka'],
+      'Pashto': ['pus', 'ps'],
+      'Kurdish': ['kur', 'ku'],
+      'Sindhi': ['snd', 'sd'],
+      'Kashmiri': ['kas', 'ks'],
+    };
+
+    const checkLang = (langName: string) => {
+      const normalizedLower = lower.replace(/[\.\-\s_]+/g, "");
+      const normalizedLang = langName.replace(/[\.\-\s_]+/g, "").toLowerCase();
+      if (normalizedLower.includes(normalizedLang)) {
+        foundLangs.push(langName);
+      } else {
+        const codes = langShortCodes[langName] || [];
+        for (const code of codes) {
+          const codeRegex = new RegExp(`\\b${code}\\b`, 'i');
+          if (codeRegex.test(lower)) {
+            foundLangs.push(langName);
+            break;
+          }
+        }
+      }
+    };
+
+    if (languages && languages.length > 0) {
+      languages.forEach(lang => checkLang(lang.name));
+    }
+
+    return foundLangs.length > 0 ? foundLangs.join(" / ") : undefined;
+  })();
+
+  return {
+    qualityLabel: quality,
+    codecLabel: codec,
+    audioLabel: audio,
+    subtitleLabel: /subtitles|subs|softsub|hardsub|esub|esubs|msub|msubs/i.test(lower) ? "Yes" : undefined,
+    printQualityLabel: normalizePrintQuality(undefined, lower),
+    season: parseInt(lower.match(/\bS(?:eason)?\s*(\d+)\b/i)?.[1] || "0") || undefined,
+    episode: parseInt(lower.match(/\bE(?:pisode)?\s*(\d+)\b/i)?.[1] || "0") || undefined,
+    isFullSeasonMKV: /full\s*season|complete\s*season/i.test(lower) && lower.includes(".mkv"),
+    isFullSeasonZIP: /full\s*season|complete\s*season/i.test(lower) && lower.includes(".zip"),
+  };
+}
+
+export async function serverCheckLink(url: string, signal?: AbortSignal): Promise<LinkCheckResult> {
+  const response = await fetch("/api/check-link", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ url }),
+    signal
+  });
+
+  const data = await response.json().catch(() => ({}));
+
+  return {
+    url,
+    ok: !!data?.ok,
+    status: data?.status,
+    statusLabel: data?.statusLabel || (data?.ok ? "WORKING" : "UNKNOWN"),
+    message: data?.message,
+    finalUrl: data?.finalUrl,
+    contentType: data?.contentType,
+    isDirectDownload: !!data?.isDirectDownload,
+    fileName: data?.fileName,
+    fileSize: data?.fileSize,
+    fileSizeText: data?.fileSizeText,
+    host: data?.host,
+    source: data?.source,
+  };
+}
+
+export function detectFromFilename(fileName?: string, finalUrl?: string, languages?: Language[], qualities?: Quality[]) {
+  const source = `${fileName || ""} ${finalUrl || ""}`.toLowerCase();
+  
+  const qualityMatch = source.match(/\b(2160p|4k|1440p|1080p|720p|480p|360p|540p)\b/i)?.[1];
+  const quality = formatQuality(qualityMatch);
+
+  const codec = normalizeCodec(source.match(/\b(x265|x264|h\.265|h\.264|hevc|av1)\b/i)?.[1]);
+  
+  const audio = (() => {
+    const foundLangs = [] as string[];
+    
+    const langShortCodes: Record<string, string[]> = {
+      'Hindi': ['hin', 'hi'],
+      'English': ['eng', 'en'],
+      'Punjabi': ['pun', 'pa'],
+      'Tamil': ['tam', 'ta'],
+      'Telugu': ['tel', 'te'],
+      'Urdu': ['urd', 'ur'],
+      'Marathi': ['mar', 'mr'],
+      'Bengali': ['ben', 'bn'],
+      'Gujarati': ['guj', 'gu'],
+      'Kannada': ['kan', 'kn'],
+      'Malayalam': ['mal', 'ml'],
+      'Odia': ['odi', 'or'],
+      'Assamese': ['asm', 'as'],
+      'Spanish': ['spa', 'es'],
+      'French': ['fre', 'fra', 'fr'],
+      'German': ['ger', 'deu', 'de'],
+      'Italian': ['ita', 'it'],
+      'Japanese': ['jpn', 'ja'],
+      'Korean': ['kor', 'ko'],
+      'Chinese': ['chi', 'zho', 'zh'],
+      'Arabic': ['ara', 'ar'],
+      'Russian': ['rus', 'ru'],
+      'Portuguese': ['por', 'pt'],
+      'Dutch': ['dut', 'nld', 'nl'],
+      'Turkish': ['tur', 'tr'],
+      'Vietnamese': ['vie', 'vi'],
+      'Thai': ['tha', 'th'],
+      'Indonesian': ['ind', 'id'],
+      'Malay': ['may', 'msa', 'ms'],
+      'Filipino': ['fil', 'tl'],
+      'Persian': ['per', 'fas', 'fa'],
+      'Polish': ['pol', 'pl'],
+      'Ukrainian': ['ukr', 'uk'],
+      'Greek': ['gre', 'ell', 'el'],
+      'Hebrew': ['heb', 'he'],
+      'Swedish': ['swe', 'sv'],
+      'Danish': ['dan', 'da'],
+      'Norwegian': ['nor', 'no'],
+      'Finnish': ['fin', 'fi'],
+      'Czech': ['cze', 'ces', 'cs'],
+      'Hungarian': ['hun', 'hu'],
+      'Romanian': ['rum', 'ron', 'ro'],
+      'Bulgarian': ['bul', 'bg'],
+      'Serbian': ['srp', 'sr'],
+      'Croatian': ['hrv', 'hr'],
+      'Slovak': ['slo', 'slk', 'sk'],
+      'Slovenian': ['slv', 'sl'],
+      'Lithuanian': ['lit', 'lt'],
+      'Latvian': ['lav', 'lv'],
+      'Estonian': ['est', 'et'],
+      'Icelandic': ['ice', 'isl', 'is'],
+      'Irish': ['gle', 'ga'],
+      'Welsh': ['wel', 'cym', 'cy'],
+      'Scottish Gaelic': ['gla', 'gd'],
+      'Basque': ['baq', 'eus', 'eu'],
+      'Catalan': ['cat', 'ca'],
+      'Galician': ['glg', 'gl'],
+      'Afrikaans': ['afr', 'af'],
+      'Swahili': ['swa', 'sw'],
+      'Zulu': ['zul', 'zu'],
+      'Xhosa': ['xho', 'xh'],
+      'Amharic': ['amh', 'am'],
+      'Somali': ['som', 'so'],
+      'Yoruba': ['yor', 'yo'],
+      'Igbo': ['ibo', 'ig'],
+      'Hausa': ['hau', 'ha'],
+      'Nepali': ['nep', 'ne'],
+      'Sinhala': ['sin', 'si'],
+      'Burmese': ['bur', 'mya', 'my'],
+      'Khmer': ['khm', 'km'],
+      'Lao': ['lao', 'lo'],
+      'Tibetan': ['tib', 'bod', 'bo'],
+      'Mongolian': ['mon', 'mn'],
+      'Uzbek': ['uzb', 'uz'],
+      'Kazakh': ['kaz', 'kk'],
+      'Kyrgyz': ['kir', 'ky'],
+      'Tajik': ['tgk', 'tg'],
+      'Turkmen': ['tuk', 'tk'],
+      'Azerbaijani': ['aze', 'az'],
+      'Armenian': ['arm', 'hye', 'hy'],
+      'Georgian': ['geo', 'kat', 'ka'],
+      'Pashto': ['pus', 'ps'],
+      'Kurdish': ['kur', 'ku'],
+      'Sindhi': ['snd', 'sd'],
+      'Kashmiri': ['kas', 'ks'],
+    };
+
+    const checkLang = (langName: string) => {
+      const normalizedLower = source.replace(/[\.\-\s_]+/g, "");
+      const normalizedLang = langName.replace(/[\.\-\s_]+/g, "").toLowerCase();
+      if (normalizedLower.includes(normalizedLang)) {
+        foundLangs.push(langName);
+      } else {
+        const codes = langShortCodes[langName] || [];
+        for (const code of codes) {
+          const codeRegex = new RegExp(`\\b${code}\\b`, 'i');
+          if (codeRegex.test(source)) {
+            foundLangs.push(langName);
+            break;
+          }
+        }
+      }
+    };
+
+    if (languages && languages.length > 0) {
+      languages.forEach(lang => checkLang(lang.name));
+    } else {
+      const defaultLangs = ['Hindi', 'English', 'Urdu', 'Tamil', 'Telugu', 'Punjabi'];
+      defaultLangs.forEach(lang => checkLang(lang));
+    }
+    
+    if (/dual[ ._-]?audio/i.test(source)) {
+      if (foundLangs.length > 0) {
+        if (foundLangs.length === 1 && !foundLangs.includes('English')) {
+          foundLangs.push('English');
+        }
+        return foundLangs.join(" / ");
+      } else {
+        return "Hindi / English";
+      }
+    }
+    
+    return foundLangs.length ? foundLangs.join(" / ") : undefined;
+  })();
+
+  const subtitle = /subtitles|subs|softsub|hardsub|esub|esubs|msub|msubs/i.test(source) ? "Subtitles" : undefined;
+  
+  let printQuality = normalizePrintQuality(source.match(/\b(web[ -]?dl|web[ -]?rip|hdrip|blu[ -]?ray|hq[ - ]?hdtc|hdtc|hdcam|dvdrip|brrip)\b/i)?.[1], fileName);
+
+  if (!printQuality && qualities && qualities.length > 0) {
+    qualities.forEach(q => {
+      const escaped = q.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const regex = new RegExp(`\\b${escaped}\\b`, 'i');
+      if (regex.test(source)) printQuality = q.name;
+    });
+  }
+
+  const result = {
+    qualityLabel: quality,
+    codecLabel: codec,
+    audioLabel: audio,
+    subtitleLabel: subtitle,
+    printQualityLabel: printQuality,
+    season: undefined as number | undefined,
+    episode: undefined as number | undefined,
+    isFullSeasonMKV: false,
+    isFullSeasonZIP: false,
+  };
+
+  const combinedMatch = source.match(/\bs(\d+)e(\d+)(?![a-z0-9])/i);
+  if (combinedMatch) {
+    result.season = parseInt(combinedMatch[1]);
+    result.episode = parseInt(combinedMatch[2]);
+  } else {
+    const seriesMatch = source.match(/\b(s(\d+)|season\s*(\d+))(?![a-z0-9])/i);
+    if (seriesMatch) {
+      result.season = parseInt(seriesMatch[2] || seriesMatch[3]);
+      const episodeMatch = source.match(/(?:e(\d+)|episode\s*(\d+))(?![a-z0-9])/i);
+      if (episodeMatch) {
+        result.episode = parseInt(episodeMatch[1] || episodeMatch[2]);
+      } else {
+        // Full season detection
+        if (source.includes(".mkv")) result.isFullSeasonMKV = true;
+        if (source.includes(".zip")) result.isFullSeasonZIP = true;
+      }
+    }
+  }
+
+  return result;
+}
+
+export async function performFullLinkScan(
+  url: string, 
+  extractedMeta: Record<string, any> = {}, 
+  languages: Language[] = [], 
+  qualities: Quality[] = [],
+  signal?: AbortSignal
+): Promise<LinkCheckResult> {
+  let base: LinkCheckResult;
+  let finalUrlToUse = url;
+
+  // Check if URL has a token parameter
+  if (url.includes('?token=') || url.includes('&token=')) {
+    try {
+      const urlObj = new URL(url);
+      const token = urlObj.searchParams.get('token');
+      if (token) {
+        urlObj.searchParams.delete('token');
+        const urlWithoutToken = urlObj.toString();
+        
+        try {
+          // Try without token first
+          base = await serverCheckLink(urlWithoutToken, signal);
+          if (base.ok) {
+            finalUrlToUse = urlWithoutToken;
+          } else {
+            // If it fails, try with token
+            base = await serverCheckLink(url, signal);
+          }
+        } catch (e) {
+          // If it throws, try with token
+          base = await serverCheckLink(url, signal);
+        }
+      } else {
+        base = await serverCheckLink(url, signal);
+      }
+    } catch (e) {
+      base = await serverCheckLink(url, signal);
+    }
+  } else {
+    base = await serverCheckLink(url, signal);
+  }
+
+  const postMeta = extractedMeta[url] || {};
+  const fileMeta = detectFromFilename(base.fileName, base.finalUrl, languages, qualities);
+  const hasFileName = !!base.fileName;
+
+  const result: LinkCheckResult = {
+    ...base,
+    url: finalUrlToUse,
+    qualityLabel: fileMeta.qualityLabel || postMeta.qualityLabel,
+    codecLabel: fileMeta.codecLabel || (hasFileName ? undefined : postMeta.codecLabel),
+    audioLabel: fileMeta.audioLabel || (hasFileName ? undefined : postMeta.audioLabel),
+    subtitleLabel: fileMeta.subtitleLabel || (hasFileName ? undefined : postMeta.subtitleLabel),
+    printQualityLabel: fileMeta.printQualityLabel || postMeta.printQualityLabel,
+    season: fileMeta.season || postMeta.season,
+    episode: fileMeta.episode || postMeta.episode,
+    isFullSeasonMKV: fileMeta.isFullSeasonMKV || postMeta.isFullSeasonMKV,
+    isFullSeasonZIP: fileMeta.isFullSeasonZIP || postMeta.isFullSeasonZIP,
+  };
+
+  if (result.ok && (!result.fileName || !result.qualityLabel || !result.audioLabel)) {
+    result.statusLabel = "MISSING_METADATA";
+  }
+  
+  if (result.ok && result.fileSize && result.fileSize < 20 * 1000 * 1000) {
+    result.statusLabel = "BROKEN";
+    result.message = "File size too small (< 20MB)";
+  }
+
+  // Filename validation
+  if (result.ok && result.fileName) {
+    const fileName = result.fileName.toLowerCase();
+    const hasQuality = /\b(2160p|4k|1440p|1080p|720p|480p|360p|540p)\b/i.test(fileName);
+    const hasLanguage = /\b(hindi|english|urdu|tamil|telugu|punjabi|marathi|bengali|gujarati|kannada|malayalam|odia|assamese|spanish|french|german|italian|japanese|korean|chinese|arabic|russian|portuguese|dutch|turkish|vietnamese|thai|indonesian|malay|filipino|persian|polish|ukrainian|greek|hebrew|swedish|danish|norwegian|finnish|czech|hungarian|romanian|bulgarian|serbian|croatian|slovak|slovenian|lithuanian|latvian|estonian|icelandic|irish|welsh|scottish gaelic|basque|catalan|galician|afrikaans|swahili|zulu|xhosa|amharic|somali|yoruba|igbo|hausa|nepali|sinhala|burmese|khmer|lao|tibetan|mongolian|uzbek|kazakh|kyrgyz|tajik|turkmen|azerbaijani|armenian|georgian|pashto|kurdish|sindhi|kashmiri|dual[ ._-]?audio)\b/i.test(fileName);
+    
+    if (!hasQuality && result.statusLabel === "WORKING") {
+      result.statusLabel = "MISSING_METADATA";
+      result.message = "Missing Quality in filename";
+    } else if (!hasLanguage && result.statusLabel === "WORKING") {
+      result.statusLabel = "MISSING_METADATA";
+      result.message = "Missing Language in filename";
+    }
+  }
+
+  return result;
+}
+
+export function buildMismatchWarnings(result: LinkCheckResult, all: LinkCheckResult[], languages?: Language[], qualities?: Quality[]) {
+  const warnings: string[] = [];
+  const fileMeta = detectFromFilename(result.fileName, result.finalUrl, languages, qualities);
+
+  if (result.qualityLabel && fileMeta.qualityLabel && result.qualityLabel !== fileMeta.qualityLabel) {
+    warnings.push(`Post says ${result.qualityLabel}, file suggests ${fileMeta.qualityLabel}`);
+  }
+
+  const postCodec = normalizeCodec(result.codecLabel);
+  const fileCodec = normalizeCodec(fileMeta.codecLabel);
+  if (postCodec && fileCodec && postCodec !== fileCodec) {
+    warnings.push(`Post says ${postCodec}, file suggests ${fileCodec}`);
+  }
+
+  if (result.printQualityLabel && fileMeta.printQualityLabel && result.printQualityLabel !== fileMeta.printQualityLabel) {
+    warnings.push(`Post says ${result.printQualityLabel}, file suggests ${fileMeta.printQualityLabel}`);
+  }
+
+  if (result.audioLabel && fileMeta.audioLabel) {
+    const a = result.audioLabel.toLowerCase();
+    const b = fileMeta.audioLabel.toLowerCase();
+    if (a !== b && !(a.includes("dual") && b.includes("dual"))) {
+      warnings.push(`Post says ${result.audioLabel}, file suggests ${fileMeta.audioLabel}`);
+    }
+  }
+
+  if (result.subtitleLabel && !fileMeta.subtitleLabel && result.fileName) {
+    warnings.push("Post says subtitles, but filename does not suggest subtitles");
+  }
+
+  const duplicates = all.filter((x) => x.url === result.url);
+  const duplicateQualities = [...new Set(duplicates.map((d) => d.qualityLabel).filter(Boolean))];
+  if (duplicateQualities.length > 1) {
+    warnings.push(`Same link reused for multiple qualities: ${duplicateQualities.join(", ")}`);
+  }
+
+  const sameFile = all.filter((x) => x.fileName && result.fileName && x.fileName === result.fileName);
+  const sameFileQualities = [...new Set(sameFile.map((d) => d.qualityLabel).filter(Boolean))];
+  if (sameFile.length > 1 && sameFileQualities.length > 1) {
+    warnings.push(`Same file name reused across qualities: ${sameFileQualities.join(", ")}`);
+  }
+
+  if (result.fileSize && result.qualityLabel) {
+    const mb = result.fileSize / (1000 * 1000);
+    const gb = mb / 1000;
+    if (mb < 20) warnings.push("File size is suspiciously small (< 20MB)");
+    if (result.qualityLabel === "1080P" && gb < 0.5) warnings.push("Suspiciously small for 1080p");
+    if (result.qualityLabel === "720P" && gb < 0.25) warnings.push("Suspiciously small for 720p");
+    if (result.qualityLabel === "480P" && gb > 3.5) warnings.push("Suspiciously large for 480p");
+    if ((result.qualityLabel === "2160P" || result.qualityLabel === "4K") && gb < 1.2) warnings.push("Suspiciously small for 4K");
+  }
+
+  return [...new Set(warnings)];
+}
