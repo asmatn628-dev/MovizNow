@@ -245,8 +245,8 @@ export function detectMetadataForLink(text: string, url: string, languages?: Lan
     audioLabel: audio,
     subtitleLabel: /subtitles|subs|softsub|hardsub|esub|esubs|msub|msubs/i.test(lower) ? "Yes" : undefined,
     printQualityLabel: normalizePrintQuality(undefined, lower),
-    season: parseInt(lower.match(/\bS(?:eason)?\s*(\d+)\b/i)?.[1] || "0") || undefined,
-    episode: parseInt(lower.match(/\bE(?:pisode)?\s*(\d+)\b/i)?.[1] || "0") || undefined,
+    season: parseInt(lower.match(/(?<=^|[^a-zA-Z0-9])S(?:eason)?\s*(\d+)\b/i)?.[1] || "0") || undefined,
+    episode: parseInt(lower.match(/(?<=^|[^a-zA-Z0-9])E(?:pisode|p)?\s*(\d+)\b/i)?.[1] || "0") || undefined,
     isFullSeasonMKV: /full\s*season|complete\s*season/i.test(lower) && lower.includes(".mkv"),
     isFullSeasonZIP: /full\s*season|complete\s*season/i.test(lower) && lower.includes(".zip"),
   };
@@ -440,17 +440,17 @@ export function detectFromFilename(fileName?: string, finalUrl?: string, languag
     isFullSeasonZIP: false,
   };
 
-  const combinedMatch = source.match(/\bs(\d+)e(\d+)(?![a-z0-9])/i);
+  const combinedMatch = source.match(/(?<=^|[^a-zA-Z0-9])s(\d+)e(\d+)(?![a-z0-9])/i);
   if (combinedMatch) {
     result.season = parseInt(combinedMatch[1]);
     result.episode = parseInt(combinedMatch[2]);
   } else {
-    const seriesMatch = source.match(/\b(s(\d+)|season\s*(\d+))(?![a-z0-9])/i);
+    const seriesMatch = source.match(/(?<=^|[^a-zA-Z0-9])(s(\d+)|season\s*(\d+))(?![a-z0-9])/i);
     if (seriesMatch) {
       result.season = parseInt(seriesMatch[2] || seriesMatch[3]);
-      const episodeMatch = source.match(/(?:e(\d+)|episode\s*(\d+))(?![a-z0-9])/i);
+      const episodeMatch = source.match(/(?<=^|[^a-zA-Z0-9])(?:e(\d+)|episode\s*(\d+)|ep\s*(\d+))(?![a-z0-9])/i);
       if (episodeMatch) {
-        result.episode = parseInt(episodeMatch[1] || episodeMatch[2]);
+        result.episode = parseInt(episodeMatch[1] || episodeMatch[2] || episodeMatch[3]);
       } else {
         // Full season detection
         if (source.includes(".mkv")) result.isFullSeasonMKV = true;
