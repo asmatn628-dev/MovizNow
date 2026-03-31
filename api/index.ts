@@ -664,6 +664,14 @@ async function startServer() {
     const distPath = path.resolve(__dirname, '../dist');
     app.use(express.static(distPath, { index: false })); // Disable default index.html serving
     
+    // Explicitly serve PWA files with correct MIME types
+    app.get('/manifest.webmanifest', (req, res) => {
+      res.sendFile(path.join(distPath, 'manifest.webmanifest'), { headers: { 'Content-Type': 'application/manifest+json' } });
+    });
+    app.get('/sw.js', (req, res) => {
+      res.sendFile(path.join(distPath, 'sw.js'), { headers: { 'Content-Type': 'application/javascript' } });
+    });
+    
     app.get('*', async (req, res) => {
       try {
         const templatePath = path.join(distPath, 'index.html');
