@@ -64,20 +64,49 @@ export default function InstallApp() {
                 Checking for app...
               </div>
             ) : (
-              <>
+              <div className="space-y-4">
                 <button
                   onClick={handleInstall}
-                  className="w-full py-4 rounded-xl font-bold flex items-center justify-center gap-2 transition-all bg-emerald-500 hover:bg-emerald-600 text-white shadow-lg shadow-emerald-500/20"
+                  className={`w-full py-4 rounded-xl font-bold flex items-center justify-center gap-2 transition-all ${
+                    isInstallable 
+                      ? "bg-emerald-500 hover:bg-emerald-600 text-white shadow-lg shadow-emerald-500/20" 
+                      : "bg-zinc-800 text-zinc-500 border border-zinc-700"
+                  }`}
                 >
                   <Download className="w-5 h-5" />
-                  Install app
+                  {isInstallable ? "Install app" : "Installation not available"}
                 </button>
+                
                 {!isInstallable && (
-                  <p className="text-[10px] text-zinc-500 text-center">
-                    Direct installation not supported by your browser. Use the instructions below.
-                  </p>
+                  <div className="space-y-4">
+                    <p className="text-[10px] text-zinc-500 text-center">
+                      Direct installation not supported by your browser. Use the instructions below.
+                    </p>
+                    
+                    <button
+                      onClick={() => {
+                        if ('serviceWorker' in navigator) {
+                          navigator.serviceWorker.getRegistrations().then(registrations => {
+                            for (let registration of registrations) {
+                              registration.unregister();
+                            }
+                            caches.keys().then(names => {
+                              for (let name of names) caches.delete(name);
+                            });
+                            window.location.reload();
+                          });
+                        } else {
+                          window.location.reload();
+                        }
+                      }}
+                      className="w-full py-3 rounded-xl font-medium flex items-center justify-center gap-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-400 transition-all border border-zinc-700 text-xs"
+                    >
+                      <RefreshCw className="w-4 h-4" />
+                      Reset App & Fix Issues
+                    </button>
+                  </div>
                 )}
-              </>
+              </div>
             )}
             
             <button

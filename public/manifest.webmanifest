@@ -8,7 +8,7 @@
   "theme_color": "#000000",
   "lang": "en-US",
   "scope": "/",
-  "id": "/",
+  "id": "moviznow-pwa",
   "orientation": "portrait",
   "dir": "ltr",
   "categories": [
@@ -61,51 +61,6 @@
       "purpose": "any maskable"
     }
   ],
-  "display_override": ["tabbed", "standalone"],
-  "file_handlers": [
-    {
-      "action": "/open-file",
-      "accept": {
-        "video/*": [".mp4", ".mkv", ".avi"]
-      }
-    }
-  ],
-  "launch_handler": {
-    "client_mode": "focus-existing"
-  },
-  "protocol_handlers": [
-    {
-      "protocol": "web+moviznow",
-      "url": "/play?url=%s"
-    }
-  ],
-  "share_target": {
-    "action": "/share",
-    "method": "POST",
-    "enctype": "multipart/form-data",
-    "params": {
-      "title": "title",
-      "text": "text",
-      "url": "url"
-    }
-  },
-  "widgets": [
-    {
-      "name": "MovizNow Widget",
-      "tag": "moviznow-widget",
-      "template": "widget-template",
-      "data": "/widget-data"
-    }
-  ],
-  "edge_side_panel": {
-    "enabled": true
-  },
-  "window_controls_overlay": {
-    "enabled": true
-  },
-  "note_taking": {
-    "note_new_url": "/notes/new"
-  },
   "screenshots": [
     {
       "src": "/screenshot-desktop.svg",
@@ -118,11 +73,6 @@
       "sizes": "390x844",
       "type": "image/svg+xml",
       "form_factor": "narrow"
-    }
-  ],
-  "scope_extensions": [
-    {
-      "origin": "http://Moviz-Now.vercel.app"
     }
   ]
 }

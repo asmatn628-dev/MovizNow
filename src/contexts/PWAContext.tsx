@@ -23,8 +23,9 @@ export function PWAProvider({ children }: { children: React.ReactNode }) {
 
     // Give the browser some time to fire the beforeinstallprompt event
     const timer = setTimeout(() => {
+      console.log('PWA detection timeout reached. isInstallable:', isInstallable);
       setIsChecking(false);
-    }, 2000);
+    }, 6000); // Increased to 6 seconds
 
     const handlePWAInstallable = (e: any) => {
       setDeferredPrompt(e.detail);
@@ -47,9 +48,21 @@ export function PWAProvider({ children }: { children: React.ReactNode }) {
     if ((window as any).deferredPrompt) {
       setDeferredPrompt((window as any).deferredPrompt);
       setIsInstallable(true);
+      setIsChecking(false);
     }
 
+    // Periodic check for global deferredPrompt
+    const interval = setInterval(() => {
+      if ((window as any).deferredPrompt && !isInstallable) {
+        setDeferredPrompt((window as any).deferredPrompt);
+        setIsInstallable(true);
+        setIsChecking(false);
+      }
+    }, 1000);
+
     return () => {
+      clearTimeout(timer);
+      clearInterval(interval);
       window.removeEventListener('pwa-installable', handlePWAInstallable);
       window.removeEventListener('pwa-installed', handlePWAInstalled);
     };
