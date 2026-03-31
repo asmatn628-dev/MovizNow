@@ -19,6 +19,7 @@ export function PWAProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     // Check if already installed
     const isStandalone = window.matchMedia('(display-mode: standalone)').matches || (window.navigator as any).standalone === true;
+    console.log('PWA: isStandalone check:', isStandalone);
     setIsInstalled(isStandalone);
 
     // Give the browser some time to fire the beforeinstallprompt event
