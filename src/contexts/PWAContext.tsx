@@ -15,6 +15,11 @@ export function PWAProvider({ children }: { children: React.ReactNode }) {
   const [isInstallable, setIsInstallable] = useState(!!(window as any).deferredPrompt);
   const [isInstalled, setIsInstalled] = useState(false);
   const [isChecking, setIsChecking] = useState(true);
+  const isInstallableRef = React.useRef(isInstallable);
+
+  useEffect(() => {
+    isInstallableRef.current = isInstallable;
+  }, [isInstallable]);
 
   useEffect(() => {
     // Check if already installed
@@ -22,9 +27,16 @@ export function PWAProvider({ children }: { children: React.ReactNode }) {
     console.log('PWA: isStandalone check:', isStandalone);
     setIsInstalled(isStandalone);
 
+    const mediaQuery = window.matchMedia('(display-mode: standalone)');
+    const handleChange = (e: MediaQueryListEvent) => {
+      console.log('PWA: display-mode changed:', e.matches);
+      setIsInstalled(e.matches);
+    };
+    mediaQuery.addEventListener('change', handleChange);
+
     // Give the browser some time to fire the beforeinstallprompt event
     const timer = setTimeout(() => {
-      console.log('PWA detection timeout reached. isInstallable:', isInstallable);
+      console.log('PWA detection timeout reached. isInstallable:', isInstallableRef.current);
       setIsChecking(false);
     }, 6000); // Increased to 6 seconds
 
@@ -54,7 +66,7 @@ export function PWAProvider({ children }: { children: React.ReactNode }) {
 
     // Periodic check for global deferredPrompt
     const interval = setInterval(() => {
-      if ((window as any).deferredPrompt && !isInstallable) {
+      if ((window as any).deferredPrompt && !isInstallableRef.current) {
         setDeferredPrompt((window as any).deferredPrompt);
         setIsInstallable(true);
         setIsChecking(false);
@@ -64,6 +76,7 @@ export function PWAProvider({ children }: { children: React.ReactNode }) {
     return () => {
       clearTimeout(timer);
       clearInterval(interval);
+      mediaQuery.removeEventListener('change', handleChange);
       window.removeEventListener('pwa-installable', handlePWAInstallable);
       window.removeEventListener('pwa-installed', handlePWAInstalled);
     };
