@@ -9,6 +9,24 @@
     <link rel="apple-touch-icon" href="/launcher.svg" />
     <link rel="manifest" href="/manifest.webmanifest" />
     <title>MovizNow</title>
+    <script>
+      // Global variable to store the PWA install prompt
+      window.deferredPrompt = null;
+      window.addEventListener('beforeinstallprompt', (e) => {
+        // Prevent the mini-infobar from appearing on mobile
+        e.preventDefault();
+        // Stash the event so it can be triggered later.
+        window.deferredPrompt = e;
+        // Dispatch a custom event to notify React
+        window.dispatchEvent(new CustomEvent('pwa-installable', { detail: e }));
+        console.log('PWA: beforeinstallprompt event captured globally');
+      });
+      window.addEventListener('appinstalled', (e) => {
+        window.deferredPrompt = null;
+        window.dispatchEvent(new CustomEvent('pwa-installed'));
+        console.log('PWA: appinstalled event captured globally');
+      });
+    </script>
   </head>
   <body>
     <div id="root"></div>

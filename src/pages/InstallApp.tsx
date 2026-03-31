@@ -1,11 +1,11 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Download, Home, Smartphone, Monitor, ShieldCheck, Zap } from 'lucide-react';
+import { Download, Home, Smartphone, Monitor, ShieldCheck, Zap, RefreshCw } from 'lucide-react';
 import { usePWA } from '../contexts/PWAContext';
 
 export default function InstallApp() {
   const navigate = useNavigate();
-  const { isInstallable, isInstalled, installApp } = usePWA();
+  const { isInstallable, isInstalled, isChecking, installApp } = usePWA();
 
   const handleInstall = async () => {
     console.log('InstallApp: handleInstall called, isInstallable:', isInstallable);
@@ -57,6 +57,11 @@ export default function InstallApp() {
             {isInstalled ? (
               <div className="bg-emerald-500/10 text-emerald-400 p-4 rounded-xl text-center font-medium border border-emerald-500/20">
                 App is already installed!
+              </div>
+            ) : isChecking ? (
+              <div className="w-full py-4 rounded-xl font-bold flex items-center justify-center gap-2 bg-zinc-800 text-zinc-400 border border-zinc-700 animate-pulse">
+                <RefreshCw className="w-5 h-5 animate-spin" />
+                Checking for app...
               </div>
             ) : (
               <>

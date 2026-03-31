@@ -4,56 +4,71 @@ interface PWAContextType {
   deferredPrompt: any;
   isInstallable: boolean;
   isInstalled: boolean;
+  isChecking: boolean;
   installApp: () => Promise<void>;
 }
 
 const PWAContext = createContext<PWAContextType | undefined>(undefined);
 
 export function PWAProvider({ children }: { children: React.ReactNode }) {
-  const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
-  const [isInstallable, setIsInstallable] = useState(false);
+  const [deferredPrompt, setDeferredPrompt] = useState<any>((window as any).deferredPrompt);
+  const [isInstallable, setIsInstallable] = useState(!!(window as any).deferredPrompt);
   const [isInstalled, setIsInstalled] = useState(false);
+  const [isChecking, setIsChecking] = useState(true);
 
   useEffect(() => {
     // Check if already installed
     const isStandalone = window.matchMedia('(display-mode: standalone)').matches || (window.navigator as any).standalone === true;
     setIsInstalled(isStandalone);
 
-    const handleBeforeInstallPrompt = (e: Event) => {
-      e.preventDefault();
-      setDeferredPrompt(e);
+    // Give the browser some time to fire the beforeinstallprompt event
+    const timer = setTimeout(() => {
+      setIsChecking(false);
+    }, 2000);
+
+    const handlePWAInstallable = (e: any) => {
+      setDeferredPrompt(e.detail);
       setIsInstallable(true);
-      console.log('PWA: beforeinstallprompt event fired');
+      setIsChecking(false);
+      console.log('PWA: React received pwa-installable event');
     };
 
-    const handleAppInstalled = () => {
+    const handlePWAInstalled = () => {
       setIsInstalled(true);
       setIsInstallable(false);
       setDeferredPrompt(null);
-      console.log('PWA: appinstalled event fired');
+      console.log('PWA: React received pwa-installed event');
     };
 
-    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
-    window.addEventListener('appinstalled', handleAppInstalled);
+    window.addEventListener('pwa-installable', handlePWAInstallable);
+    window.addEventListener('pwa-installed', handlePWAInstalled);
+
+    // Also check for the event again in case it fired before this listener was added
+    if ((window as any).deferredPrompt) {
+      setDeferredPrompt((window as any).deferredPrompt);
+      setIsInstallable(true);
+    }
 
     return () => {
-      window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
-      window.removeEventListener('appinstalled', handleAppInstalled);
+      window.removeEventListener('pwa-installable', handlePWAInstallable);
+      window.removeEventListener('pwa-installed', handlePWAInstalled);
     };
   }, []);
 
   const installApp = async () => {
-    if (!deferredPrompt) {
+    const prompt = deferredPrompt || (window as any).deferredPrompt;
+    if (!prompt) {
       console.warn('PWA: No deferredPrompt available');
       return;
     }
 
     try {
-      deferredPrompt.prompt();
-      const { outcome } = await deferredPrompt.userChoice;
+      prompt.prompt();
+      const { outcome } = await prompt.userChoice;
       console.log(`PWA: User choice outcome: ${outcome}`);
       if (outcome === 'accepted') {
         setDeferredPrompt(null);
+        (window as any).deferredPrompt = null;
         setIsInstallable(false);
       }
     } catch (err) {
@@ -62,7 +77,7 @@ export function PWAProvider({ children }: { children: React.ReactNode }) {
   };
 
   return (
-    <PWAContext.Provider value={{ deferredPrompt, isInstallable, isInstalled, installApp }}>
+    <PWAContext.Provider value={{ deferredPrompt, isInstallable, isInstalled, isChecking, installApp }}>
       {children}
     </PWAContext.Provider>
   );
