@@ -12,6 +12,7 @@ import ConfirmModal from '../../components/ConfirmModal';
 import { formatContentTitle } from '../../utils/contentUtils';
 import { smartSearch } from '../../utils/searchUtils';
 import { LazyLoadImage } from 'react-lazy-load-image-component';
+import { VirtuosoGrid } from 'react-virtuoso';
 
 import { NotificationMenu } from '../../components/NotificationMenu';
 
@@ -24,6 +25,8 @@ export default function Home({ onOpenMediaModal }: { onOpenMediaModal: () => voi
   const [showSuggestions, setShowSuggestions] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const suggestionsRef = useRef<HTMLDivElement>(null);
+  
+  // ... (rest of the component)
 
   const searchSuggestions = useMemo(() => {
     if (!search.trim()) return [];

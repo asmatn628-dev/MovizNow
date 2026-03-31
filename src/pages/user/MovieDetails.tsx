@@ -426,6 +426,11 @@ export default function MovieDetails() {
       return;
     }
 
+    if (!navigator.onLine) {
+      setAlertConfig({ isOpen: true, title: 'No Internet', message: 'You need an internet connection to open this link.' });
+      return;
+    }
+
     if (!profile) {
       setShowLoginPrompt(true);
       return;
