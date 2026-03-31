@@ -96,31 +96,13 @@ export const LinkCheckerModal: React.FC<Props> = ({
   }, [isOpen, autoStart, initialInput]);
 
   // Auto-paste from clipboard when modal opens
-  React.useEffect(() => {
-    if (isOpen) {
-      pasteFromClipboard(true);
-    }
-  }, [isOpen]);
-
+  // Removed automatic paste
+  
   // Auto-paste from clipboard when window gains focus
-  React.useEffect(() => {
-    const handleFocus = () => {
-      if (isOpen) {
-        pasteFromClipboard(true);
-      }
-    };
-    window.addEventListener('focus', handleFocus);
-    return () => window.removeEventListener('focus', handleFocus);
-  }, [isOpen]);
-
+  // Removed automatic paste
+  
   // Periodic clipboard check while modal is open
-  React.useEffect(() => {
-    if (!isOpen) return;
-    const interval = setInterval(() => {
-      pasteFromClipboard(true);
-    }, 5000); // Check every 5 seconds
-    return () => clearInterval(interval);
-  }, [isOpen]);
+  // Removed periodic check
 
   const links = useMemo(() => {
     if (!autoExtract) {
@@ -450,7 +432,7 @@ export const LinkCheckerModal: React.FC<Props> = ({
                   </div>
 
                   <div className="flex flex-wrap gap-2">
-                    <button onClick={() => pasteFromClipboard(false)} className="inline-flex items-center justify-center rounded-2xl border border-zinc-700 bg-zinc-950 px-4 py-2 text-sm font-medium text-zinc-100 hover:bg-zinc-900 gap-2 transition-colors"><ClipboardPaste className="h-4 w-4" />Paste</button>
+                    <button onClick={() => pasteFromClipboard(false)} className="inline-flex items-center justify-center rounded-2xl border border-zinc-700 bg-zinc-950 px-8 py-2 text-sm font-medium text-zinc-100 hover:bg-zinc-900 gap-2 transition-colors w-32"><ClipboardPaste className="h-4 w-4" />Paste</button>
                   </div>
 
                   <div className="flex flex-wrap items-center justify-between gap-3 text-sm text-zinc-400">
