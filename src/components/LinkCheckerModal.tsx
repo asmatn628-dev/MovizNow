@@ -73,6 +73,7 @@ type Props = {
       episode?: number;
     }
   ) => void;
+  onResults?: (results: LinkCheckResult[]) => void;
   languages?: Language[];
   qualities?: Quality[];
 };
@@ -143,7 +144,14 @@ function formatQuality(q?: string) {
   return lower;
 }
 
-function normalizePrintQuality(v?: string) {
+function normalizePrintQuality(v?: string, fileName?: string) {
+  if (!v && !fileName) return undefined;
+  
+  // If filename contains HD, it's WEB-DL
+  if (fileName && /\bHD\b/i.test(fileName)) {
+    return "WEB-DL";
+  }
+
   if (!v) return undefined;
   const s = v.toUpperCase().replace(/[\s\.\-_]+/g, "");
   if (s.includes("WEBDL")) return "WEB-DL";
@@ -312,7 +320,8 @@ function detectMetadataForLink(text: string, url: string, languages?: Language[]
   const subtitle = /subtitles|subs|softsub|hardsub|esub|esubs|msub|msubs/i.test(lower) ? "Subtitles" : undefined;
 
   let printQuality = normalizePrintQuality(
-    lower.match(/\b(web[ -]?dl|web[ -]?rip|hdrip|blu[ -]?ray|hq[ - ]?hdtc|hdtc|hdcam|dvdrip|brrip)\b/i)?.[1]
+    lower.match(/\b(web[ -]?dl|web[ -]?rip|hdrip|blu[ -]?ray|hq[ - ]?hdtc|hdtc|hdcam|dvdrip|brrip)\b/i)?.[1],
+    undefined // We don't have filename here yet
   );
 
   if (!printQuality && qualities && qualities.length > 0) {
@@ -500,7 +509,7 @@ function detectFromFilename(fileName?: string, finalUrl?: string, languages?: La
 
   const subtitle = /subtitles|subs|softsub|hardsub|esub|esubs|msub|msubs/i.test(source) ? "Subtitles" : undefined;
   
-  let printQuality = normalizePrintQuality(source.match(/\b(web[ -]?dl|web[ -]?rip|hdrip|blu[ -]?ray|hq[ - ]?hdtc|hdtc|hdcam|dvdrip|brrip)\b/i)?.[1]);
+  let printQuality = normalizePrintQuality(source.match(/\b(web[ -]?dl|web[ -]?rip|hdrip|blu[ -]?ray|hq[ - ]?hdtc|hdtc|hdcam|dvdrip|brrip)\b/i)?.[1], fileName);
 
   if (!printQuality && qualities && qualities.length > 0) {
     qualities.forEach(q => {
@@ -587,7 +596,9 @@ function buildMismatchWarnings(result: LinkCheckResult, all: LinkCheckResult[], 
   }
 
   if (result.fileSize && result.qualityLabel) {
-    const gb = result.fileSize / (1000 * 1000 * 1000);
+    const mb = result.fileSize / (1000 * 1000);
+    const gb = mb / 1000;
+    if (mb < 20) warnings.push("File size is suspiciously small (< 20MB)");
     if (result.qualityLabel === "1080P" && gb < 0.5) warnings.push("Suspiciously small for 1080p");
     if (result.qualityLabel === "720P" && gb < 0.25) warnings.push("Suspiciously small for 720p");
     if (result.qualityLabel === "480P" && gb > 3.5) warnings.push("Suspiciously large for 480p");
@@ -630,6 +641,7 @@ export const LinkCheckerModal: React.FC<Props> = ({
   initialInput = "",
   autoStart = false,
   onAddLinks,
+  onResults,
   languages = [],
   qualities = [],
 }) => {
@@ -637,6 +649,7 @@ export const LinkCheckerModal: React.FC<Props> = ({
   const [autoExtract, setAutoExtract] = useState(true);
   const [loading, setLoading] = useState(false);
   const [results, setResults] = useState<LinkCheckResult[]>([]);
+  const [selectedUrls, setSelectedUrls] = useState<Set<string>>(new Set());
   const [error, setError] = useState<string | null>(null);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
 
@@ -710,6 +723,23 @@ export const LinkCheckerModal: React.FC<Props> = ({
 
   const toggleExpand = (url: string) => {
     setExpanded((prev) => ({ ...prev, [url]: !prev[url] }));
+  };
+
+  const toggleSelect = (url: string) => {
+    setSelectedUrls((prev) => {
+      const next = new Set(prev);
+      if (next.has(url)) next.delete(url);
+      else next.add(url);
+      return next;
+    });
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedUrls.size === results.length) {
+      setSelectedUrls(new Set());
+    } else {
+      setSelectedUrls(new Set(results.map((r) => r.url)));
+    }
   };
 
   const handleCheck = async (onlyUrls?: string[]) => {
@@ -797,9 +827,33 @@ export const LinkCheckerModal: React.FC<Props> = ({
           if (result.ok && (!result.fileName || !result.qualityLabel || !result.audioLabel)) {
             result.statusLabel = "MISSING_METADATA";
           }
+          
+          if (result.ok && result.fileSize && result.fileSize < 20 * 1000 * 1000) {
+            result.statusLabel = "BROKEN";
+            result.message = "File size too small (< 20MB)";
+          }
+
+          // Filename validation
+          if (result.ok && result.fileName) {
+            const fileName = result.fileName.toLowerCase();
+            const hasQuality = /\b(2160p|4k|1440p|1080p|720p|480p|360p|540p)\b/i.test(fileName);
+            const hasLanguage = /\b(hindi|english|urdu|tamil|telugu|punjabi|marathi|bengali|gujarati|kannada|malayalam|odia|assamese|spanish|french|german|italian|japanese|korean|chinese|arabic|russian|portuguese|dutch|turkish|vietnamese|thai|indonesian|malay|filipino|persian|polish|ukrainian|greek|hebrew|swedish|danish|norwegian|finnish|czech|hungarian|romanian|bulgarian|serbian|croatian|slovak|slovenian|lithuanian|latvian|estonian|icelandic|irish|welsh|scottish gaelic|basque|catalan|galician|afrikaans|swahili|zulu|xhosa|amharic|somali|yoruba|igbo|hausa|nepali|sinhala|burmese|khmer|lao|tibetan|mongolian|uzbek|kazakh|kyrgyz|tajik|turkmen|azerbaijani|armenian|georgian|pashto|kurdish|sindhi|kashmiri|dual[ ._-]?audio)\b/i.test(fileName);
+            
+            if (!hasQuality && result.statusLabel === "WORKING") {
+              result.statusLabel = "MISSING_METADATA";
+              result.message = "Missing Quality in filename";
+            } else if (!hasLanguage && result.statusLabel === "WORKING") {
+              result.statusLabel = "MISSING_METADATA";
+              result.message = "Missing Language in filename";
+            }
+          }
 
           allResults.push(result);
           completedCount++;
+
+          if (result.statusLabel === "WORKING") {
+            setSelectedUrls((prev) => new Set(prev).add(result.url));
+          }
 
           // Update results incrementally for better UX
           if (onlyUrls?.length) {
@@ -829,6 +883,10 @@ export const LinkCheckerModal: React.FC<Props> = ({
 
       const workers = Array.from({ length: Math.min(concurrency, urls.length) }, () => processNext());
       await Promise.all(workers);
+      
+      if (onResults) {
+        onResults(allResults);
+      }
     } catch (e: any) {
       setError(e?.message || "Unknown error while checking links.");
     } finally {
@@ -839,7 +897,7 @@ export const LinkCheckerModal: React.FC<Props> = ({
   const handleAddLinks = () => {
     if (!onAddLinks || results.length === 0) return;
     
-    const workingResults = results.filter(r => r.statusLabel === "WORKING");
+    const workingResults = results.filter(r => selectedUrls.has(r.url) && r.statusLabel === "WORKING");
     if (workingResults.length === 0) return;
 
     // Collect metadata to pass back
@@ -935,17 +993,34 @@ export const LinkCheckerModal: React.FC<Props> = ({
   const pasteFromClipboard = async (isAuto = false) => {
     try {
       const text = await navigator.clipboard.readText();
-      if (text) {
-        setInput((prev) => {
-          if (!prev) return text;
-          // Check if text is already in input to avoid duplicates
-          if (prev.includes(text)) return prev;
-          return prev + (prev.endsWith('\n') ? '' : '\n') + text;
-        });
-        if (!isAuto) setError(null);
+      if (!text) return;
+
+      const newLinks = splitLinks(text).map(normalizeUrl).filter(Boolean);
+      if (newLinks.length === 0) return;
+
+      let addedAny = false;
+      const newlyAddedUrls: string[] = [];
+
+      setInput((prev) => {
+        const existingLinks = splitLinks(prev).map(normalizeUrl).filter(Boolean);
+        const uniqueNewLinks = newLinks.filter(l => !existingLinks.includes(l));
+        
+        if (uniqueNewLinks.length === 0) return prev;
+        
+        addedAny = true;
+        newlyAddedUrls.push(...uniqueNewLinks);
+        const separator = prev.trim() ? '\n' : '';
+        return prev + separator + uniqueNewLinks.join('\n');
+      });
+
+      if (addedAny && isAuto && results.length > 0 && !loading) {
+        // Automatically check the newly added links if we already have results
+        handleCheck(newlyAddedUrls);
       }
-    } catch {
-      if (!isAuto) setError("Clipboard access was blocked by the browser.");
+      
+      if (!isAuto) setError(null);
+    } catch (e) {
+      if (!isAuto) setError("Clipboard access denied. Please paste manually.");
     }
   };
 
@@ -1033,10 +1108,16 @@ export const LinkCheckerModal: React.FC<Props> = ({
                   <button onClick={copyResults} className="inline-flex items-center justify-center rounded-2xl border border-zinc-700 bg-transparent px-4 py-2 text-sm font-medium text-zinc-100 hover:bg-zinc-900 gap-2 disabled:opacity-50 transition-colors" disabled={!results.length}><Copy className="h-4 w-4" /> Copy Results</button>
                   <button onClick={reset} className="inline-flex items-center justify-center rounded-2xl border border-zinc-700 bg-transparent px-4 py-2 text-sm font-medium text-zinc-100 hover:bg-zinc-900 gap-2 transition-colors"><Trash2 className="h-4 w-4" /> Reset</button>
                   
+                  {!!results.length && (
+                    <button onClick={toggleSelectAll} className="inline-flex items-center justify-center rounded-2xl border border-zinc-700 bg-transparent px-4 py-2 text-sm font-medium text-zinc-100 hover:bg-zinc-900 gap-2 transition-colors">
+                      {selectedUrls.size === results.length ? "Deselect All" : "Select All"}
+                    </button>
+                  )}
+
                   {onAddLinks && results.some(r => r.statusLabel === "WORKING") && !loading && (
                     <button onClick={handleAddLinks} className="inline-flex items-center justify-center rounded-2xl bg-emerald-600 px-4 py-2 text-sm font-bold text-white hover:bg-emerald-700 gap-2 ml-auto transition-colors">
                       <Plus className="h-4 w-4" />
-                      Add {results.filter(r => r.statusLabel === "WORKING").length} Link(s)
+                      Add {selectedUrls.size} Selected Link(s)
                     </button>
                   )}
                 </div>
@@ -1077,31 +1158,36 @@ export const LinkCheckerModal: React.FC<Props> = ({
                       <div key={`${result.url}-${result.qualityLabel || "na"}`} className="rounded-2xl border border-zinc-800 bg-zinc-900/50 overflow-hidden">
                         <div className="p-4 space-y-3">
                           <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
-                            <div className="min-w-0 flex-1">
-                              <div className="flex items-center gap-2 flex-wrap">
-                                {result.ok ? <CheckCircle2 className="h-5 w-5 text-emerald-400" /> : <XCircle className="h-5 w-5 text-red-400" />}
-                                <div className={`inline-flex rounded-full border px-3 py-1 text-xs font-medium ${badgeMap[statusLabel]}`}>{statusLabel}</div>
-                                {result.ok && (
-                                  <div className="inline-flex rounded-full border border-cyan-800 bg-cyan-500/10 px-3 py-1 text-xs font-bold text-cyan-400">
-                                    Name: {finalName}
-                                  </div>
-                                )}
-                                {result.isDirectDownload ? <div className="inline-flex rounded-full border border-blue-800 bg-blue-500/10 px-3 py-1 text-xs font-medium text-blue-400"><FileDown className="h-3.5 w-3.5 mr-1" /> Direct Download</div> : null}
-                                {(result.mismatchWarnings?.length || 0) > 0 ? <div className="inline-flex rounded-full border border-pink-800 bg-pink-500/10 px-3 py-1 text-xs font-medium text-pink-400"><Siren className="h-3.5 w-3.5 mr-1" /> Mismatch</div> : null}
+                            <div className="min-w-0 flex-1 flex items-start gap-3">
+                              <div className="mt-1">
+                                <input type="checkbox" checked={selectedUrls.has(result.url)} onChange={() => toggleSelect(result.url)} className="h-5 w-5 rounded border-zinc-700 bg-zinc-950" />
                               </div>
-                              <div className="mt-2 flex flex-wrap gap-2">
-                                {result.qualityLabel ? <span className="rounded-full border border-fuchsia-800 bg-fuchsia-500/10 px-2.5 py-1 text-[11px] font-medium text-fuchsia-300">{result.qualityLabel}</span> : null}
-                                {result.printQualityLabel ? <span className="rounded-full border border-rose-800 bg-rose-500/10 px-2.5 py-1 text-[11px] font-medium text-rose-300">{result.printQualityLabel}</span> : null}
-                                {result.codecLabel ? <span className="rounded-full border border-indigo-800 bg-indigo-500/10 px-2.5 py-1 text-[11px] font-medium text-indigo-300">{result.codecLabel}</span> : null}
-                                {result.audioLabel ? <span className="rounded-full border border-emerald-800 bg-emerald-500/10 px-2.5 py-1 text-[11px] font-medium text-emerald-300">{result.audioLabel}</span> : null}
-                                {result.subtitleLabel ? <span className="rounded-full border border-amber-800 bg-amber-500/10 px-2.5 py-1 text-[11px] font-medium text-amber-300">{result.subtitleLabel}</span> : null}
-                                {result.season ? <span className="rounded-full border border-blue-800 bg-blue-500/10 px-2.5 py-1 text-[11px] font-bold text-blue-300">Season {result.season}</span> : null}
-                                {result.episode ? <span className="rounded-full border border-indigo-800 bg-indigo-500/10 px-2.5 py-1 text-[11px] font-bold text-indigo-300">Episode {result.episode}</span> : null}
-                                {result.isFullSeasonMKV ? <span className="rounded-full border border-purple-800 bg-purple-500/10 px-2.5 py-1 text-[11px] font-bold text-purple-300">Full Season MKV</span> : null}
-                                {result.isFullSeasonZIP ? <span className="rounded-full border border-purple-800 bg-purple-500/10 px-2.5 py-1 text-[11px] font-bold text-purple-300">Full Season ZIP</span> : null}
+                              <div className="min-w-0 flex-1">
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  {result.ok ? <CheckCircle2 className="h-5 w-5 text-emerald-400" /> : <XCircle className="h-5 w-5 text-red-400" />}
+                                  <div className={`inline-flex rounded-full border px-3 py-1 text-xs font-medium ${badgeMap[statusLabel]}`}>{statusLabel}</div>
+                                  {result.ok && (
+                                    <div className="inline-flex rounded-full border border-cyan-800 bg-cyan-500/10 px-3 py-1 text-xs font-bold text-cyan-400">
+                                      Name: {finalName}
+                                    </div>
+                                  )}
+                                  {result.isDirectDownload ? <div className="inline-flex rounded-full border border-blue-800 bg-blue-500/10 px-3 py-1 text-xs font-medium text-blue-400"><FileDown className="h-3.5 w-3.5 mr-1" /> Direct Download</div> : null}
+                                  {(result.mismatchWarnings?.length || 0) > 0 ? <div className="inline-flex rounded-full border border-pink-800 bg-pink-500/10 px-3 py-1 text-xs font-medium text-pink-400"><Siren className="h-3.5 w-3.5 mr-1" /> Mismatch</div> : null}
+                                </div>
+                                <div className="mt-2 flex flex-wrap gap-2">
+                                  {result.qualityLabel ? <span className="rounded-full border border-fuchsia-800 bg-fuchsia-500/10 px-2.5 py-1 text-[11px] font-medium text-fuchsia-300">{result.qualityLabel}</span> : null}
+                                  {result.printQualityLabel ? <span className="rounded-full border border-rose-800 bg-rose-500/10 px-2.5 py-1 text-[11px] font-medium text-rose-300">{result.printQualityLabel}</span> : null}
+                                  {result.codecLabel ? <span className="rounded-full border border-indigo-800 bg-indigo-500/10 px-2.5 py-1 text-[11px] font-medium text-indigo-300">{result.codecLabel}</span> : null}
+                                  {result.audioLabel ? <span className="rounded-full border border-emerald-800 bg-emerald-500/10 px-2.5 py-1 text-[11px] font-medium text-emerald-300">{result.audioLabel}</span> : null}
+                                  {result.subtitleLabel ? <span className="rounded-full border border-amber-800 bg-amber-500/10 px-2.5 py-1 text-[11px] font-medium text-amber-300">{result.subtitleLabel}</span> : null}
+                                  {result.season ? <span className="rounded-full border border-blue-800 bg-blue-500/10 px-2.5 py-1 text-[11px] font-bold text-blue-300">Season {result.season}</span> : null}
+                                  {result.episode ? <span className="rounded-full border border-indigo-800 bg-indigo-500/10 px-2.5 py-1 text-[11px] font-bold text-indigo-300">Episode {result.episode}</span> : null}
+                                  {result.isFullSeasonMKV ? <span className="rounded-full border border-purple-800 bg-purple-500/10 px-2.5 py-1 text-[11px] font-bold text-purple-300">Full Season MKV</span> : null}
+                                  {result.isFullSeasonZIP ? <span className="rounded-full border border-purple-800 bg-purple-500/10 px-2.5 py-1 text-[11px] font-bold text-purple-300">Full Season ZIP</span> : null}
+                                </div>
+                                <div className="mt-2 break-all text-sm text-zinc-200">{result.url}</div>
+                                <p className="text-sm text-zinc-400 mt-1">{result.message || (result.ok ? "The link is reachable." : "The link could not be verified.")}</p>
                               </div>
-                              <div className="mt-2 break-all text-sm text-zinc-200">{result.url}</div>
-                              <p className="text-sm text-zinc-400 mt-1">{result.message || (result.ok ? "The link is reachable." : "The link could not be verified.")}</p>
                             </div>
                             <button onClick={() => toggleExpand(result.url)} className="inline-flex items-center justify-center rounded-2xl border border-zinc-700 bg-transparent px-4 py-2 text-sm font-medium text-zinc-100 hover:bg-zinc-900 gap-2 self-start transition-colors">Details {openRow ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}</button>
                           </div>

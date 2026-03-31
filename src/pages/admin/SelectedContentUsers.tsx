@@ -19,38 +19,54 @@ export default function SelectedContentUsers() {
   const [statusFilter, setStatusFilter] = useState<Status | 'all'>('all');
 
   useEffect(() => {
-    const unsub = onSnapshot(collection(db, 'users'), (snapshot) => {
-      const data = snapshot.docs.map((doc) => ({ ...doc.data() } as UserProfile));
-      
-      // Auto-expire users whose expiry date has passed
-      const now = new Date();
-      data.forEach(user => {
-        if (user.status === 'active' && user.expiryDate) {
-          const expiryDate = new Date(user.expiryDate);
-          expiryDate.setDate(expiryDate.getDate() + 1);
-          if (now > expiryDate) {
-            updateDoc(doc(db, 'users', user.uid), { status: 'expired' }).catch(console.error);
-          }
-        }
-      });
+    const fetchUsers = async () => {
+      try {
+        const { getDocs, writeBatch } = await import('firebase/firestore');
+        const snapshot = await getDocs(collection(db, 'users'));
+        const data = snapshot.docs.map((doc) => ({ ...doc.data() } as UserProfile));
+        
+        const now = new Date();
+        const batch = writeBatch(db);
+        let hasUpdates = false;
 
-      setUsers(data);
-    }, (error) => {
-      console.error("Users snapshot error:", error);
-      handleFirestoreError(error, OperationType.LIST, 'users');
-    });
-    return () => unsub();
+        data.forEach((user, index) => {
+          if (user.status === 'active' && user.expiryDate) {
+            const expiryDate = new Date(user.expiryDate);
+            expiryDate.setDate(expiryDate.getDate() + 1);
+            if (now > expiryDate) {
+              batch.update(snapshot.docs[index].ref, { status: 'expired' });
+              user.status = 'expired';
+              hasUpdates = true;
+            }
+          }
+        });
+
+        if (hasUpdates) {
+          await batch.commit();
+        }
+
+        setUsers(data);
+      } catch (error) {
+        console.error("Error fetching users:", error);
+        handleFirestoreError(error, OperationType.LIST, 'users');
+      }
+    };
+    fetchUsers();
   }, []);
 
   useEffect(() => {
-    const unsub = onSnapshot(collection(db, 'content'), (snapshot) => {
-      const data = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() } as Content));
-      setContentList(data.sort((a, b) => a.title.localeCompare(b.title)));
-    }, (error) => {
-      console.error("Content snapshot error:", error);
-      handleFirestoreError(error, OperationType.LIST, 'content');
-    });
-    return () => unsub();
+    const fetchContent = async () => {
+      try {
+        const { getDocs } = await import('firebase/firestore');
+        const snapshot = await getDocs(collection(db, 'content'));
+        const data = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() } as Content));
+        setContentList(data.sort((a, b) => a.title.localeCompare(b.title)));
+      } catch (error) {
+        console.error("Content fetch error:", error);
+        handleFirestoreError(error, OperationType.LIST, 'content');
+      }
+    };
+    fetchContent();
   }, []);
 
   const handleManageAccess = (user: UserProfile) => {

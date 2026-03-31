@@ -5,6 +5,7 @@ import { collection, addDoc, deleteDoc, doc, updateDoc, onSnapshot, writeBatch }
 import { useAuth } from '../../contexts/AuthContext';
 import { useContent } from '../../contexts/ContentContext';
 import { Content, Genre, Language, Quality, QualityLinks, Season, Episode, LinkDef, Role } from '../../types';
+import { motion, AnimatePresence } from 'framer-motion';
 import { Plus, Edit2, Trash2, Share2, Film, Tv, X, Save, Upload, Search, Eye, EyeOff, ArrowUp, ArrowDown, Copy, ClipboardPaste, GripVertical, Bell, RefreshCw, ChevronDown, ChevronUp, User, Lock } from 'lucide-react';
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
 import ConfirmModal from '../../components/ConfirmModal';
@@ -12,8 +13,207 @@ import AlertModal from '../../components/AlertModal';
 import { MediaModal, findTMDBByImdb, searchTMDBByTitle, fetchTMDBDetails, fetchSeriesSeasons, fetchIMDbRating } from '../../components/MediaModal';
 import { LinkCheckerModal } from '../../components/LinkCheckerModal';
 import { formatContentTitle, formatReleaseDate, formatRuntime, formatDateToMonthDDYYYY } from '../../utils/contentUtils';
+import { smartSearch } from '../../utils/searchUtils';
 import { handleFirestoreError, OperationType } from '../../utils/firestoreErrorHandler';
 import { generateTinyUrl } from '../../utils/tinyurl';
+
+interface QualityInputsProps {
+  links: QualityLinks;
+  onChange: (updater: QualityLinks | ((prev: QualityLinks) => QualityLinks)) => void;
+  droppableId: string;
+}
+
+const QualityInputs: React.FC<QualityInputsProps> = ({ links, onChange, droppableId }) => {
+  const safeLinks = links || [];
+  const handleUrlBlur = async (url: string, idx: number) => {
+    if (!url) return;
+    try {
+      const res = await fetch("/api/check-link", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.fileSize) {
+          let sizeInBytes = data.fileSize;
+          let size = 0;
+          let unit: 'MB' | 'GB' = 'MB';
+          
+          if (sizeInBytes >= 1000 * 1000 * 1000) {
+            size = sizeInBytes / (1000 * 1000 * 1000);
+            unit = 'GB';
+          } else {
+            size = sizeInBytes / (1000 * 1000);
+            unit = 'MB';
+          }
+          
+          onChange(prevLinks => {
+            const currentLinks = Array.isArray(prevLinks) ? prevLinks : [];
+            const newLinks = [...currentLinks];
+            if (newLinks[idx]) {
+              newLinks[idx] = {
+                ...newLinks[idx],
+                size: size.toFixed(2).replace(/\.00$/, ''),
+                unit: unit
+              };
+            }
+            return newLinks;
+          });
+        }
+      }
+    } catch (e) {
+      console.error("Failed to check link info", e);
+    }
+  };
+
+  const onDragEnd = (result: DropResult) => {
+    if (!result.destination) return;
+    const items = Array.from(links);
+    const [reorderedItem] = items.splice(result.source.index, 1);
+    items.splice(result.destination.index, 0, reorderedItem);
+    onChange(items);
+  };
+
+  return (
+    <DragDropContext onDragEnd={onDragEnd}>
+      <Droppable droppableId={droppableId}>
+        {(provided) => (
+          <div 
+            {...provided.droppableProps}
+            ref={provided.innerRef}
+            className="space-y-3"
+          >
+            {safeLinks.map((link, idx) => (
+              <Draggable key={link.id} draggableId={link.id} index={idx}>
+                {(provided, snapshot) => (
+                  <div 
+                    ref={provided.innerRef}
+                    {...provided.draggableProps}
+                    className={`flex flex-col gap-2 bg-zinc-900 p-3 rounded-xl border ${snapshot.isDragging ? 'border-emerald-500 shadow-lg shadow-emerald-500/20 z-50' : 'border-zinc-800'} transition-all`}
+                  >
+                      {/* 1st line: Name field */}
+                      <div className="flex gap-2 items-center">
+                        <input
+                          type="text"
+                          placeholder="Name (e.g. 1080p, WEB-DL)"
+                          value={link.name}
+                          onChange={(e) => {
+                            onChange(prev => {
+                              const currentLinks = Array.isArray(prev) ? prev : [];
+                              const newLinks = [...currentLinks];
+                              newLinks[idx] = { ...newLinks[idx], name: e.target.value };
+                              return newLinks;
+                            });
+                          }}
+                          className={`${droppableId.startsWith('episode-links') ? 'w-45' : 'w-55'} bg-zinc-950 border border-zinc-800 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:border-emerald-500`}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            onChange(prev => {
+                              const currentLinks = Array.isArray(prev) ? prev : [];
+                              return [...currentLinks, { id: Math.random().toString(36).substr(2, 9), name: '', url: '', size: '', unit: 'MB' }];
+                            });
+                          }}
+                          className="p-1.5 bg-emerald-500/10 border border-emerald-500/20 text-emerald-500 rounded-lg hover:bg-emerald-500/20 transition-colors"
+                          title="Add Link"
+                        >
+                          <Plus className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                      {/* 2nd line: Size, Unit, Delete, Drag and drop */}
+                      <div className="flex gap-2 items-center">
+                        <div className="flex gap-2 items-center shrink-0">
+                          <input
+                            type="number"
+                            placeholder="Size"
+                            value={link.size}
+                            onChange={(e) => {
+                              onChange(prev => {
+                                const currentLinks = Array.isArray(prev) ? prev : [];
+                                const newLinks = [...currentLinks];
+                                newLinks[idx] = { ...newLinks[idx], size: e.target.value };
+                                return newLinks;
+                              });
+                            }}
+                            className="w-20 bg-zinc-950 border border-zinc-800 rounded-lg px-2 py-1.5 text-sm text-center focus:outline-none focus:border-emerald-500"
+                          />
+                          <div className="flex bg-zinc-950 border border-zinc-800 rounded-lg p-0.5 shrink-0">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                onChange(prev => {
+                                  const currentLinks = Array.isArray(prev) ? prev : [];
+                                  const newLinks = [...currentLinks];
+                                  newLinks[idx] = { ...newLinks[idx], unit: 'MB' };
+                                  return newLinks;
+                                });
+                              }}
+                              className={`px-2 py-1 rounded-md text-xs font-bold transition-all ${link.unit === 'MB' ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/20' : 'text-zinc-500 hover:text-zinc-300'}`}
+                            >
+                              MB
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                onChange(prev => {
+                                  const currentLinks = Array.isArray(prev) ? prev : [];
+                                  const newLinks = [...currentLinks];
+                                  newLinks[idx] = { ...newLinks[idx], unit: 'GB' };
+                                  return newLinks;
+                                });
+                              }}
+                              className={`px-2 py-1 rounded-md text-xs font-bold transition-all ${link.unit === 'GB' ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/20' : 'text-zinc-500 hover:text-zinc-300'}`}
+                            >
+                              GB
+                            </button>
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            onChange(prev => {
+                              const currentLinks = Array.isArray(prev) ? prev : [];
+                              return currentLinks.filter((_, i) => i !== idx);
+                            });
+                          }}
+                          className="p-2 text-red-500 hover:bg-red-500/10 rounded-lg transition-colors shrink-0 ml-auto"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                        <div {...provided.dragHandleProps} className="text-zinc-600 hover:text-zinc-400 cursor-grab active:cursor-grabbing p-2 hover:bg-zinc-800 rounded-lg transition-colors">
+                          <GripVertical className="w-4 h-4" />
+                        </div>
+                      </div>
+                    <div className="flex gap-2 items-center">
+                      <input
+                        type="text"
+                        placeholder="URL"
+                        value={link.url}
+                        onChange={(e) => {
+                          onChange(prev => {
+                            const currentLinks = Array.isArray(prev) ? prev : [];
+                            const newLinks = [...currentLinks];
+                            newLinks[idx] = { ...newLinks[idx], url: e.target.value };
+                            return newLinks;
+                          });
+                        }}
+                        onBlur={(e) => handleUrlBlur(e.target.value, idx)}
+                        className="flex-1 bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-emerald-500"
+                      />
+                    </div>
+                  </div>
+                )}
+              </Draggable>
+            ))}
+            {provided.placeholder}
+          </div>
+        )}
+      </Droppable>
+    </DragDropContext>
+  );
+};
 
 export default function ContentManagement() {
   const { profile, user } = useAuth();
@@ -29,6 +229,7 @@ export default function ContentManagement() {
   const [type, setType] = useState<'movie' | 'series'>('movie');
   const [status, setStatus] = useState<'draft' | 'published' | 'selected_content'>('published');
   const [title, setTitle] = useState('');
+  const [showTitleSuggestions, setShowTitleSuggestions] = useState(false);
   const [description, setDescription] = useState('');
   const [posterUrl, setPosterUrl] = useState('');
   const [trailerUrl, setTrailerUrl] = useState('');
@@ -88,6 +289,11 @@ export default function ContentManagement() {
 
   const prefilledDataApplied = useRef(false);
 
+  const titleSuggestions = useMemo(() => {
+    if (!title.trim() || title.length < 2) return [];
+    return smartSearch(contentList, title).filter(c => c.id !== editingId).slice(0, 5);
+  }, [title, contentList, editingId]);
+
   useEffect(() => {
     if (location.state?.prefilledData && !prefilledDataApplied.current && genres.length > 0) {
       const data = location.state.prefilledData;
@@ -125,20 +331,23 @@ export default function ContentManagement() {
   }, [contextLoading]);
 
   useEffect(() => {
-    const unsubManagers = onSnapshot(collection(db, 'users'), (snapshot) => {
-      const managersData: Record<string, string> = {};
-      snapshot.docs.forEach(doc => {
-        const data = doc.data();
-        if (data.role === 'admin' || data.role === 'owner' || data.role === 'content_manager' || data.role === 'manager') {
-          managersData[doc.id] = data.displayName || data.email || 'Unknown';
-        }
-      });
-      setManagers(managersData);
-    });
-
-    return () => { 
-      unsubManagers();
+    const fetchManagers = async () => {
+      try {
+        const { getDocs } = await import('firebase/firestore');
+        const snapshot = await getDocs(collection(db, 'users'));
+        const managersData: Record<string, string> = {};
+        snapshot.docs.forEach(doc => {
+          const data = doc.data();
+          if (data.role === 'admin' || data.role === 'owner' || data.role === 'content_manager' || data.role === 'manager') {
+            managersData[doc.id] = data.displayName || data.email || 'Unknown';
+          }
+        });
+        setManagers(managersData);
+      } catch (error) {
+        console.error("Error fetching managers:", error);
+      }
     };
+    fetchManagers();
   }, []);
 
   useEffect(() => {
@@ -1655,189 +1864,6 @@ export default function ContentManagement() {
     setAlertConfig({ isOpen: true, title: 'Success', message: 'Data auto-filled successfully!' });
   };
 
-  const renderQualityInputs = (
-    links: QualityLinks, 
-    onChange: React.Dispatch<React.SetStateAction<QualityLinks>>,
-    droppableId: string
-  ) => {
-    const safeLinks = links || [];
-    const handleUrlBlur = async (url: string, idx: number) => {
-      if (!url) return;
-      try {
-        const res = await fetch("/api/check-link", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ url }),
-        });
-        if (res.ok) {
-          const data = await res.json();
-          if (data.fileSize) {
-            let sizeInBytes = data.fileSize;
-            let size = 0;
-            let unit: 'MB' | 'GB' = 'MB';
-            
-            if (sizeInBytes >= 1000 * 1000 * 1000) {
-              size = sizeInBytes / (1000 * 1000 * 1000);
-              unit = 'GB';
-            } else {
-              size = sizeInBytes / (1000 * 1000);
-              unit = 'MB';
-            }
-            
-            onChange(prevLinks => {
-              const newLinks = [...prevLinks];
-              if (newLinks[idx]) {
-                newLinks[idx] = {
-                  ...newLinks[idx],
-                  size: size.toFixed(2).replace(/\.00$/, ''),
-                  unit: unit
-                };
-              }
-              return newLinks;
-            });
-          }
-        }
-      } catch (e) {
-        console.error("Failed to check link info", e);
-      }
-    };
-
-    const onDragEnd = (result: DropResult) => {
-      if (!result.destination) return;
-      const items = Array.from(links);
-      const [reorderedItem] = items.splice(result.source.index, 1);
-      items.splice(result.destination.index, 0, reorderedItem);
-      onChange(items);
-    };
-
-    return (
-      <DragDropContext onDragEnd={onDragEnd}>
-        <Droppable droppableId={droppableId}>
-          {(provided) => (
-            <div 
-              {...provided.droppableProps}
-              ref={provided.innerRef}
-              className="space-y-3"
-            >
-              {safeLinks.map((link, idx) => (
-                <Draggable key={link.id} draggableId={link.id} index={idx}>
-                  {(provided, snapshot) => (
-                    <div 
-                      ref={provided.innerRef}
-                      {...provided.draggableProps}
-                      className={`flex flex-col gap-2 bg-zinc-900 p-3 rounded-xl border ${snapshot.isDragging ? 'border-emerald-500 shadow-lg shadow-emerald-500/20 z-50' : 'border-zinc-800'} transition-all`}
-                    >
-                        {/* 1st line: Name field */}
-                        <div className="flex gap-2 items-center">
-                          <input
-                            type="text"
-                            placeholder="Name (e.g. 1080p, WEB-DL)"
-                            value={link.name}
-                            onChange={(e) => {
-                              onChange(prev => {
-                                const newLinks = [...prev];
-                                newLinks[idx] = { ...newLinks[idx], name: e.target.value };
-                                return newLinks;
-                              });
-                            }}
-                            className={`${droppableId.startsWith('episode-links') ? 'w-45' : 'w-55'} bg-zinc-950 border border-zinc-800 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:border-emerald-500`}
-                          />
-                          <button
-                            type="button"
-                            onClick={() => {
-                              onChange(prev => [...prev, { id: Math.random().toString(36).substr(2, 9), name: '', url: '', size: '', unit: 'MB' }]);
-                            }}
-                            className="p-1.5 bg-emerald-500/10 border border-emerald-500/20 text-emerald-500 rounded-lg hover:bg-emerald-500/20 transition-colors"
-                            title="Add Link"
-                          >
-                            <Plus className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
-                        {/* 2nd line: Size, Unit, Delete, Drag and drop */}
-                        <div className="flex gap-2 items-center">
-                          <div className="flex gap-2 items-center shrink-0">
-                            <input
-                              type="number"
-                              placeholder="Size"
-                              value={link.size}
-                              onChange={(e) => {
-                                onChange(prev => {
-                                  const newLinks = [...prev];
-                                  newLinks[idx] = { ...newLinks[idx], size: e.target.value };
-                                  return newLinks;
-                                });
-                              }}
-                              className="w-20 bg-zinc-950 border border-zinc-800 rounded-lg px-2 py-1.5 text-sm text-center focus:outline-none focus:border-emerald-500"
-                            />
-                            <div className="flex bg-zinc-950 border border-zinc-800 rounded-lg p-0.5 shrink-0">
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  onChange(prev => {
-                                    const newLinks = [...prev];
-                                    newLinks[idx] = { ...newLinks[idx], unit: 'MB' };
-                                    return newLinks;
-                                  });
-                                }}
-                                className={`px-2 py-1 rounded-md text-xs font-bold transition-all ${link.unit === 'MB' ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/20' : 'text-zinc-500 hover:text-zinc-300'}`}
-                              >
-                                MB
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  onChange(prev => {
-                                    const newLinks = [...prev];
-                                    newLinks[idx] = { ...newLinks[idx], unit: 'GB' };
-                                    return newLinks;
-                                  });
-                                }}
-                                className={`px-2 py-1 rounded-md text-xs font-bold transition-all ${link.unit === 'GB' ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/20' : 'text-zinc-500 hover:text-zinc-300'}`}
-                              >
-                                GB
-                              </button>
-                            </div>
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              onChange(prev => prev.filter((_, i) => i !== idx));
-                            }}
-                            className="p-2 text-red-500 hover:bg-red-500/10 rounded-lg transition-colors shrink-0 ml-auto"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                          <div {...provided.dragHandleProps} className="text-zinc-600 hover:text-zinc-400 cursor-grab active:cursor-grabbing p-2 hover:bg-zinc-800 rounded-lg transition-colors">
-                            <GripVertical className="w-4 h-4" />
-                          </div>
-                        </div>
-                      <div className="flex gap-2 items-center">
-                        <input
-                          type="text"
-                          placeholder="URL"
-                          value={link.url}
-                          onChange={(e) => {
-                            onChange(prev => {
-                              const newLinks = [...prev];
-                              newLinks[idx] = { ...newLinks[idx], url: e.target.value };
-                              return newLinks;
-                            });
-                          }}
-                          onBlur={(e) => handleUrlBlur(e.target.value, idx)}
-                          className="flex-1 bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-emerald-500"
-                        />
-                      </div>
-                    </div>
-                  )}
-                </Draggable>
-              ))}
-              {provided.placeholder}
-            </div>
-          )}
-        </Droppable>
-      </DragDropContext>
-    );
-  };
 
   const uniqueYears = useMemo(() => {
     const years = new Set(contentList.map(c => Number(c.year)).filter(y => y > 0 && !isNaN(y)));
@@ -1878,8 +1904,7 @@ export default function ContentManagement() {
       result = result.filter(c => c.addedBy === filterAddedBy);
     }
     if (searchTerm) {
-      const lower = searchTerm.toLowerCase();
-      result = result.filter(c => c.title.toLowerCase().includes(lower));
+      result = smartSearch(result, searchTerm);
     }
     
     result.sort((a, b) => {
@@ -1918,13 +1943,16 @@ export default function ContentManagement() {
     );
   };
 
-  const handleBulkStatusChange = (status: 'published' | 'draft' | 'selected_content') => {
+  const handleBulkStatusChange = async (status: 'published' | 'draft' | 'selected_content') => {
     if (!window.confirm(`Are you sure you want to change the status of ${selectedContent.length} items to ${status}?`)) return;
     
     const currentSelected = [...selectedContent];
     setSelectedContent([]);
     
-    const batch = writeBatch(db);
+    let batches = [writeBatch(db)];
+    let currentBatchIndex = 0;
+    let operationCount = 0;
+
     currentSelected.forEach(id => {
       const content = contentList.find(c => c.id === id);
       if (content) {
@@ -1933,30 +1961,53 @@ export default function ContentManagement() {
           return;
         }
         const contentRef = doc(db, 'content', id);
-        batch.update(contentRef, { status });
+        
+        if (operationCount === 500) {
+          batches.push(writeBatch(db));
+          currentBatchIndex++;
+          operationCount = 0;
+        }
+        batches[currentBatchIndex].update(contentRef, { status });
+        operationCount++;
       }
     });
-    batch.commit().catch(error => {
+
+    try {
+      await Promise.all(batches.map(b => b.commit()));
+    } catch (error) {
       console.error('Error updating content:', error);
       setAlertConfig({ isOpen: true, title: 'Error', message: 'Failed to update content' });
-    });
+    }
   };
 
-  const handleBulkDelete = () => {
+  const handleBulkDelete = async () => {
     if (!window.confirm(`Are you sure you want to delete ${selectedContent.length} items? This action cannot be undone.`)) return;
     
     const currentSelected = [...selectedContent];
     setSelectedContent([]);
     
-    const batch = writeBatch(db);
+    let batches = [writeBatch(db)];
+    let currentBatchIndex = 0;
+    let operationCount = 0;
+
     currentSelected.forEach(id => {
       const contentRef = doc(db, 'content', id);
-      batch.delete(contentRef);
+      
+      if (operationCount === 500) {
+        batches.push(writeBatch(db));
+        currentBatchIndex++;
+        operationCount = 0;
+      }
+      batches[currentBatchIndex].delete(contentRef);
+      operationCount++;
     });
-    batch.commit().catch(error => {
+
+    try {
+      await Promise.all(batches.map(b => b.commit()));
+    } catch (error) {
       console.error('Error deleting content:', error);
       setAlertConfig({ isOpen: true, title: 'Error', message: 'Failed to delete content' });
-    });
+    }
   };
 
   return (
@@ -2162,27 +2213,39 @@ export default function ContentManagement() {
         </div>
       )}
 
-      {isModalOpen && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 z-50 overflow-y-auto">
-          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-4xl my-8 flex flex-col max-h-[90vh]">
-            <div className="p-4 border-b border-zinc-800 flex items-center justify-between sticky top-0 bg-zinc-900 z-10">
-              <div className="flex items-center gap-2 sm:gap-4">
-                <h2 className="text-lg sm:text-xl font-bold whitespace-nowrap">{editingId ? 'Edit Content' : 'Add Content'}</h2>
-                <button
-                  type="button"
-                  onClick={() => setIsAutoFillModalOpen(true)}
-                  className="bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-500 px-2 sm:px-3 py-1.5 rounded-xl text-xs sm:text-sm font-bold flex items-center gap-1.5 sm:gap-2 transition-colors border border-emerald-500/20 whitespace-nowrap"
-                >
-                  <ClipboardPaste className="w-3.5 h-3.5 sm:w-4 sm:h-4" /> Auto-Fill from Text
+      <AnimatePresence>
+        {isModalOpen && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 z-50 overflow-y-auto"
+          >
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              transition={{ duration: 0.2 }}
+              className="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-4xl my-8 flex flex-col max-h-[90vh] shadow-2xl"
+            >
+              <div className="p-4 border-b border-zinc-800 flex items-center justify-between sticky top-0 bg-zinc-900 z-10 rounded-t-2xl">
+                <div className="flex items-center gap-2 sm:gap-4">
+                  <h2 className="text-lg sm:text-xl font-bold whitespace-nowrap">{editingId ? 'Edit Content' : 'Add Content'}</h2>
+                  <button
+                    type="button"
+                    onClick={() => setIsAutoFillModalOpen(true)}
+                    className="bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-500 px-2 sm:px-3 py-1.5 rounded-xl text-xs sm:text-sm font-bold flex items-center gap-1.5 sm:gap-2 transition-colors border border-emerald-500/20 whitespace-nowrap"
+                  >
+                    <ClipboardPaste className="w-3.5 h-3.5 sm:w-4 sm:h-4" /> Auto-Fill from Text
+                  </button>
+                </div>
+                <button onClick={() => setIsModalOpen(false)} className="text-zinc-400 hover:text-white p-1 sm:p-2 ml-2 shrink-0 transition-colors">
+                  <X className="w-5 h-5" />
                 </button>
               </div>
-              <button onClick={() => setIsModalOpen(false)} className="text-zinc-400 hover:text-white p-1 sm:p-2 ml-2 shrink-0">
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-            
-            <div className="flex-1 overflow-y-auto p-4">
-              <form id="content-form" onSubmit={handleSave} className="space-y-4">
+              
+              <div className="flex-1 overflow-y-auto p-4">
+                <form id="content-form" onSubmit={handleSave} className="space-y-4">
                 <div className="grid grid-cols-1 gap-4">
                   
                   {/* 1. Type+Status */}
@@ -2227,9 +2290,37 @@ export default function ContentManagement() {
                   </div>
                   
                   {/* 2. Title */}
-                  <div>
+                  <div className="relative">
                     <label className="block text-xs font-medium text-zinc-500 mb-1">Title</label>
-                    <input type="text" value={title} onChange={(e) => setTitle(e.target.value)} className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-emerald-500" />
+                    <input 
+                      type="text" 
+                      value={title} 
+                      onChange={(e) => {
+                        setTitle(e.target.value);
+                        setShowTitleSuggestions(true);
+                      }} 
+                      onFocus={() => setShowTitleSuggestions(true)}
+                      onBlur={() => setTimeout(() => setShowTitleSuggestions(false), 200)}
+                      className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-emerald-500" 
+                    />
+                    {showTitleSuggestions && titleSuggestions.length > 0 && (
+                      <div className="absolute z-50 w-full mt-1 bg-zinc-900 border border-zinc-700 rounded-lg shadow-xl max-h-48 overflow-y-auto">
+                        <div className="p-2 text-xs text-zinc-400 border-b border-zinc-800">Similar content found:</div>
+                        {titleSuggestions.map(suggestion => (
+                          <div 
+                            key={suggestion.id} 
+                            className="px-3 py-2 hover:bg-zinc-800 cursor-pointer text-sm flex justify-between items-center"
+                            onClick={() => {
+                              setTitle(suggestion.title);
+                              setShowTitleSuggestions(false);
+                            }}
+                          >
+                            <span className="text-zinc-200">{suggestion.title}</span>
+                            <span className="text-xs text-zinc-500 capitalize">{suggestion.type} • {suggestion.year}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
                   
                   {/* 3. Release Year+ Fetch +Master Fetch */}
@@ -2483,7 +2574,7 @@ export default function ContentManagement() {
                 {type === 'movie' ? (
                   <div>
                     <h3 className="text-lg font-bold mb-4">Movie Links</h3>
-                    {renderQualityInputs(movieLinks, setMovieLinks, 'movie-links')}
+                    <QualityInputs links={movieLinks} onChange={setMovieLinks} droppableId="movie-links" />
                   </div>
                 ) : (
                   <div>
@@ -2552,26 +2643,34 @@ export default function ContentManagement() {
                           
                           <div className="mb-6">
                             <h5 className="text-sm font-medium text-zinc-400 mb-2">Season ZIP Links</h5>
-                            {renderQualityInputs(season.zipLinks, (updater) => {
-                              setSeasons(prev => {
-                                const newSeasons = [...prev];
-                                const currentLinks = newSeasons[sIdx].zipLinks;
-                                newSeasons[sIdx].zipLinks = typeof updater === 'function' ? updater(currentLinks) : updater;
-                                return newSeasons;
-                              });
-                            }, `season-zip-${sIdx}`)}
+                            <QualityInputs 
+                              links={season.zipLinks} 
+                              onChange={(updater) => {
+                                setSeasons(prev => {
+                                  const newSeasons = [...prev];
+                                  const currentLinks = newSeasons[sIdx].zipLinks;
+                                  newSeasons[sIdx].zipLinks = typeof updater === 'function' ? updater(currentLinks) : updater;
+                                  return newSeasons;
+                                });
+                              }}
+                              droppableId={`season-zip-${sIdx}`}
+                            />
                           </div>
 
                           <div className="mb-6">
                             <h5 className="text-sm font-medium text-zinc-400 mb-2">Season MKV Links</h5>
-                            {renderQualityInputs(season.mkvLinks || [], (updater) => {
-                              setSeasons(prev => {
-                                const newSeasons = [...prev];
-                                const currentLinks = newSeasons[sIdx].mkvLinks || [];
-                                newSeasons[sIdx].mkvLinks = typeof updater === 'function' ? updater(currentLinks) : updater;
-                                return newSeasons;
-                              });
-                            }, `season-mkv-${sIdx}`)}
+                            <QualityInputs 
+                              links={season.mkvLinks || []} 
+                              onChange={(updater) => {
+                                setSeasons(prev => {
+                                  const newSeasons = [...prev];
+                                  const currentLinks = newSeasons[sIdx].mkvLinks || [];
+                                  newSeasons[sIdx].mkvLinks = typeof updater === 'function' ? updater(currentLinks) : updater;
+                                  return newSeasons;
+                                });
+                              }}
+                              droppableId={`season-mkv-${sIdx}`}
+                            />
                           </div>
 
                           <div>
@@ -2668,14 +2767,18 @@ export default function ContentManagement() {
 
                                   <div className="mb-4">
                                     <h6 className="text-xs font-medium text-zinc-500 mb-2 uppercase tracking-wider">Episode Links</h6>
-                                    {renderQualityInputs(ep.links, (updater) => {
-                                      setSeasons(prev => {
-                                        const newSeasons = [...prev];
-                                        const currentLinks = newSeasons[sIdx].episodes[eIdx].links;
-                                        newSeasons[sIdx].episodes[eIdx].links = typeof updater === 'function' ? updater(currentLinks) : updater;
-                                        return newSeasons;
-                                      });
-                                    }, `episode-links-${sIdx}-${eIdx}`)}
+                                    <QualityInputs 
+                                      links={ep.links} 
+                                      onChange={(updater) => {
+                                        setSeasons(prev => {
+                                          const newSeasons = [...prev];
+                                          const currentLinks = newSeasons[sIdx].episodes[eIdx].links;
+                                          newSeasons[sIdx].episodes[eIdx].links = typeof updater === 'function' ? updater(currentLinks) : updater;
+                                          return newSeasons;
+                                        });
+                                      }}
+                                      droppableId={`episode-links-${sIdx}-${eIdx}`}
+                                    />
                                   </div>
                                 </div>
                               ))}
@@ -2706,23 +2809,36 @@ export default function ContentManagement() {
                 Save Content
               </button>
             </div>
-          </div>
-        </div>
-      )}
+          </motion.div>
+        </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Auto-Fill Modal */}
-      {isAutoFillModalOpen && (
-        <div className="fixed inset-0 bg-black/90 backdrop-blur-md flex items-center justify-center p-4 z-[60]">
-          <div className="bg-zinc-900 border border-zinc-800 rounded-3xl w-full max-w-2xl overflow-hidden shadow-2xl">
-            <div className="p-6 border-b border-zinc-800 flex items-center justify-between bg-zinc-900/50">
-              <div>
-                <h3 className="text-xl font-bold text-white">Auto-Fill from Text</h3>
-                <p className="text-sm text-zinc-400 mt-1">Paste WhatsApp or copied data to automatically populate fields</p>
-              </div>
-              <button 
-                onClick={() => setIsAutoFillModalOpen(false)}
-                className="text-zinc-400 hover:text-white p-2 hover:bg-zinc-800 rounded-full transition-all"
-              >
+      <AnimatePresence>
+        {isAutoFillModalOpen && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/90 backdrop-blur-md flex items-center justify-center p-4 z-[60]"
+          >
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              transition={{ duration: 0.2 }}
+              className="bg-zinc-900 border border-zinc-800 rounded-3xl w-full max-w-2xl overflow-hidden shadow-2xl"
+            >
+              <div className="p-6 border-b border-zinc-800 flex items-center justify-between bg-zinc-900/50">
+                <div>
+                  <h3 className="text-xl font-bold text-white">Auto-Fill from Text</h3>
+                  <p className="text-sm text-zinc-400 mt-1">Paste WhatsApp or copied data to automatically populate fields</p>
+                </div>
+                <button 
+                  onClick={() => setIsAutoFillModalOpen(false)}
+                  className="text-zinc-400 hover:text-white p-2 hover:bg-zinc-800 rounded-full transition-all"
+                >
                 <X className="w-6 h-6" />
               </button>
             </div>
@@ -2754,9 +2870,10 @@ export default function ContentManagement() {
                 </button>
               </div>
             </div>
-          </div>
-        </div>
+          </motion.div>
+        </motion.div>
       )}
+      </AnimatePresence>
 
       <MediaModal
         isOpen={isMasterFetchModalOpen}
@@ -2789,13 +2906,25 @@ export default function ContentManagement() {
         onClose={() => setAlertConfig({ ...alertConfig, isOpen: false })}
       />
 
-      {imdbSeasonsPopup && imdbSeasonsPopup.isOpen && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-[60] p-4">
-          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 max-w-md w-full relative">
-            <button
-              onClick={() => setImdbSeasonsPopup(null)}
-              className="absolute top-4 right-4 text-zinc-400 hover:text-white transition-colors"
+      <AnimatePresence>
+        {imdbSeasonsPopup && imdbSeasonsPopup.isOpen && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-[60] p-4"
+          >
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              transition={{ duration: 0.2 }}
+              className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 max-w-md w-full relative shadow-2xl"
             >
+              <button
+                onClick={() => setImdbSeasonsPopup(null)}
+                className="absolute top-4 right-4 text-zinc-400 hover:text-white transition-colors"
+              >
               <X className="w-5 h-5" />
             </button>
             <h3 className="text-xl font-bold mb-2">Select Seasons</h3>
@@ -2858,9 +2987,10 @@ export default function ContentManagement() {
                 Fetch Selected
               </button>
             </div>
-          </div>
-        </div>
+          </motion.div>
+        </motion.div>
       )}
+      </AnimatePresence>
       {shareSeasonModal.isOpen && shareSeasonModal.content && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-[60] p-4">
           <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 max-w-md w-full relative">

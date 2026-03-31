@@ -15,22 +15,22 @@ const WatchLater = lazy(() => import('./pages/user/WatchLater'));
 const Favorites = lazy(() => import('./pages/user/Favorites'));
 const MovieRequests = lazy(() => import('./pages/user/MovieRequests'));
 
-// Admin Pages
-const AdminLayout = lazy(() => import('./pages/admin/AdminLayout'));
-const Analytics = lazy(() => import('./pages/admin/Analytics'));
-const ContentManagement = lazy(() => import('./pages/admin/ContentManagement'));
-const GenreManagement = lazy(() => import('./pages/admin/GenreManagement'));
-const LanguageManagement = lazy(() => import('./pages/admin/LanguageManagement'));
-const QualityManagement = lazy(() => import('./pages/admin/QualityManagement'));
-const UserManagement = lazy(() => import('./pages/admin/UserManagement'));
-const UserManagers = lazy(() => import('./pages/admin/UserManagers'));
-const TemporaryUsers = lazy(() => import('./pages/admin/TemporaryUsers'));
-const SelectedContentUsers = lazy(() => import('./pages/admin/SelectedContentUsers'));
-const IncomeManagement = lazy(() => import('./pages/admin/IncomeManagement'));
-const ErrorLinks = lazy(() => import('./pages/admin/ErrorLinks'));
-const ReportedLinks = lazy(() => import('./pages/admin/ReportedLinks'));
-const Notifications = lazy(() => import('./pages/admin/Notifications'));
-const MovieRequestsManagement = lazy(() => import('./pages/admin/MovieRequestsManagement'));
+import AdminLayout from './pages/admin/AdminLayout';
+import Analytics from './pages/admin/Analytics';
+import ContentManagement from './pages/admin/ContentManagement';
+import GenreManagement from './pages/admin/GenreManagement';
+import LanguageManagement from './pages/admin/LanguageManagement';
+import QualityManagement from './pages/admin/QualityManagement';
+import UserManagement from './pages/admin/UserManagement';
+import UserManagers from './pages/admin/UserManagers';
+import TemporaryUsers from './pages/admin/TemporaryUsers';
+import SelectedContentUsers from './pages/admin/SelectedContentUsers';
+import IncomeManagement from './pages/admin/IncomeManagement';
+import ErrorLinks from './pages/admin/ErrorLinks';
+import ReportedLinks from './pages/admin/ReportedLinks';
+import Notifications from './pages/admin/Notifications';
+import MovieRequestsManagement from './pages/admin/MovieRequestsManagement';
+const InstallApp = lazy(() => import('./pages/InstallApp'));
 
 const LoadingFallback = () => (
   <div className="min-h-screen bg-zinc-950" />
@@ -59,6 +59,8 @@ export default function App() {
           <Suspense fallback={<LoadingFallback />}>
             <Routes>
               <Route path="/login" element={<Login />} />
+              <Route path="/app" element={<InstallApp />} />
+              <Route path="/install" element={<InstallApp />} />
               
               {/* User Routes */}
               <Route path="/" element={<ProtectedRoute><Home onOpenMediaModal={() => setIsMediaModalOpen(true)} /></ProtectedRoute>} />

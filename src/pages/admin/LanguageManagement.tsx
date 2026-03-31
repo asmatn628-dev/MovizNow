@@ -17,34 +17,40 @@ export default function LanguageManagement() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const unsub = onSnapshot(collection(db, 'languages'), (snapshot) => {
-      const data = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() } as Language));
-      setLanguages(data.sort((a, b) => {
-        if (a.order !== undefined && b.order !== undefined) return a.order - b.order;
-        if (a.order !== undefined) return -1;
-        if (b.order !== undefined) return 1;
-        return a.name.localeCompare(b.name);
-      }));
-      setLoading(false);
-    }, (error) => {
-      console.error("Languages snapshot error:", error);
-      setLoading(false);
-      handleFirestoreError(error, OperationType.LIST, 'languages');
-    });
-    return () => unsub();
+    const fetchLanguages = async () => {
+      try {
+        const { getDocs } = await import('firebase/firestore');
+        const snapshot = await getDocs(collection(db, 'languages'));
+        const data = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() } as Language));
+        setLanguages(data.sort((a, b) => {
+          if (a.order !== undefined && b.order !== undefined) return a.order - b.order;
+          if (a.order !== undefined) return -1;
+          if (b.order !== undefined) return 1;
+          return a.name.localeCompare(b.name);
+        }));
+        setLoading(false);
+      } catch (error) {
+        console.error("Languages fetch error:", error);
+        setLoading(false);
+        handleFirestoreError(error, OperationType.LIST, 'languages');
+      }
+    };
+    fetchLanguages();
   }, []);
 
   const handleAdd = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newLanguage.trim()) return;
     const maxOrder = languages.length > 0 ? Math.max(...languages.map(l => l.order || 0)) : 0;
-    await addDoc(collection(db, 'languages'), { name: newLanguage.trim(), order: maxOrder + 1 });
+    const docRef = await addDoc(collection(db, 'languages'), { name: newLanguage.trim(), order: maxOrder + 1 });
+    setLanguages([...languages, { id: docRef.id, name: newLanguage.trim(), order: maxOrder + 1 }]);
     setNewLanguage('');
   };
 
   const handleDelete = async () => {
     if (!deleteId) return;
     await deleteDoc(doc(db, 'languages', deleteId));
+    setLanguages(languages.filter(l => l.id !== deleteId));
     setDeleteId(null);
   };
 
@@ -56,6 +62,7 @@ export default function LanguageManagement() {
   const handleSaveEdit = async () => {
     if (!editName.trim() || !editingId) return;
     await updateDoc(doc(db, 'languages', editingId), { name: editName.trim() });
+    setLanguages(languages.map(l => l.id === editingId ? { ...l, name: editName.trim() } : l));
     setEditingId(null);
     setEditName('');
   };

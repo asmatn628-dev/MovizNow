@@ -58,10 +58,16 @@ export default function MovieRequestsManagement() {
   }, [sortBy, sortOrder]);
 
   useEffect(() => {
-    const unsub = onSnapshot(collection(db, 'content'), (snapshot) => {
-      setAllContent(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-    });
-    return () => unsub();
+    const fetchContent = async () => {
+      try {
+        const { getDocs } = await import('firebase/firestore');
+        const snapshot = await getDocs(collection(db, 'content'));
+        setAllContent(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+      } catch (error) {
+        console.error("Error fetching content:", error);
+      }
+    };
+    fetchContent();
   }, []);
 
   const handleUpdateStatus = async (requestId: string, status: 'completed' | 'rejected' | 'pending') => {

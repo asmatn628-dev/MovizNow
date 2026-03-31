@@ -21,14 +21,18 @@ export default function IncomeManagement() {
   const [alertConfig, setAlertConfig] = useState<{ isOpen: boolean; title: string; message: string }>({ isOpen: false, title: '', message: '' });
 
   useEffect(() => {
-    const q = query(collection(db, 'income'), orderBy('date', 'desc'));
-    const unsub = onSnapshot(q, (snapshot) => {
-      setIncomes(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Income)));
-    }, (error) => {
-      console.error("Income snapshot error:", error);
-      handleFirestoreError(error, OperationType.LIST, 'income');
-    });
-    return () => unsub();
+    const fetchIncome = async () => {
+      try {
+        const { getDocs } = await import('firebase/firestore');
+        const q = query(collection(db, 'income'), orderBy('date', 'desc'));
+        const snapshot = await getDocs(q);
+        setIncomes(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Income)));
+      } catch (error) {
+        console.error("Income fetch error:", error);
+        handleFirestoreError(error, OperationType.LIST, 'income');
+      }
+    };
+    fetchIncome();
   }, []);
 
   const handleAdd = async (e: React.FormEvent) => {

@@ -35,11 +35,9 @@ window.addEventListener('vite:preloadError', (event) => {
 });
 
 createRoot(document.getElementById('root')!).render(
-  <StrictMode>
     <HelmetProvider>
       <ErrorBoundary>
         <App />
       </ErrorBoundary>
-    </HelmetProvider>
-  </StrictMode>,
+    </HelmetProvider>,
 );

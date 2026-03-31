@@ -10,54 +10,66 @@ import { handleFirestoreError, OperationType } from '../../utils/firestoreErrorH
 export default function QualityManagement() {
   const [qualities, setQualities] = useState<Quality[]>([]);
   const [newQuality, setNewQuality] = useState('');
+  const [newColor, setNewColor] = useState('#10b981');
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editName, setEditName] = useState('');
+  const [editColor, setEditColor] = useState('#10b981');
   const [searchTerm, setSearchTerm] = useState('');
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const unsub = onSnapshot(collection(db, 'qualities'), (snapshot) => {
-      const data = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() } as Quality));
-      setQualities(data.sort((a, b) => {
-        if (a.order !== undefined && b.order !== undefined) return a.order - b.order;
-        if (a.order !== undefined) return -1;
-        if (b.order !== undefined) return 1;
-        return a.name.localeCompare(b.name);
-      }));
-      setLoading(false);
-    }, (error) => {
-      console.error("Qualities snapshot error:", error);
-      setLoading(false);
-      handleFirestoreError(error, OperationType.LIST, 'qualities');
-    });
-    return () => unsub();
+    const fetchQualities = async () => {
+      try {
+        const { getDocs } = await import('firebase/firestore');
+        const snapshot = await getDocs(collection(db, 'qualities'));
+        const data = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() } as Quality));
+        setQualities(data.sort((a, b) => {
+          if (a.order !== undefined && b.order !== undefined) return a.order - b.order;
+          if (a.order !== undefined) return -1;
+          if (b.order !== undefined) return 1;
+          return a.name.localeCompare(b.name);
+        }));
+        setLoading(false);
+      } catch (error) {
+        console.error("Qualities fetch error:", error);
+        setLoading(false);
+        handleFirestoreError(error, OperationType.LIST, 'qualities');
+      }
+    };
+    fetchQualities();
   }, []);
 
   const handleAdd = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newQuality.trim()) return;
     const maxOrder = qualities.length > 0 ? Math.max(...qualities.map(q => q.order || 0)) : 0;
-    await addDoc(collection(db, 'qualities'), { name: newQuality.trim(), order: maxOrder + 1 });
+    const docRef = await addDoc(collection(db, 'qualities'), { name: newQuality.trim(), order: maxOrder + 1, color: newColor });
+    setQualities([...qualities, { id: docRef.id, name: newQuality.trim(), order: maxOrder + 1, color: newColor }]);
     setNewQuality('');
+    setNewColor('#10b981');
   };
 
   const handleDelete = async () => {
     if (!deleteId) return;
     await deleteDoc(doc(db, 'qualities', deleteId));
+    setQualities(qualities.filter(q => q.id !== deleteId));
     setDeleteId(null);
   };
 
   const handleEdit = (quality: Quality) => {
     setEditingId(quality.id);
     setEditName(quality.name);
+    setEditColor(quality.color || '#10b981');
   };
 
   const handleSaveEdit = async () => {
     if (!editName.trim() || !editingId) return;
-    await updateDoc(doc(db, 'qualities', editingId), { name: editName.trim() });
+    await updateDoc(doc(db, 'qualities', editingId), { name: editName.trim(), color: editColor });
+    setQualities(qualities.map(q => q.id === editingId ? { ...q, name: editName.trim(), color: editColor } : q));
     setEditingId(null);
     setEditName('');
+    setEditColor('#10b981');
   };
 
   const onDragEnd = async (result: DropResult) => {
@@ -112,6 +124,15 @@ export default function QualityManagement() {
             placeholder="e.g., WEB-DL, HDRip, BluRay"
             className="flex-1 bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-3 focus:outline-none focus:border-emerald-500"
           />
+          <div className="flex items-center gap-2 bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2">
+            <label className="text-sm text-zinc-400">Color:</label>
+            <input
+              type="color"
+              value={newColor}
+              onChange={(e) => setNewColor(e.target.value)}
+              className="w-8 h-8 rounded cursor-pointer bg-transparent border-none p-0"
+            />
+          </div>
           <button
             type="submit"
             className="bg-emerald-500 hover:bg-emerald-600 text-white px-6 py-3 rounded-xl font-medium flex items-center justify-center gap-2 transition-colors"
@@ -155,6 +176,12 @@ export default function QualityManagement() {
                             className="flex-1 bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-1.5 focus:outline-none focus:border-emerald-500 text-sm"
                             autoFocus
                           />
+                          <input
+                            type="color"
+                            value={editColor}
+                            onChange={(e) => setEditColor(e.target.value)}
+                            className="w-8 h-8 rounded cursor-pointer bg-transparent border-none p-0 shrink-0"
+                          />
                           <button onClick={handleSaveEdit} className="p-1.5 text-emerald-500 hover:bg-emerald-500/10 rounded-lg transition-colors">
                             <Check className="w-4 h-4" />
                           </button>
@@ -168,7 +195,13 @@ export default function QualityManagement() {
                             <div {...provided.dragHandleProps} className={`cursor-grab active:cursor-grabbing p-1 hover:bg-zinc-800 rounded ${searchTerm ? 'opacity-50 pointer-events-none' : ''}`}>
                               <GripVertical className="w-4 h-4 text-zinc-500" />
                             </div>
-                            <span className="font-medium">{quality.name}</span>
+                            <div className="flex items-center gap-2">
+                              <div 
+                                className="w-3 h-3 rounded-full" 
+                                style={{ backgroundColor: quality.color || '#10b981' }}
+                              />
+                              <span className="font-medium">{quality.name}</span>
+                            </div>
                           </div>
                           <div className="flex items-center gap-1">
                             <button

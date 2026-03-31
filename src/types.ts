@@ -64,6 +64,7 @@ export interface Quality {
   id: string;
   name: string;
   order?: number;
+  color?: string;
 }
 
 export interface LinkDef {
@@ -135,4 +136,30 @@ export interface Content {
   seasons?: string; // JSON stringified Season[]
   imdbRating?: string; // Added imdbRating
   subtitles?: boolean; // Added subtitles
+}
+
+export interface ErrorLinkInfo {
+  contentId: string;
+  contentTitle: string;
+  contentType: 'movie' | 'series';
+  location: string;
+  link: any;
+  linkIndex: number;
+  seasonIndex?: number;
+  episodeIndex?: number;
+  listType?: 'movie' | 'zip' | 'mkv' | 'episode';
+  errorDetail: string;
+  fetchedSize?: string;
+  fetchedUnit?: 'MB' | 'GB';
+  createdAt?: string;
+}
+
+export interface ScanState {
+  id: string;
+  status: 'idle' | 'scanning' | 'completed' | 'error';
+  scannedCount: number;
+  totalLinks: number;
+  errorLinks: ErrorLinkInfo[];
+  lastUpdated: any;
+  startedAt: any;
 }

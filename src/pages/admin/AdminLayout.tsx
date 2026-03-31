@@ -18,14 +18,17 @@ export default function AdminLayout() {
   useEffect(() => {
     if (profile?.role !== 'admin' && profile?.role !== 'owner' && profile?.role !== 'content_manager' && profile?.role !== 'manager') return;
 
-    const q = query(collection(db, 'reported_links'), where('status', '==', 'pending'));
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      setReportedLinksCount(snapshot.size);
-    }, (error) => {
-      console.error("Error fetching reported links count:", error);
-    });
-
-    return () => unsubscribe();
+    const fetchReportedLinksCount = async () => {
+      try {
+        const { getDocs } = await import('firebase/firestore');
+        const q = query(collection(db, 'reported_links'), where('status', '==', 'pending'));
+        const snapshot = await getDocs(q);
+        setReportedLinksCount(snapshot.size);
+      } catch (error) {
+        console.error("Error fetching reported links count:", error);
+      }
+    };
+    fetchReportedLinksCount();
   }, [profile]);
 
   const allNavItems = [

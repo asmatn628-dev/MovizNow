@@ -13,13 +13,20 @@ export default function UserManagers() {
   const navigate = useNavigate();
 
   useEffect(() => {
-    const q = query(collection(db, 'users'), where('isUserManager', '==', true));
-    const unsub = onSnapshot(q, (snapshot) => {
-      const data = snapshot.docs.map(doc => ({ ...doc.data() } as UserProfile));
-      setManagers(data);
-      setLoading(false);
-    });
-    return () => unsub();
+    const fetchManagers = async () => {
+      try {
+        const { getDocs } = await import('firebase/firestore');
+        const q = query(collection(db, 'users'), where('isUserManager', '==', true));
+        const snapshot = await getDocs(q);
+        const data = snapshot.docs.map(doc => ({ ...doc.data() } as UserProfile));
+        setManagers(data);
+        setLoading(false);
+      } catch (error) {
+        console.error("Error fetching managers:", error);
+        setLoading(false);
+      }
+    };
+    fetchManagers();
   }, []);
 
   const handleRemoveManager = async (e: React.MouseEvent, userId: string) => {

@@ -6,6 +6,7 @@ import { Film, Plus, Search, Clock, CheckCircle2, XCircle, MessageCircle, ArrowL
 import { Link } from 'react-router-dom';
 import { clsx } from 'clsx';
 import { handleFirestoreError, OperationType } from '../../utils/firestoreErrorHandler';
+import { smartSearch } from '../../utils/searchUtils';
 import { format } from 'date-fns';
 
 interface MovieRequest {
@@ -37,27 +38,30 @@ export default function MovieRequests() {
   useEffect(() => {
     if (!profile) return;
 
-    const q = query(
-      collection(db, 'movie_requests'), 
-      where('userId', '==', profile.uid),
-      orderBy('createdAt', 'desc')
-    );
-    const unsub = onSnapshot(q, (snapshot) => {
-      const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as MovieRequest));
-      setRequests(data);
-      setLoading(false);
+    const fetchRequests = async () => {
+      try {
+        const { getDocs } = await import('firebase/firestore');
+        const q = query(
+          collection(db, 'movie_requests'), 
+          where('userId', '==', profile.uid),
+          orderBy('createdAt', 'desc')
+        );
+        const snapshot = await getDocs(q);
+        const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as MovieRequest));
+        setRequests(data);
+        setLoading(false);
 
-      if (profile) {
-        const count = data.filter(r => r.userId === profile.uid).length;
-        setUserRequestCount(count);
+        if (profile) {
+          const count = data.filter(r => r.userId === profile.uid).length;
+          setUserRequestCount(count);
+        }
+      } catch (error) {
+        console.error("Requests fetch error:", error);
+        setLoading(false);
+        handleFirestoreError(error, OperationType.LIST, 'movie_requests');
       }
-    }, (error) => {
-      console.error("Requests snapshot error:", error);
-      setLoading(false);
-      handleFirestoreError(error, OperationType.LIST, 'movie_requests');
-    });
-
-    return () => unsub();
+    };
+    fetchRequests();
   }, [profile]);
 
   const handleSubmitRequest = async (e: React.FormEvent) => {
@@ -126,9 +130,7 @@ export default function MovieRequests() {
     }
   };
 
-  const filteredRequests = requests.filter(r => 
-    r.title.toLowerCase().includes(search.toLowerCase())
-  );
+  const filteredRequests = search.trim() ? smartSearch(requests, search) : requests;
 
   return (
     <div className="min-h-screen bg-zinc-950 text-white flex flex-col">

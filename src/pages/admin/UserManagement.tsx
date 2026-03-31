@@ -65,30 +65,63 @@ export default function UserManagement() {
       q = query(collection(db, 'users'), where('managedBy', '==', managedByFilter));
     }
 
-    const unsub = onSnapshot(q, (snapshot: any) => {
+    const unsub = onSnapshot(q, async (snapshot: any) => {
       const data = snapshot.docs.map((doc: any) => {
         const userData = { ...doc.data() } as UserProfile;
-        // Auto-assign owner role to asmatn628@gmail.com
-        if (userData.email === 'asmatn628@gmail.com' && userData.role !== 'owner') {
-          updateDoc(doc.ref, { role: 'owner', expiryDate: 'Lifetime' }).catch(console.error);
-          userData.role = 'owner';
-          userData.expiryDate = 'Lifetime';
-        }
         return userData;
       });
       
-      // Auto-expire users whose expiry date has passed
       const now = new Date();
-      data.forEach((user: UserProfile) => {
+      let batches = [writeBatch(db)];
+      let currentBatchIndex = 0;
+      let operationCount = 0;
+      let hasUpdates = false;
+
+      data.forEach((user: UserProfile, index: number) => {
+        const docRef = snapshot.docs[index].ref;
+        let needsUpdate = false;
+        const updates: any = {};
+        
+        // Auto-assign owner role to asmatn628@gmail.com
+        if (user.email === 'asmatn628@gmail.com' && user.role !== 'owner') {
+          updates.role = 'owner';
+          updates.expiryDate = 'Lifetime';
+          user.role = 'owner';
+          user.expiryDate = 'Lifetime';
+          needsUpdate = true;
+        }
+        
+        // Auto-expire users whose expiry date has passed
         if (user.status === 'active' && user.expiryDate && user.role !== 'owner') {
           const expiryDate = new Date(user.expiryDate);
           // Add 24 hours to make it expire at the end of the day
           const expiryEnd = new Date(expiryDate.getTime() + 24 * 60 * 60 * 1000);
           if (now > expiryEnd) {
-            updateDoc(doc(db, 'users', user.uid), { status: 'expired' }).catch(console.error);
+            updates.status = 'expired';
+            user.status = 'expired';
+            needsUpdate = true;
           }
         }
+
+        if (needsUpdate) {
+          if (operationCount === 500) {
+            batches.push(writeBatch(db));
+            currentBatchIndex++;
+            operationCount = 0;
+          }
+          batches[currentBatchIndex].update(docRef, updates);
+          operationCount++;
+          hasUpdates = true;
+        }
       });
+
+      if (hasUpdates) {
+        try {
+          await Promise.all(batches.map(b => b.commit()));
+        } catch (error) {
+          console.error("Error committing auto-updates batch:", error);
+        }
+      }
 
       setUsers(data);
       setLoading(false);
@@ -102,24 +135,36 @@ export default function UserManagement() {
 
   useEffect(() => {
     if (profile?.role === 'admin' || profile?.role === 'owner') {
-      const q = query(collection(db, 'users'), where('isUserManager', '==', true));
-      const unsub = onSnapshot(q, (snapshot) => {
-        const managersData: Record<string, string> = {};
-        snapshot.docs.forEach(doc => {
-          const data = doc.data();
-          managersData[doc.id] = data.displayName || data.email || 'Unknown Manager';
-        });
-        setManagers(managersData);
-      });
-      return () => unsub();
+      const fetchManagers = async () => {
+        try {
+          const { getDocs } = await import('firebase/firestore');
+          const q = query(collection(db, 'users'), where('isUserManager', '==', true));
+          const snapshot = await getDocs(q);
+          const managersData: Record<string, string> = {};
+          snapshot.docs.forEach(doc => {
+            const data = doc.data();
+            managersData[doc.id] = data.displayName || data.email || 'Unknown Manager';
+          });
+          setManagers(managersData);
+        } catch (error) {
+          console.error("Error fetching managers:", error);
+        }
+      };
+      fetchManagers();
     }
   }, [profile]);
 
   useEffect(() => {
-    const unsub = onSnapshot(collection(db, 'content'), (snapshot) => {
-      setAllContent(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-    });
-    return () => unsub();
+    const fetchContent = async () => {
+      try {
+        const { getDocs } = await import('firebase/firestore');
+        const snapshot = await getDocs(collection(db, 'content'));
+        setAllContent(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+      } catch (error) {
+        console.error("Error fetching content:", error);
+      }
+    };
+    fetchContent();
   }, []);
 
   const fetchUserAnalytics = async (user: UserProfile) => {

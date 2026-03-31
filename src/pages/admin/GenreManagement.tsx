@@ -17,34 +17,40 @@ export default function GenreManagement() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const unsub = onSnapshot(collection(db, 'genres'), (snapshot) => {
-      const data = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() } as Genre));
-      setGenres(data.sort((a, b) => {
-        if (a.order !== undefined && b.order !== undefined) return a.order - b.order;
-        if (a.order !== undefined) return -1;
-        if (b.order !== undefined) return 1;
-        return a.name.localeCompare(b.name);
-      }));
-      setLoading(false);
-    }, (error) => {
-      console.error("Genres snapshot error:", error);
-      setLoading(false);
-      handleFirestoreError(error, OperationType.LIST, 'genres');
-    });
-    return () => unsub();
+    const fetchGenres = async () => {
+      try {
+        const { getDocs } = await import('firebase/firestore');
+        const snapshot = await getDocs(collection(db, 'genres'));
+        const data = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() } as Genre));
+        setGenres(data.sort((a, b) => {
+          if (a.order !== undefined && b.order !== undefined) return a.order - b.order;
+          if (a.order !== undefined) return -1;
+          if (b.order !== undefined) return 1;
+          return a.name.localeCompare(b.name);
+        }));
+        setLoading(false);
+      } catch (error) {
+        console.error("Genres fetch error:", error);
+        setLoading(false);
+        handleFirestoreError(error, OperationType.LIST, 'genres');
+      }
+    };
+    fetchGenres();
   }, []);
 
   const handleAdd = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newGenre.trim()) return;
     const maxOrder = genres.length > 0 ? Math.max(...genres.map(g => g.order || 0)) : 0;
-    await addDoc(collection(db, 'genres'), { name: newGenre.trim(), order: maxOrder + 1 });
+    const docRef = await addDoc(collection(db, 'genres'), { name: newGenre.trim(), order: maxOrder + 1 });
+    setGenres([...genres, { id: docRef.id, name: newGenre.trim(), order: maxOrder + 1 }]);
     setNewGenre('');
   };
 
   const handleDelete = async () => {
     if (!deleteId) return;
     await deleteDoc(doc(db, 'genres', deleteId));
+    setGenres(genres.filter(g => g.id !== deleteId));
     setDeleteId(null);
   };
 
@@ -56,6 +62,7 @@ export default function GenreManagement() {
   const handleSaveEdit = async () => {
     if (!editName.trim() || !editingId) return;
     await updateDoc(doc(db, 'genres', editingId), { name: editName.trim() });
+    setGenres(genres.map(g => g.id === editingId ? { ...g, name: editName.trim() } : g));
     setEditingId(null);
     setEditName('');
   };

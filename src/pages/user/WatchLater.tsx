@@ -45,7 +45,7 @@ export default function WatchLater() {
             const isAssigned = profile?.assignedContent?.some(id => id === content.id || id.startsWith(`${content.id}:`));
             const isLocked = profile?.status !== 'active' || ((profile?.role === 'temporary' || profile?.role === 'selected_content' || content.status === 'selected_content') && !isAssigned);
             
-            const contentQuality = qualities.find(q => q.id === content.qualityId)?.name;
+            const qualityObj = qualities.find(q => q.id === content.qualityId);
             const contentLangs = languages.filter(l => content.languageIds?.includes(l.id)).map(l => l.name).join(', ');
             const contentGenres = genres.filter(g => content.genreIds?.includes(g.id)).map(g => g.name).join(', ');
 
@@ -77,10 +77,10 @@ export default function WatchLater() {
                   <h3 className="font-bold text-base md:text-lg leading-tight mb-2">{formatContentTitle(content)}</h3>
                   <div className="flex flex-wrap items-center gap-2 text-zinc-400 text-xs mb-2">
                     <span>{content.year}</span>
-                    {contentQuality && (
+                    {qualityObj && (
                       <>
                         <span>•</span>
-                        <span className="text-emerald-400 font-medium">{contentQuality}</span>
+                        <span className="font-medium" style={{ color: qualityObj.color || '#34d399' }}>{qualityObj.name}</span>
                       </>
                     )}
                   </div>

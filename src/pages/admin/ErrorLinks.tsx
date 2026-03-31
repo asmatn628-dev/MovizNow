@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { db } from '../../firebase';
 import { collection, onSnapshot, doc, updateDoc, getDoc } from 'firebase/firestore';
-import { Content, Season, QualityLinks, LinkDef } from '../../types';
-import { AlertTriangle, Edit2, ExternalLink, RefreshCw, X, Save, CheckCircle2, Filter, ArrowUpDown, Search, Trash2, Plus } from 'lucide-react';
+import { Content, Season, QualityLinks, LinkDef, ErrorLinkInfo, ScanState } from '../../types';
+import { AlertTriangle, Edit2, ExternalLink, RefreshCw, X, Save, CheckCircle2, Filter, ArrowUpDown, Search, Trash2, Plus, ClipboardPaste } from 'lucide-react';
 import { handleFirestoreError, OperationType } from '../../utils/firestoreErrorHandler';
-import { scannerService, ErrorLinkInfo, ScanState } from '../../services/ScannerService';
+import { scannerService } from '../../services/ScannerService';
 import { LinkCheckerModal } from '../../components/LinkCheckerModal';
+import { motion, AnimatePresence } from 'framer-motion';
 
 const parseLinks = (linksStr: string | undefined): QualityLinks => {
   if (!linksStr) return [];
@@ -34,16 +35,7 @@ export default function ErrorLinks() {
   // Client-side/Deep Scan State
   const [scanning, setScanning] = useState(false);
   const [scanStatus, setScanStatus] = useState<'idle' | 'scanning' | 'completed' | 'error'>('idle');
-  const [scannedCount, setScannedCount] = useState(0);
-  const [totalLinks, setTotalLinks] = useState(0);
   const [errorLinks, setErrorLinks] = useState<ErrorLinkInfo[]>([]);
-
-  // Background Scan State
-  const [bgScanning, setBgScanning] = useState(false);
-  const [bgScanStatus, setBgScanStatus] = useState<'idle' | 'scanning' | 'completed' | 'error'>('idle');
-  const [bgScannedCount, setBgScannedCount] = useState(0);
-  const [bgTotalLinks, setBgTotalLinks] = useState(0);
-  const [bgErrorLinks, setBgErrorLinks] = useState<ErrorLinkInfo[]>([]);
 
   const [isLinkCheckerModalOpen, setIsLinkCheckerModalOpen] = useState(false);
   const [modalInput, setModalInput] = useState('');
@@ -66,15 +58,8 @@ export default function ErrorLinks() {
   const [addLinksInput, setAddLinksInput] = useState('');
   const [addingLinks, setAddingLinks] = useState(false);
 
-  const [activeTab, setActiveTab] = useState<'current' | 'background'>('current');
-  const activeErrorLinks = activeTab === 'background' ? bgErrorLinks : errorLinks;
-  const activeScannedCount = activeTab === 'background' ? bgScannedCount : scannedCount;
-  const activeTotalLinks = activeTab === 'background' ? bgTotalLinks : totalLinks;
-  const activeScanStatus = activeTab === 'background' ? bgScanStatus : scanStatus;
-  const isAnyScanning = scanning || bgScanning;
-
   const liveErrorLinks = React.useMemo(() => {
-    return activeErrorLinks.map(info => {
+    return errorLinks.map(info => {
       const content = contentList.find(c => c.id === info.contentId);
       if (!content) return info;
 
@@ -116,7 +101,7 @@ export default function ErrorLinks() {
 
       return { ...info, link: currentLink };
     });
-  }, [activeErrorLinks, contentList]);
+  }, [errorLinks, contentList]);
 
   const uniqueErrorTypes = Array.from(new Set(liveErrorLinks.map(link => link.errorDetail))).sort();
 
@@ -147,42 +132,27 @@ export default function ErrorLinks() {
       handleFirestoreError(error, OperationType.LIST, 'content');
     });
 
-    const unsubScan = onSnapshot(doc(db, 'scans', 'current'), (snapshot) => {
+    // Load initial error links from Firestore
+    getDoc(doc(db, 'scans', 'current')).then(snapshot => {
       if (snapshot.exists()) {
         const data = snapshot.data() as ScanState;
-        setScanStatus(data.status);
-        setScanning(data.status === 'scanning');
-        setScannedCount(data.scannedCount);
-        setTotalLinks(data.totalLinks);
         setErrorLinks(data.errorLinks || []);
-      }
-    });
-
-    const unsubBgScan = onSnapshot(doc(db, 'scans', 'background'), (snapshot) => {
-      if (snapshot.exists()) {
-        const data = snapshot.data() as ScanState;
-        setBgScanStatus(data.status);
-        setBgScanning(data.status === 'scanning');
-        setBgScannedCount(data.scannedCount);
-        setBgTotalLinks(data.totalLinks);
-        setBgErrorLinks(data.errorLinks || []);
+        setScanStatus(data.status || 'idle');
       }
     });
 
     return () => {
       unsubContent();
-      unsubScan();
-      unsubBgScan();
     };
   }, []);
 
   // Auto-recheck links if they change
   useEffect(() => {
-    if (isAnyScanning || loading) return;
+    if (scanning || loading) return;
 
     const checkChangedLinks = async () => {
       const changedLinks = liveErrorLinks.filter(live => {
-        const original = activeErrorLinks.find(o => 
+        const original = errorLinks.find(o => 
           o.contentId === live.contentId && 
           o.listType === live.listType && 
           o.linkIndex === live.linkIndex &&
@@ -200,7 +170,7 @@ export default function ErrorLinks() {
           const result = await scannerService.checkPixeldrainLink(item.link.url);
           if (!result.error) {
             // Link is now working! Remove from Firestore error list
-            const scanDocRef = doc(db, 'scans', activeTab);
+            const scanDocRef = doc(db, 'scans', 'current');
             const scanDoc = await getDoc(scanDocRef);
             if (scanDoc.exists()) {
               const scanData = scanDoc.data() as ScanState;
@@ -215,7 +185,7 @@ export default function ErrorLinks() {
             }
           } else {
             // Link still has error, update the error detail and the link snapshot in Firestore
-            const scanDocRef = doc(db, 'scans', activeTab);
+            const scanDocRef = doc(db, 'scans', 'current');
             const scanDoc = await getDoc(scanDocRef);
             if (scanDoc.exists()) {
               const scanData = scanDoc.data() as ScanState;
@@ -245,7 +215,8 @@ export default function ErrorLinks() {
     };
 
     checkChangedLinks();
-  }, [liveErrorLinks, activeErrorLinks, isAnyScanning, loading, activeTab]);
+  }, [liveErrorLinks, errorLinks, scanning, loading]);
+
 
 
   const getAllLinksToScan = (): { info: ErrorLinkInfo, url: string }[] => {
@@ -389,44 +360,61 @@ export default function ErrorLinks() {
     return allLinksToScan;
   };
 
-  const scanLinks = async () => {
-    if (scanning) return;
+  const handleScanResults = async (results: any[]) => {
+    setScanning(false);
+    setScanStatus('completed');
+    
     const allLinksToScan = getAllLinksToScan();
-    if (allLinksToScan.length === 0) return;
+    const newErrorLinks: ErrorLinkInfo[] = [];
+
+    results.forEach(res => {
+      if (!res.ok || res.statusLabel === "BROKEN" || res.statusLabel === "MISSING_METADATA") {
+        const original = allLinksToScan.find(l => l.url === res.url);
+        if (original) {
+          newErrorLinks.push({
+            ...original.info,
+            errorDetail: res.message || res.statusLabel || "Unknown Error",
+            fetchedSize: res.fileSizeText?.split(' ')[0],
+            fetchedUnit: res.fileSizeText?.split(' ')[1] as 'MB' | 'GB',
+            createdAt: new Date().toISOString()
+          });
+        }
+      }
+    });
+
+    setErrorLinks(newErrorLinks);
     
-    setScanning(true);
-    setScanStatus('scanning');
-    setScannedCount(0);
-    setTotalLinks(allLinksToScan.length);
-    setErrorLinks([]);
-    
+    // Save to Firestore once to avoid many writes
     try {
-      await scannerService.startScan(allLinksToScan, false, (count, total, errors) => {
-        setScannedCount(count);
-        setTotalLinks(total);
-        setErrorLinks(errors);
+      await updateDoc(doc(db, 'scans', 'current'), {
+        errorLinks: newErrorLinks,
+        status: 'completed',
+        lastUpdated: new Date()
       });
-      setScanStatus('completed');
     } catch (e) {
-      console.error("Error starting scan:", e);
-      setScanStatus('error');
-    } finally {
-      setScanning(false);
+      console.error("Error saving scan results", e);
     }
   };
 
-  const startBackgroundScan = async () => {
-    if (bgScanning) return;
-    const allLinksToScan = getAllLinksToScan();
-    if (allLinksToScan.length === 0) return;
+  const scanLinks = async (onlyFiltered = false) => {
+    if (scanning) return;
     
-    setBgScanning(true);
-    try {
-      await scannerService.startBackgroundScan(allLinksToScan);
-    } catch (e) {
-      alert("Failed to start background scan.");
-      setBgScanning(false);
+    let linksToScan: { info: ErrorLinkInfo, url: string }[] = [];
+    if (onlyFiltered) {
+      linksToScan = filteredAndSortedLinks.map(l => ({ info: l, url: l.link.url }));
+    } else {
+      linksToScan = getAllLinksToScan();
     }
+    
+    if (linksToScan.length === 0) return;
+    
+    setScanning(true);
+    setScanStatus('scanning');
+    const allUrls = linksToScan.map(l => l.url).join('\n');
+    setModalInput(allUrls);
+    setModalTitle(onlyFiltered ? 'Re-checking Filtered Links' : 'Deep Link Scan');
+    setModalAutoStart(true);
+    setIsLinkCheckerModalOpen(true);
   };
 
   const handleDeleteLink = async (info: ErrorLinkInfo) => {
@@ -482,11 +470,7 @@ export default function ErrorLinks() {
       await updateDoc(doc(db, 'content', content.id), updatedContent);
       
       // Update local error links state to remove the deleted link
-      if (bgScanning) {
-        setBgErrorLinks(prev => prev.filter(l => !(l.contentId === info.contentId && l.link.url === info.link.url)));
-      } else {
-        setErrorLinks(prev => prev.filter(l => !(l.contentId === info.contentId && l.link.url === info.link.url)));
-      }
+      setErrorLinks(prev => prev.filter(l => !(l.contentId === info.contentId && l.link.url === info.link.url)));
     } catch (error) {
       console.error("Error deleting link:", error);
       alert("Failed to delete link.");
@@ -687,8 +671,7 @@ export default function ErrorLinks() {
       const isWorking = !!checkData.ok;
 
       // Update error list
-      const setErrorList = bgScanning ? setBgErrorLinks : setErrorLinks;
-      setErrorList(prev => {
+      setErrorLinks(prev => {
         const filtered = prev.filter(item => 
           !(item.contentId === editingLink.contentId && 
             item.listType === editingLink.listType && 
@@ -715,8 +698,8 @@ export default function ErrorLinks() {
         return [...filtered, updatedLink];
       });
 
-      // Update scans/current or scans/background in Firestore
-      const scanDocRef = doc(db, 'scans', activeTab);
+      // Update scans/current in Firestore
+      const scanDocRef = doc(db, 'scans', 'current');
       const scanDoc = await getDoc(scanDocRef);
       if (scanDoc.exists()) {
         const scanData = scanDoc.data() as ScanState;
@@ -774,26 +757,6 @@ export default function ErrorLinks() {
           <p className="text-zinc-400 mt-1">Deep Scan using multiple algorithms to find broken links.</p>
         </div>
         <div className="flex flex-col gap-2 items-end">
-          {/* Tab Switcher */}
-          <div className="flex bg-zinc-900 p-1 rounded-lg border border-zinc-800 mb-2">
-            <button
-              onClick={() => setActiveTab('current')}
-              className={`px-4 py-1.5 rounded-md text-sm font-medium transition-colors ${
-                activeTab === 'current' ? 'bg-emerald-500 text-white' : 'text-zinc-400 hover:text-white'
-              }`}
-            >
-              Current Scan
-            </button>
-            <button
-              onClick={() => setActiveTab('background')}
-              className={`px-4 py-1.5 rounded-md text-sm font-medium transition-colors ${
-                activeTab === 'background' ? 'bg-purple-500 text-white' : 'text-zinc-400 hover:text-white'
-              }`}
-            >
-              Server Scan
-            </button>
-          </div>
-          {/* Line 1: Main Scan Buttons */}
           <div className="flex items-center gap-2">
             {scanStatus === 'completed' && (
               <span className="text-emerald-500 text-sm font-medium flex items-center gap-1">
@@ -806,14 +769,14 @@ export default function ErrorLinks() {
               </span>
             )}
             <button
-              onClick={scanLinks}
+              onClick={() => scanLinks(false)}
               disabled={scanning || loading}
               className="bg-emerald-500 hover:bg-emerald-600 disabled:bg-emerald-500/50 text-white px-4 py-2 rounded-lg text-sm font-medium flex items-center justify-center gap-2 transition-colors whitespace-nowrap"
             >
               {scanning ? (
                 <>
                   <RefreshCw className="w-4 h-4 animate-spin" />
-                  Scanning ({scannedCount}/{totalLinks})
+                  Scanning...
                 </>
               ) : (
                 <>
@@ -822,58 +785,16 @@ export default function ErrorLinks() {
                 </>
               )}
             </button>
-            <button
-              onClick={startBackgroundScan}
-              disabled={bgScanning || loading}
-              className="bg-purple-500 hover:bg-purple-600 disabled:bg-purple-500/50 text-white px-4 py-2 rounded-lg text-sm font-medium flex items-center justify-center gap-2 transition-colors whitespace-nowrap"
-            >
-              {bgScanning ? (
-                <>
-                  <RefreshCw className="w-4 h-4 animate-spin" />
-                  Scanning Background ({bgScannedCount}/{bgTotalLinks})
-                </>
-              ) : (
-                <>
-                  <RefreshCw className="w-4 h-4" />
-                  {bgScanStatus === 'idle' ? 'Server-Side Scan' : 'Restart Server Scan'}
-                </>
-              )}
-            </button>
-          </div>
-
-          {/* Line 2: Manual/Rescan Buttons */}
-          <div className="flex items-center gap-2">
-            <button
-              onClick={async () => {
-                if (scanning) return;
-                const filteredLinks = filteredAndSortedLinks.map(link => ({ info: link, url: link.link.url }));
-                if (filteredLinks.length === 0) return;
-                
-                setScanning(true);
-                setScanStatus('scanning');
-                setScannedCount(0);
-                setTotalLinks(filteredLinks.length);
-                setErrorLinks([]);
-                
-                try {
-                  await scannerService.startScan(filteredLinks, false, (count, total, errors) => {
-                    setScannedCount(count);
-                    setTotalLinks(total);
-                    setErrorLinks(errors);
-                  });
-                  setScanStatus('completed');
-                } catch (e) {
-                  console.error("Error starting scan:", e);
-                  setScanStatus('error');
-                } finally {
-                  setScanning(false);
-                }
-              }}
-              className="bg-amber-500 hover:bg-amber-600 text-white px-4 py-2 rounded-lg text-sm font-medium flex items-center justify-center gap-2 transition-colors whitespace-nowrap"
-            >
-              <RefreshCw className="w-4 h-4" />
-              Rescan Filtered
-            </button>
+            {errorLinks.length > 0 && (
+              <button
+                onClick={() => scanLinks(true)}
+                disabled={scanning || loading}
+                className="bg-zinc-800 hover:bg-zinc-700 text-white px-4 py-2 rounded-lg text-sm font-medium flex items-center justify-center gap-2 transition-colors whitespace-nowrap"
+              >
+                <RefreshCw className="w-4 h-4" />
+                Re-check Filtered
+              </button>
+            )}
             <button
               onClick={() => {
                 setModalInput('');
@@ -881,37 +802,25 @@ export default function ErrorLinks() {
                 setModalTitle('Manual Link Checker');
                 setIsLinkCheckerModalOpen(true);
               }}
-              className="bg-sky-500 hover:bg-sky-600 text-white px-4 py-2 rounded-lg text-sm font-medium flex items-center justify-center gap-2 transition-colors whitespace-nowrap"
+              className="bg-zinc-800 hover:bg-zinc-700 text-white px-4 py-2 rounded-lg text-sm font-medium flex items-center justify-center gap-2 transition-colors whitespace-nowrap"
             >
               <Search className="w-4 h-4" />
               Manual Check
             </button>
-          </div>
-
-          {/* Line 3: Stop/Cancel Buttons */}
-          <div className="flex items-center gap-2">
-            {scanning && (
-              <button
-                onClick={() => {
-                  console.log("Stop button clicked");
-                  scannerService.stopScan();
-                }}
-                className="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded-lg text-sm font-medium flex items-center justify-center gap-2 transition-colors whitespace-nowrap"
-              >
-                <X className="w-4 h-4" />
-                Stop Scan
-              </button>
-            )}
           </div>
         </div>
       </div>
 
       <LinkCheckerModal 
         isOpen={isLinkCheckerModalOpen} 
-        onClose={() => setIsLinkCheckerModalOpen(false)} 
+        onClose={() => {
+          setIsLinkCheckerModalOpen(false);
+          setScanning(false);
+        }} 
         initialInput={modalInput}
         autoStart={modalAutoStart}
         title={modalTitle}
+        onResults={handleScanResults}
       />
 
       {loading ? (
@@ -925,14 +834,14 @@ export default function ErrorLinks() {
               {scanning ? (
                 <div className="flex flex-col items-center">
                   <RefreshCw className="w-12 h-12 animate-spin mb-4 text-emerald-500" />
-                  <p className="text-xl">Scanning links... Please wait.</p>
-                  <p className="text-sm mt-2">Checking {scannedCount} of {totalLinks} links</p>
+                  <p className="text-xl text-white">Scanning links... Please wait.</p>
+                  <p className="text-sm mt-2">Checking all Pixeldrain links in your content library.</p>
                 </div>
               ) : scanStatus === 'completed' ? (
                 <div className="flex flex-col items-center">
                   <CheckCircle2 className="w-16 h-16 mb-4 text-emerald-500" />
                   <p className="text-xl text-white font-medium">All links are working perfectly!</p>
-                  <p className="text-sm mt-2">We checked {totalLinks} Pixeldrain links and found no errors.</p>
+                  <p className="text-sm mt-2">We checked the Pixeldrain links and found no errors.</p>
                 </div>
               ) : scanStatus === 'error' ? (
                 <div className="flex flex-col items-center">
@@ -943,8 +852,8 @@ export default function ErrorLinks() {
               ) : (
                 <div className="flex flex-col items-center">
                   <CheckCircle2 className="w-16 h-16 mb-4 text-emerald-500/50" />
-                  <p className="text-xl">No error links found.</p>
-                  <p className="text-sm mt-2">Click "Scan Links" to check all Pixeldrain links.</p>
+                  <p className="text-xl text-white">No error links found.</p>
+                  <p className="text-sm mt-2">Click "Start Deep Scan" to check all Pixeldrain links.</p>
                 </div>
               )}
             </div>
@@ -1070,170 +979,194 @@ export default function ErrorLinks() {
       )}
 
       {/* Add Links Modal */}
-      {isAddLinksModalOpen && addLinksContent && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-lg p-6">
-            <div className="flex items-center justify-between mb-6">
-              <h2 className="text-xl font-bold text-white">Add Links to {addLinksContent.title}</h2>
-              <button onClick={() => setIsAddLinksModalOpen(false)} className="text-zinc-400 hover:text-white">
-                <X className="w-6 h-6" />
-              </button>
-            </div>
-
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-zinc-400 mb-2">Paste Links (JSON or Name:URL format)</label>
-                <textarea
-                  value={addLinksInput}
-                  onChange={(e) => setAddLinksInput(e.target.value)}
-                  placeholder='[{"name":"720p","url":"..."},...]'
-                  className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-3 focus:outline-none focus:border-emerald-500 h-40 font-mono text-sm"
-                />
+      <AnimatePresence>
+        {isAddLinksModalOpen && addLinksContent && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 z-50"
+          >
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              className="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-lg p-6"
+            >
+              <div className="flex items-center justify-between mb-6">
+                <h2 className="text-xl font-bold text-white">Add Links to {addLinksContent.title}</h2>
+                <button onClick={() => setIsAddLinksModalOpen(false)} className="text-zinc-400 hover:text-white">
+                  <X className="w-6 h-6" />
+                </button>
               </div>
 
-              <div className="flex gap-3 pt-2">
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-zinc-400 mb-2">Paste Links (JSON or Name:URL format)</label>
+                  <textarea
+                    value={addLinksInput}
+                    onChange={(e) => setAddLinksInput(e.target.value)}
+                    placeholder='[{"name":"720p","url":"..."},...]'
+                    className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-3 focus:outline-none focus:border-emerald-500 h-40 font-mono text-sm"
+                  />
+                </div>
+
+                <div className="flex gap-3 pt-2">
+                  <button
+                    onClick={() => setIsAddLinksModalOpen(false)}
+                    className="flex-1 bg-zinc-800 hover:bg-zinc-700 text-white py-3 rounded-xl font-bold transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleAddLinks}
+                    disabled={addingLinks || !addLinksInput.trim()}
+                    className="flex-1 bg-emerald-500 hover:bg-emerald-600 disabled:bg-emerald-500/50 text-white py-3 rounded-xl font-bold transition-colors flex items-center justify-center gap-2"
+                  >
+                    {addingLinks ? <RefreshCw className="w-5 h-5 animate-spin" /> : <Save className="w-5 h-5" />}
+                    {addingLinks ? 'Adding...' : 'Add Links'}
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Edit Modal */}
+      <AnimatePresence>
+        {editingLink && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 z-50"
+          >
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              className="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-md p-6"
+            >
+              <div className="flex items-center justify-between mb-6">
+                <h2 className="text-xl font-bold">Edit Link</h2>
+                <button onClick={() => setEditingLink(null)} className="text-zinc-400 hover:text-white">
+                  <X className="w-6 h-6" />
+                </button>
+              </div>
+
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-zinc-400 mb-1">Content</label>
+                  <div className="text-white font-medium">{editingLink.contentTitle} <span className="text-zinc-500 text-sm">({editingLink.location})</span></div>
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-medium text-zinc-400 mb-1">Name</label>
+                  <input
+                    type="text"
+                    value={editName}
+                    onChange={(e) => setEditName(e.target.value)}
+                    className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-3 focus:outline-none focus:border-emerald-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-zinc-400 mb-1">URL</label>
+                  <input
+                    type="text"
+                    value={editUrl}
+                    onChange={(e) => setEditUrl(e.target.value)}
+                    onBlur={(e) => handleUrlBlur(e.target.value)}
+                    className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-3 focus:outline-none focus:border-emerald-500"
+                  />
+                  <div className="flex items-center justify-between mt-1">
+                    <p className="text-xs text-zinc-500">Paste a new Pixeldrain link to auto-fetch size.</p>
+                    {editUrl.includes('/api/file/') && (
+                      <button
+                        onClick={() => setEditUrl(editUrl.replace('/api/file/', '/u/'))}
+                        className="text-xs text-emerald-500 hover:text-emerald-400 font-medium"
+                      >
+                        Convert to /u/ format
+                      </button>
+                    )}
+                    {editUrl.includes('/api/list/') && (
+                      <button
+                        onClick={() => setEditUrl(editUrl.replace('/api/list/', '/l/'))}
+                        className="text-xs text-emerald-500 hover:text-emerald-400 font-medium"
+                      >
+                        Convert to /l/ format
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                <div className="flex gap-4">
+                  <div className="flex-1">
+                    <label className="block text-sm font-medium text-zinc-400 mb-1">Size</label>
+                    <input
+                      type="number"
+                      value={editSize}
+                      onChange={(e) => setEditSize(e.target.value)}
+                      className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-3 focus:outline-none focus:border-emerald-500"
+                    />
+                    {editingLink.fetchedSize && (
+                      <button
+                        onClick={() => {
+                          setEditSize(editingLink.fetchedSize!);
+                          setEditUnit(editingLink.fetchedUnit!);
+                        }}
+                        className="text-[10px] text-emerald-500 hover:text-emerald-400 mt-1 font-medium flex items-center gap-1"
+                      >
+                        <RefreshCw className="w-3 h-3" /> Apply server size ({editingLink.fetchedSize} {editingLink.fetchedUnit})
+                      </button>
+                    )}
+                  </div>
+                  <div className="w-32">
+                    <label className="block text-sm font-medium text-zinc-400 mb-1">Unit</label>
+                    <div className="flex bg-zinc-950 border border-zinc-800 rounded-xl p-1 shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => setEditUnit('MB')}
+                        className={`flex-1 py-2 rounded-lg text-sm font-bold transition-all ${editUnit === 'MB' ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/20' : 'text-zinc-500 hover:text-zinc-300'}`}
+                      >
+                        MB
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setEditUnit('GB')}
+                        className={`flex-1 py-2 rounded-lg text-sm font-bold transition-all ${editUnit === 'GB' ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/20' : 'text-zinc-500 hover:text-zinc-300'}`}
+                      >
+                        GB
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="mt-8 flex justify-end gap-3">
                 <button
-                  onClick={() => setIsAddLinksModalOpen(false)}
-                  className="flex-1 bg-zinc-800 hover:bg-zinc-700 text-white py-3 rounded-xl font-bold transition-colors"
+                  onClick={() => setEditingLink(null)}
+                  className="px-4 py-2 text-zinc-400 hover:text-white transition-colors font-medium"
                 >
                   Cancel
                 </button>
                 <button
-                  onClick={handleAddLinks}
-                  disabled={addingLinks || !addLinksInput.trim()}
-                  className="flex-1 bg-emerald-500 hover:bg-emerald-600 disabled:bg-emerald-500/50 text-white py-3 rounded-xl font-bold transition-colors flex items-center justify-center gap-2"
+                  onClick={handleSaveEdit}
+                  disabled={saving || !editUrl}
+                  className="bg-emerald-500 hover:bg-emerald-600 disabled:bg-emerald-500/50 text-white px-6 py-2 rounded-xl font-medium flex items-center gap-2 transition-colors"
                 >
-                  {addingLinks ? <RefreshCw className="w-5 h-5 animate-spin" /> : <Save className="w-5 h-5" />}
-                  {addingLinks ? 'Adding...' : 'Add Links'}
+                  {saving ? (
+                    <div className="animate-spin rounded-full h-5 w-5 border-t-2 border-b-2 border-white"></div>
+                  ) : (
+                    <><Save className="w-4 h-4" /> Save Changes</>
+                  )}
                 </button>
               </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Edit Modal */}
-      {editingLink && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-md p-6">
-            <div className="flex items-center justify-between mb-6">
-              <h2 className="text-xl font-bold">Edit Link</h2>
-              <button onClick={() => setEditingLink(null)} className="text-zinc-400 hover:text-white">
-                <X className="w-6 h-6" />
-              </button>
-            </div>
-
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-zinc-400 mb-1">Content</label>
-                <div className="text-white font-medium">{editingLink.contentTitle} <span className="text-zinc-500 text-sm">({editingLink.location})</span></div>
-              </div>
-              
-              <div>
-                <label className="block text-sm font-medium text-zinc-400 mb-1">Name</label>
-                <input
-                  type="text"
-                  value={editName}
-                  onChange={(e) => setEditName(e.target.value)}
-                  className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-3 focus:outline-none focus:border-emerald-500"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-zinc-400 mb-1">URL</label>
-                <input
-                  type="text"
-                  value={editUrl}
-                  onChange={(e) => setEditUrl(e.target.value)}
-                  onBlur={(e) => handleUrlBlur(e.target.value)}
-                  className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-3 focus:outline-none focus:border-emerald-500"
-                />
-                <div className="flex items-center justify-between mt-1">
-                  <p className="text-xs text-zinc-500">Paste a new Pixeldrain link to auto-fetch size.</p>
-                  {editUrl.includes('/api/file/') && (
-                    <button
-                      onClick={() => setEditUrl(editUrl.replace('/api/file/', '/u/'))}
-                      className="text-xs text-emerald-500 hover:text-emerald-400 font-medium"
-                    >
-                      Convert to /u/ format
-                    </button>
-                  )}
-                  {editUrl.includes('/api/list/') && (
-                    <button
-                      onClick={() => setEditUrl(editUrl.replace('/api/list/', '/l/'))}
-                      className="text-xs text-emerald-500 hover:text-emerald-400 font-medium"
-                    >
-                      Convert to /l/ format
-                    </button>
-                  )}
-                </div>
-              </div>
-
-              <div className="flex gap-4">
-                <div className="flex-1">
-                  <label className="block text-sm font-medium text-zinc-400 mb-1">Size</label>
-                  <input
-                    type="number"
-                    value={editSize}
-                    onChange={(e) => setEditSize(e.target.value)}
-                    className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-3 focus:outline-none focus:border-emerald-500"
-                  />
-                  {editingLink.fetchedSize && (
-                    <button
-                      onClick={() => {
-                        setEditSize(editingLink.fetchedSize!);
-                        setEditUnit(editingLink.fetchedUnit!);
-                      }}
-                      className="text-[10px] text-emerald-500 hover:text-emerald-400 mt-1 font-medium flex items-center gap-1"
-                    >
-                      <RefreshCw className="w-3 h-3" /> Apply server size ({editingLink.fetchedSize} {editingLink.fetchedUnit})
-                    </button>
-                  )}
-                </div>
-                <div className="w-32">
-                  <label className="block text-sm font-medium text-zinc-400 mb-1">Unit</label>
-                  <div className="flex bg-zinc-950 border border-zinc-800 rounded-xl p-1 shrink-0">
-                    <button
-                      type="button"
-                      onClick={() => setEditUnit('MB')}
-                      className={`flex-1 py-2 rounded-lg text-sm font-bold transition-all ${editUnit === 'MB' ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/20' : 'text-zinc-500 hover:text-zinc-300'}`}
-                    >
-                      MB
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setEditUnit('GB')}
-                      className={`flex-1 py-2 rounded-lg text-sm font-bold transition-all ${editUnit === 'GB' ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/20' : 'text-zinc-500 hover:text-zinc-300'}`}
-                    >
-                      GB
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div className="mt-8 flex justify-end gap-3">
-              <button
-                onClick={() => setEditingLink(null)}
-                className="px-4 py-2 text-zinc-400 hover:text-white transition-colors font-medium"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleSaveEdit}
-                disabled={saving || !editUrl}
-                className="bg-emerald-500 hover:bg-emerald-600 disabled:bg-emerald-500/50 text-white px-6 py-2 rounded-xl font-medium flex items-center gap-2 transition-colors"
-              >
-                {saving ? (
-                  <div className="animate-spin rounded-full h-5 w-5 border-t-2 border-b-2 border-white"></div>
-                ) : (
-                  <><Save className="w-4 h-4" /> Save Changes</>
-                )}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

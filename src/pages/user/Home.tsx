@@ -1,5 +1,5 @@
-import { useState, useEffect, useMemo } from 'react';
-import { Link } from 'react-router-dom';
+import { useState, useEffect, useMemo, useRef } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
 import { db } from '../../firebase';
 import { doc, updateDoc } from 'firebase/firestore';
 import { Content, Role } from '../../types';
@@ -10,6 +10,7 @@ import { clsx } from 'clsx';
 import { format } from 'date-fns';
 import ConfirmModal from '../../components/ConfirmModal';
 import { formatContentTitle } from '../../utils/contentUtils';
+import { smartSearch } from '../../utils/searchUtils';
 import { LazyLoadImage } from 'react-lazy-load-image-component';
 
 import { NotificationMenu } from '../../components/NotificationMenu';
@@ -17,8 +18,32 @@ import { NotificationMenu } from '../../components/NotificationMenu';
 export default function Home({ onOpenMediaModal }: { onOpenMediaModal: () => void }) {
   const { profile, logout } = useAuth();
   const { contentList, genres, languages, qualities, loading } = useContent();
+  const navigate = useNavigate();
   
   const [search, setSearch] = useState('');
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const searchInputRef = useRef<HTMLInputElement>(null);
+  const suggestionsRef = useRef<HTMLDivElement>(null);
+
+  const searchSuggestions = useMemo(() => {
+    if (!search.trim()) return [];
+    return smartSearch(contentList, search).slice(0, 5);
+  }, [search, contentList]);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (
+        suggestionsRef.current && 
+        !suggestionsRef.current.contains(event.target as Node) &&
+        searchInputRef.current &&
+        !searchInputRef.current.contains(event.target as Node)
+      ) {
+        setShowSuggestions(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
   const [sort, setSort] = useState<'newest' | 'year' | 'az'>('newest');
   const [selectedGenre, setSelectedGenre] = useState<string>('');
   const [selectedLanguage, setSelectedLanguage] = useState<string>('');
@@ -155,7 +180,7 @@ export default function Home({ onOpenMediaModal }: { onOpenMediaModal: () => voi
     }
 
     if (search) {
-      result = result.filter(c => c.title.toLowerCase().includes(search.toLowerCase()));
+      result = smartSearch(result, search);
     }
     if (selectedType) {
       result = result.filter(c => c.type === selectedType);
@@ -417,7 +442,7 @@ export default function Home({ onOpenMediaModal }: { onOpenMediaModal: () => voi
                 const isAssigned = (profile?.role === 'temporary' || profile?.role === 'selected_content') && profile?.assignedContent?.some(id => id === content.id || id.startsWith(`${content.id}:`));
                 const isLocked = profile?.status !== 'active' || ((profile?.role === 'temporary' || profile?.role === 'selected_content') && !isAssigned);
                 
-                const contentQuality = qualities.find(q => q.id === content.qualityId)?.name;
+                const qualityObj = qualities.find(q => q.id === content.qualityId);
                 const contentLangs = languages.filter(l => content.languageIds?.includes(l.id)).map(l => l.name).join(', ');
                 const contentGenres = genres.filter(g => content.genreIds?.includes(g.id)).map(g => g.name).join(', ');
 
@@ -441,9 +466,12 @@ export default function Home({ onOpenMediaModal }: { onOpenMediaModal: () => voi
                         <div className="bg-black/90 px-1.5 py-0.5 rounded text-[8px] font-bold uppercase tracking-wider">
                           {content.type}
                         </div>
-                        {contentQuality && (
-                          <div className="bg-emerald-500 text-black px-1.5 py-0.5 rounded text-[8px] font-bold uppercase tracking-wider">
-                            {contentQuality}
+                        {qualityObj && (
+                          <div 
+                            className="text-black px-1.5 py-0.5 rounded text-[8px] font-bold uppercase tracking-wider"
+                            style={{ backgroundColor: qualityObj.color || '#10b981' }}
+                          >
+                            {qualityObj.name}
                           </div>
                         )}
                       </div>
@@ -484,12 +512,50 @@ export default function Home({ onOpenMediaModal }: { onOpenMediaModal: () => voi
           <div className="relative w-full">
             <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-zinc-500" />
             <input
+              ref={searchInputRef}
               type="text"
               placeholder="Search movies & series..."
               value={search}
-              onChange={(e) => setSearch(e.target.value)}
+              onChange={(e) => {
+                setSearch(e.target.value);
+                setShowSuggestions(true);
+              }}
+              onFocus={() => setShowSuggestions(true)}
               className="w-full bg-zinc-900 border border-zinc-800 rounded-xl pl-12 pr-4 py-3 focus:outline-none focus:border-emerald-500"
             />
+            {showSuggestions && searchSuggestions.length > 0 && (
+              <div 
+                ref={suggestionsRef}
+                className="absolute z-50 w-full mt-2 bg-zinc-900 border border-zinc-700 rounded-xl shadow-2xl max-h-60 overflow-y-auto"
+              >
+                <div className="p-2 text-xs font-medium text-zinc-400 border-b border-zinc-800">Suggestions</div>
+                {searchSuggestions.map(suggestion => (
+                  <div 
+                    key={suggestion.id} 
+                    className="px-4 py-3 hover:bg-zinc-800 cursor-pointer flex items-center gap-3 transition-colors"
+                    onClick={() => {
+                      setSearch(suggestion.title);
+                      setShowSuggestions(false);
+                      navigate(`/movie/${suggestion.id}`);
+                    }}
+                  >
+                    {suggestion.posterUrl ? (
+                      <img src={suggestion.posterUrl} alt={suggestion.title} className="w-8 h-12 object-cover rounded" />
+                    ) : (
+                      <div className="w-8 h-12 bg-zinc-800 rounded flex items-center justify-center">
+                        <Film className="w-4 h-4 text-zinc-600" />
+                      </div>
+                    )}
+                    <div className="flex-1 min-w-0">
+                      <div className="text-sm font-medium text-zinc-200 truncate">{suggestion.title}</div>
+                      <div className="text-xs text-zinc-500 capitalize mt-0.5">
+                        {suggestion.type} • {suggestion.year}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
           
           <div className="flex gap-3 overflow-x-auto pb-2 md:pb-0 flex-nowrap">
@@ -571,7 +637,7 @@ export default function Home({ onOpenMediaModal }: { onOpenMediaModal: () => voi
                 const isAssigned = (profile?.role === 'temporary' || profile?.role === 'selected_content') && profile.assignedContent?.some(id => id === content.id || id.startsWith(`${content.id}:`));
                 const isLocked = profile?.status !== 'active' || ((profile?.role === 'temporary' || profile?.role === 'selected_content') && !isAssigned);
                 
-                const contentQuality = qualities.find(q => q.id === content.qualityId)?.name;
+                const qualityObj = qualities.find(q => q.id === content.qualityId);
                 const contentLangs = languages.filter(l => content.languageIds?.includes(l.id)).map(l => l.name).join(', ');
                 const contentGenres = genres.filter(g => content.genreIds?.includes(g.id)).map(g => g.name).join(', ');
 
@@ -592,13 +658,12 @@ export default function Home({ onOpenMediaModal }: { onOpenMediaModal: () => voi
                       <div className={`absolute top-2 right-2 px-2 py-1 rounded text-xs font-bold uppercase tracking-wider text-white ${content.type === 'movie' ? 'bg-blue-500/90' : 'bg-purple-500/90'}`}>
                         {content.type}
                       </div>
-                      {contentQuality && (
-                        <div className={`absolute top-9 right-2 px-2 py-1 rounded text-[10px] font-bold uppercase tracking-wider ${
-                          ['WEB-DL', 'WebRip', 'HDRip', 'BluRay'].some(hq => contentQuality.toUpperCase().includes(hq.toUpperCase()))
-                            ? 'bg-cyan-500 text-black shadow-[0_0_10px_rgba(6,182,212,0.5)]'
-                            : 'bg-amber-500 text-black shadow-[0_0_10px_rgba(245,158,11,0.5)]'
-                        }`}>
-                          {contentQuality}
+                      {qualityObj && (
+                        <div 
+                          className="absolute top-9 right-2 px-2 py-1 rounded text-[10px] font-bold uppercase tracking-wider text-black shadow-lg"
+                          style={{ backgroundColor: qualityObj.color || '#10b981' }}
+                        >
+                          {qualityObj.name}
                         </div>
                       )}
                       {isLocked && (

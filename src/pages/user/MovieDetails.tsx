@@ -838,18 +838,18 @@ export default function MovieDetails() {
                   {mergedContent.type}
                 </span>
                 <span className="text-zinc-300 font-medium">{mergedContent.year}</span>
-                {mergedContent.qualityId && (
-                  <span className={`px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider ${
-                    (() => {
-                      const qName = qualities.find(q => q.id === mergedContent.qualityId)?.name || '';
-                      return ['WEB-DL', 'WebRip', 'HDRip', 'BluRay'].some(hq => qName.toUpperCase().includes(hq.toUpperCase()))
-                        ? 'bg-cyan-500 text-black shadow-[0_0_10px_rgba(6,182,212,0.5)]'
-                        : 'bg-amber-500 text-black shadow-[0_0_10px_rgba(245,158,11,0.5)]';
-                    })()
-                  }`}>
-                    {qualities.find(q => q.id === mergedContent.qualityId)?.name}
-                  </span>
-                )}
+                {mergedContent.qualityId && (() => {
+                  const qualityObj = qualities.find(q => q.id === mergedContent.qualityId);
+                  if (!qualityObj) return null;
+                  return (
+                    <span 
+                      className="px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider text-black shadow-lg"
+                      style={{ backgroundColor: qualityObj.color || '#10b981' }}
+                    >
+                      {qualityObj.name}
+                    </span>
+                  );
+                })()}
               </div>
               
               <h1 className="text-4xl md:text-6xl font-bold mb-4 leading-tight">{formatContentTitle(mergedContent)}</h1>
@@ -1083,18 +1083,18 @@ export default function MovieDetails() {
                       {mergedContent.releaseDate && <span className="flex items-center gap-2 bg-cyan-500/10 px-3 py-1.5 rounded-lg"><Film className="w-4 h-4 text-cyan-500" /> {formatReleaseDate(mergedContent.releaseDate)}</span>}
                       {contentGenres && <span className="flex items-center gap-2 bg-cyan-500/10 px-3 py-1.5 rounded-lg">Genre: {contentGenres}</span>}
                       {contentLangs && <span className="flex items-center gap-2 bg-cyan-500/10 px-3 py-1.5 rounded-lg">Language: {contentLangs}</span>}
-                      {mergedContent.qualityId && (
-                        <span className={`flex items-center gap-2 px-3 py-1.5 rounded-lg font-bold ${
-                          (() => {
-                            const qName = qualities.find(q => q.id === mergedContent.qualityId)?.name || '';
-                            return ['WEB-DL', 'WebRip', 'HDRip', 'BluRay'].some(hq => qName.toUpperCase().includes(hq.toUpperCase()))
-                              ? 'bg-cyan-500 text-black shadow-[0_0_10px_rgba(6,182,212,0.5)]'
-                              : 'bg-amber-500 text-black shadow-[0_0_10px_rgba(245,158,11,0.5)]';
-                          })()
-                        }`}>
-                          Quality: {qualities.find(q => q.id === mergedContent.qualityId)?.name}
-                        </span>
-                      )}
+                      {mergedContent.qualityId && (() => {
+                        const qualityObj = qualities.find(q => q.id === mergedContent.qualityId);
+                        if (!qualityObj) return null;
+                        return (
+                          <span 
+                            className="flex items-center gap-2 px-3 py-1.5 rounded-lg font-bold text-black shadow-lg"
+                            style={{ backgroundColor: qualityObj.color || '#10b981' }}
+                          >
+                            Quality: {qualityObj.name}
+                          </span>
+                        );
+                      })()}
                     </div>
                     
                     {mergedContent.cast && mergedContent.cast.length > 0 && (
@@ -1265,112 +1265,133 @@ export default function MovieDetails() {
         onCancel={() => setDeleteId(null)}
       />
 
-      {linkPopup && (
-        <div 
-          className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4"
-          onClick={closeLinkPopup}
-        >
-          <div 
-            className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 max-w-md w-full relative"
-            onClick={(e) => e.stopPropagation()}
+      <AnimatePresence>
+        {linkPopup && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+            onClick={closeLinkPopup}
           >
-            <button
-              onClick={closeLinkPopup}
-              className="absolute top-4 right-4 text-zinc-400 hover:text-white transition-colors"
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
-            </button>
-            <h3 className="text-xl font-bold mb-2">Play Content</h3>
-            <p className="text-zinc-400 mb-6">How would you like to open "{linkPopup.name}"?</p>
-            <div className="flex flex-col gap-3">
-              {!(linkPopup.isZip || linkPopup.name.toLowerCase().includes('zip') || linkPopup.url.toLowerCase().includes('.zip')) ? (
-                <>
-                  <button
-                    onClick={() => handlePlayExternal('generic')}
-                    className="w-full bg-emerald-500 hover:bg-emerald-600 text-white font-bold py-3 px-4 rounded-xl transition-colors flex items-center justify-center gap-2"
-                  >
-                    <Play className="w-5 h-5" /> Play in Video Player
-                  </button>
-                  
-                  <div className="grid grid-cols-2 gap-3">
-                    <button
-                      onClick={() => handlePlayExternal('mx')}
-                      className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-xl transition-colors flex items-center justify-center gap-2 text-sm"
-                    >
-                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" className="w-5 h-5">
-                        <rect width="24" height="24" rx="6" fill="white" fillOpacity="0.2"/>
-                        <path d="M16.5 12L9 16.5V7.5L16.5 12Z" fill="currentColor"/>
-                      </svg>
-                      MX Player
-                    </button>
-                    <button
-                      onClick={() => handlePlayExternal('vlc')}
-                      className="w-full bg-orange-600 hover:bg-orange-700 text-white font-bold py-3 px-4 rounded-xl transition-colors flex items-center justify-center gap-2 text-sm"
-                    >
-                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" className="w-5 h-5">
-                        <path d="M12 2L5 22H19L12 2Z" fill="currentColor"/>
-                        <path d="M6.5 17H17.5" stroke="#ea580c" strokeWidth="2.5"/>
-                        <path d="M9 10H15" stroke="#ea580c" strokeWidth="2.5"/>
-                      </svg>
-                      VLC Player
-                    </button>
-                  </div>
-                </>
-              ) : null}
-
-              <button
-                onClick={handleReportLink}
-                disabled={isReporting}
-                className="w-full bg-red-600/20 hover:bg-red-600/30 text-red-500 font-bold py-3 px-4 rounded-xl transition-colors flex items-center justify-center gap-2 border border-red-500/30 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {isReporting ? (
-                  <Loader2 className="w-5 h-5 animate-spin" />
-                ) : (
-                  <AlertTriangle className="w-5 h-5" />
-                )}
-                {isReporting ? 'Sending...' : 'Report Link (if not Working)'}
-              </button>
-
-              <button
-                onClick={() => handlePlayExternal('download')}
-                className="w-full bg-zinc-700 hover:bg-zinc-600 text-white font-bold py-3 px-4 rounded-xl transition-colors flex items-center justify-center gap-2"
-              >
-                <Copy className="w-5 h-5" /> Copy Link
-              </button>
-
-              <button
-                onClick={handlePlayDirectly}
-                className="w-full bg-cyan-600 hover:bg-cyan-700 text-white font-bold py-3 px-4 rounded-xl transition-colors flex items-center justify-center gap-2"
-              >
-                <Download className="w-5 h-5" /> Download
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-      {isPosterExpanded && (
-        <div 
-          className="fixed inset-0 bg-black/90 backdrop-blur-sm flex items-center justify-center z-[60] p-4"
-          onClick={closePosterPopup}
-        >
-          <div className="relative max-w-4xl max-h-[90vh] w-full flex justify-center">
-            <button
-              onClick={closePosterPopup}
-              className="absolute -top-12 right-0 text-zinc-400 hover:text-white transition-colors bg-black/50 p-2 rounded-full"
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
-            </button>
-            <LazyLoadImage 
-              src={mergedContent.posterUrl || 'https://picsum.photos/seed/movie/400/600'} 
-              alt={mergedContent.title} 
-              className="max-w-full max-h-[90vh] object-contain rounded-lg shadow-2xl" 
-              referrerPolicy="no-referrer" 
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              transition={{ duration: 0.2 }}
+              className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 max-w-md w-full relative shadow-2xl"
               onClick={(e) => e.stopPropagation()}
-              wrapperClassName="max-w-full max-h-[90vh]"
-            />
-          </div>
-        </div>
-      )}
+            >
+              <button
+                onClick={closeLinkPopup}
+                className="absolute top-4 right-4 text-zinc-400 hover:text-white transition-colors"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+              </button>
+              <h3 className="text-xl font-bold mb-2">Play Content</h3>
+              <p className="text-zinc-400 mb-6">How would you like to open "{linkPopup.name}"?</p>
+              <div className="flex flex-col gap-3">
+                {!(linkPopup.isZip || linkPopup.name.toLowerCase().includes('zip') || linkPopup.url.toLowerCase().includes('.zip')) ? (
+                  <>
+                    <button
+                      onClick={() => handlePlayExternal('generic')}
+                      className="w-full bg-emerald-500 hover:bg-emerald-600 text-white font-bold py-3 px-4 rounded-xl transition-colors flex items-center justify-center gap-2"
+                    >
+                      <Play className="w-5 h-5" /> Play in Video Player
+                    </button>
+                    
+                    <div className="grid grid-cols-2 gap-3">
+                      <button
+                        onClick={() => handlePlayExternal('mx')}
+                        className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-xl transition-colors flex items-center justify-center gap-2 text-sm"
+                      >
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" className="w-5 h-5">
+                          <rect width="24" height="24" rx="6" fill="white" fillOpacity="0.2"/>
+                          <path d="M16.5 12L9 16.5V7.5L16.5 12Z" fill="currentColor"/>
+                        </svg>
+                        MX Player
+                      </button>
+                      <button
+                        onClick={() => handlePlayExternal('vlc')}
+                        className="w-full bg-orange-600 hover:bg-orange-700 text-white font-bold py-3 px-4 rounded-xl transition-colors flex items-center justify-center gap-2 text-sm"
+                      >
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" className="w-5 h-5">
+                          <path d="M12 2L5 22H19L12 2Z" fill="currentColor"/>
+                          <path d="M6.5 17H17.5" stroke="#ea580c" strokeWidth="2.5"/>
+                          <path d="M9 10H15" stroke="#ea580c" strokeWidth="2.5"/>
+                        </svg>
+                        VLC Player
+                      </button>
+                    </div>
+                  </>
+                ) : null}
+
+                <button
+                  onClick={handleReportLink}
+                  disabled={isReporting}
+                  className="w-full bg-red-600/20 hover:bg-red-600/30 text-red-500 font-bold py-3 px-4 rounded-xl transition-colors flex items-center justify-center gap-2 border border-red-500/30 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {isReporting ? (
+                    <Loader2 className="w-5 h-5 animate-spin" />
+                  ) : (
+                    <AlertTriangle className="w-5 h-5" />
+                  )}
+                  {isReporting ? 'Sending...' : 'Report Link (if not Working)'}
+                </button>
+
+                <button
+                  onClick={() => handlePlayExternal('download')}
+                  className="w-full bg-zinc-700 hover:bg-zinc-600 text-white font-bold py-3 px-4 rounded-xl transition-colors flex items-center justify-center gap-2"
+                >
+                  <Copy className="w-5 h-5" /> Copy Link
+                </button>
+
+                <button
+                  onClick={handlePlayDirectly}
+                  className="w-full bg-cyan-600 hover:bg-cyan-700 text-white font-bold py-3 px-4 rounded-xl transition-colors flex items-center justify-center gap-2"
+                >
+                  <Download className="w-5 h-5" /> Download
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {isPosterExpanded && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/90 backdrop-blur-sm flex items-center justify-center z-[60] p-4"
+            onClick={closePosterPopup}
+          >
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              transition={{ duration: 0.2 }}
+              className="relative max-w-4xl max-h-[90vh] w-full flex justify-center"
+            >
+              <button
+                onClick={closePosterPopup}
+                className="absolute -top-12 right-0 text-zinc-400 hover:text-white transition-colors bg-black/50 p-2 rounded-full"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+              </button>
+              <LazyLoadImage 
+                src={mergedContent.posterUrl || 'https://picsum.photos/seed/movie/400/600'} 
+                alt={mergedContent.title} 
+                className="max-w-full max-h-[90vh] object-contain rounded-lg shadow-2xl" 
+                referrerPolicy="no-referrer" 
+                onClick={(e) => e.stopPropagation()}
+                wrapperClassName="max-w-full max-h-[90vh]"
+              />
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
       <AnimatePresence>
         {isTrailerPopupOpen && (
           <motion.div 

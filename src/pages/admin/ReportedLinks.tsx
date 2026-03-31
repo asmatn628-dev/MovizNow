@@ -32,31 +32,35 @@ export default function ReportedLinks() {
   const [isLinkCheckerModalOpen, setIsLinkCheckerModalOpen] = useState(false);
 
   useEffect(() => {
-    const unsub = onSnapshot(collection(db, 'reported_links'), (snapshot) => {
-      const data = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() } as ReportedLink));
-      // Sort by status (pending first) then by date
-      data.sort((a, b) => {
-        if (a.status === 'pending' && b.status === 'resolved') return -1;
-        if (a.status === 'resolved' && b.status === 'pending') return 1;
-        const aTime = a.createdAt?.toMillis?.() || 0;
-        const bTime = b.createdAt?.toMillis?.() || 0;
-        return bTime - aTime;
-      });
-      setReports(data);
-      setLoading(false);
-    }, (error) => {
-      console.error("Reported links snapshot error:", error);
-      setLoading(false);
-      handleFirestoreError(error, OperationType.LIST, 'reported_links');
-    });
-
-    return () => unsub();
+    const fetchReports = async () => {
+      try {
+        const { getDocs } = await import('firebase/firestore');
+        const snapshot = await getDocs(collection(db, 'reported_links'));
+        const data = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() } as ReportedLink));
+        // Sort by status (pending first) then by date
+        data.sort((a, b) => {
+          if (a.status === 'pending' && b.status === 'resolved') return -1;
+          if (a.status === 'resolved' && b.status === 'pending') return 1;
+          const aTime = a.createdAt?.toMillis?.() || 0;
+          const bTime = b.createdAt?.toMillis?.() || 0;
+          return bTime - aTime;
+        });
+        setReports(data);
+        setLoading(false);
+      } catch (error) {
+        console.error("Reported links fetch error:", error);
+        setLoading(false);
+        handleFirestoreError(error, OperationType.LIST, 'reported_links');
+      }
+    };
+    fetchReports();
   }, []);
 
   const handleDelete = async (id: string) => {
     if (!window.confirm('Are you sure you want to delete this report?')) return;
     try {
       await deleteDoc(doc(db, 'reported_links', id));
+      setReports(reports.filter(r => r.id !== id));
     } catch (error) {
       console.error("Error deleting report:", error);
       alert("Failed to delete report");
@@ -74,6 +78,7 @@ export default function ReportedLinks() {
       await updateDoc(doc(db, 'reported_links', report.id), {
         status: 'resolved'
       });
+      setReports(reports.map(r => r.id === report.id ? { ...r, status: 'resolved' } : r));
       
       if (report.userId) {
         // Add a notification to the user's notifications collection
