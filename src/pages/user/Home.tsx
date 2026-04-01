@@ -12,13 +12,13 @@ import ConfirmModal from '../../components/ConfirmModal';
 import { formatContentTitle } from '../../utils/contentUtils';
 import { smartSearch } from '../../utils/searchUtils';
 import { LazyLoadImage } from 'react-lazy-load-image-component';
-import { VirtuosoGrid } from 'react-virtuoso';
+import ContentCard from '../../components/ContentCard';
 
 import { NotificationMenu } from '../../components/NotificationMenu';
 
 export default function Home({ onOpenMediaModal }: { onOpenMediaModal: () => void }) {
-  const { profile, logout } = useAuth();
-  const { contentList, genres, languages, qualities, loading } = useContent();
+  const { profile, logout, toggleFavorite, toggleWatchLater } = useAuth();
+  const { contentList, genres, languages, qualities, loading, isOffline } = useContent();
   const navigate = useNavigate();
   
   const [search, setSearch] = useState('');
@@ -47,7 +47,7 @@ export default function Home({ onOpenMediaModal }: { onOpenMediaModal: () => voi
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
-  const [sort, setSort] = useState<'newest' | 'year' | 'az'>('newest');
+  const [sort, setSort] = useState<'default' | 'newest' | 'year' | 'az'>('default');
   const [selectedGenre, setSelectedGenre] = useState<string>('');
   const [selectedLanguage, setSelectedLanguage] = useState<string>('');
   const [selectedType, setSelectedType] = useState<string>('');
@@ -61,7 +61,7 @@ export default function Home({ onOpenMediaModal }: { onOpenMediaModal: () => voi
   const [hasDismissedSession, setHasDismissedSession] = useState(false);
 
   const clearFilters = () => {
-    setSort('newest');
+    setSort('default');
     setSelectedType('');
     setSelectedGenre('');
     setSelectedLanguage('');
@@ -122,10 +122,30 @@ export default function Home({ onOpenMediaModal }: { onOpenMediaModal: () => voi
     if (contentList.length > 0) {
       const savedScrollPosition = sessionStorage.getItem('homeScrollPosition');
       if (savedScrollPosition) {
-        setTimeout(() => window.scrollTo(0, parseInt(savedScrollPosition, 10)), 100);
+        // Use a small delay to ensure the grid has rendered
+        const timer = setTimeout(() => {
+          window.scrollTo({
+            top: parseInt(savedScrollPosition, 10),
+            behavior: 'instant'
+          });
+        }, 100);
+        return () => clearTimeout(timer);
       }
     }
   }, [contentList.length]);
+
+  const [recentlyViewed, setRecentlyViewed] = useState<Content[]>([]);
+
+  useEffect(() => {
+    try {
+      const recentStr = localStorage.getItem('recently_viewed');
+      if (recentStr) {
+        setRecentlyViewed(JSON.parse(recentStr));
+      }
+    } catch (e) {
+      console.error("Failed to load recently viewed", e);
+    }
+  }, []);
 
   const uniqueYears = useMemo(() => {
     const years = new Set(contentList.map(c => Number(c.year)).filter(y => y > 0 && !isNaN(y)));
@@ -209,7 +229,12 @@ export default function Home({ onOpenMediaModal }: { onOpenMediaModal: () => voi
         if (aAssigned !== bAssigned) return bAssigned - aAssigned;
       }
 
-      if (sort === 'newest') {
+      if (sort === 'default') {
+        if (a.order !== undefined && b.order !== undefined) return a.order - b.order;
+        if (a.order === undefined && b.order !== undefined) return -1;
+        if (a.order !== undefined && b.order === undefined) return 1;
+        return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+      } else if (sort === 'newest') {
         return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
       } else if (sort === 'year') {
         return b.year - a.year;
@@ -321,7 +346,7 @@ export default function Home({ onOpenMediaModal }: { onOpenMediaModal: () => voi
             <Link to="/requests" className="text-zinc-400 hover:text-white transition-colors" title="Movie Requests">
               <MessageCircle className="w-5 h-5" />
             </Link>
-            {profile && <NotificationMenu profile={profile} />}
+            {profile && <NotificationMenu />}
             {(profile?.role === 'admin' || profile?.role === 'owner') && (
               <Link to="/admin" className="text-zinc-400 hover:text-white transition-colors" title="Admin Panel">
                 <LayoutDashboard className="w-5 h-5" />
@@ -433,79 +458,77 @@ export default function Home({ onOpenMediaModal }: { onOpenMediaModal: () => voi
           </div>
         )}
 
-        {/* Recently Added Section */}
-        {!search && selectedType === '' && selectedGenre === '' && selectedLanguage === '' && selectedQuality === '' && selectedYear === '' && recentlyAddedContent.length > 0 && (
-          <div className="mb-12">
-            <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
-              <Film className="w-5 h-5 text-emerald-500" />
-              Recently Added
-            </h2>
-            <div className="flex gap-4 overflow-x-auto pb-4 snap-x">
-              {recentlyAddedContent.map((content) => {
-                const isAssigned = (profile?.role === 'temporary' || profile?.role === 'selected_content') && profile?.assignedContent?.some(id => id === content.id || id.startsWith(`${content.id}:`));
-                const isLocked = profile?.status !== 'active' || ((profile?.role === 'temporary' || profile?.role === 'selected_content') && !isAssigned);
-                
-                const qualityObj = qualities.find(q => q.id === content.qualityId);
-                const contentLangs = languages.filter(l => content.languageIds?.includes(l.id)).map(l => l.name).join(', ');
-                const contentGenres = genres.filter(g => content.genreIds?.includes(g.id)).map(g => g.name).join(', ');
-
-                return (
-                  <Link
-                    key={`recent-${content.id}`}
-                    to={`/movie/${content.id}`}
-                    className={`snap-start shrink-0 w-28 sm:w-36 group relative flex flex-col bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden transition-transform hover:scale-105 hover:border-emerald-500/50`}
-                  >
-                    <div className="relative aspect-[2/3] w-full bg-zinc-800">
-                      <LazyLoadImage
-                        src={content.posterUrl || 'https://picsum.photos/seed/movie/400/600'}
-                        alt={content.title}
-                        className="w-full h-full object-cover"
-                        referrerPolicy="no-referrer"
-                        wrapperClassName="w-full h-full"
-                      />
-                      <div className="absolute inset-0 bg-gradient-to-t from-zinc-900 via-zinc-900/20 to-transparent opacity-60 group-hover:opacity-80 transition-opacity" />
+        {/* Recently Viewed Section */}
+        {!search && selectedType === '' && selectedGenre === '' && selectedLanguage === '' && selectedQuality === '' && selectedYear === '' && recentlyViewed.length > 0 && (
+          <div className="mb-8">
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="text-sm font-bold text-zinc-400 flex items-center gap-2 uppercase tracking-wider">
+                <Clock className="w-4 h-4 text-indigo-500" />
+                Recently Viewed
+              </h2>
+            </div>
+            <div className="relative group">
+              <div 
+                className="flex overflow-x-auto gap-3 pb-3 snap-x snap-mandatory hide-scrollbar"
+                style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
+              >
+                {recentlyViewed.map(content => {
+                  const qualityObj = qualities.find(q => q.id === content.qualityId);
+                  const contentLangs = languages.filter(l => content.languageIds?.includes(l.id)).map(l => l.name).join(', ');
+                  const contentGenres = genres.filter(g => content.genreIds?.includes(g.id)).map(g => g.name).join(', ');
+                  
+                  return (
+                    <Link
+                      key={content.id}
+                      to={`/movie/${content.id}`}
+                      className="flex-none w-[80px] sm:w-[100px] snap-start group/card relative rounded-xl overflow-hidden bg-zinc-900 border border-zinc-800 hover:border-zinc-700 transition-all duration-300"
+                    >
+                      <div className="aspect-[2/3] relative">
+                        <LazyLoadImage
+                          src={content.posterUrl || 'https://images.unsplash.com/photo-1440404653325-ab127d49abc1?auto=format&fit=crop&w=300&q=80'}
+                          alt={content.title}
+                          className="w-full h-full object-cover transition-transform duration-500 group-hover/card:scale-110"
+                          wrapperClassName="w-full h-full"
+                          referrerPolicy="no-referrer"
+                        />
+                        <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/40 to-transparent opacity-80 group-hover/card:opacity-100 transition-opacity" />
+                        
+                        <div className="absolute top-1 left-1 flex flex-col gap-0.5 z-10">
+                          <span className={clsx(
+                            "px-1 py-0.5 rounded text-[6px] font-bold uppercase tracking-wider backdrop-blur-md border",
+                            content.type === 'movie' 
+                              ? "bg-blue-500/20 text-blue-400 border-blue-500/30"
+                              : "bg-purple-500/20 text-purple-400 border-purple-500/30"
+                          )}>
+                            {content.type}
+                          </span>
+                          {qualityObj && (
+                            <span 
+                              className="px-1 py-0.5 rounded text-[6px] font-bold text-black shadow-sm"
+                              style={{ backgroundColor: qualityObj.color || '#34d399' }}
+                            >
+                              {qualityObj.name}
+                            </span>
+                          )}
+                        </div>
+                      </div>
                       
-                      <div className="absolute top-2 right-2 flex flex-col gap-1 items-end z-10">
-                        <div className="bg-black/90 px-1.5 py-0.5 rounded text-[8px] font-bold uppercase tracking-wider">
-                          {content.type}
-                        </div>
-                        {qualityObj && (
-                          <div 
-                            className="text-black px-1.5 py-0.5 rounded text-[8px] font-bold uppercase tracking-wider"
-                            style={{ backgroundColor: qualityObj.color || '#10b981' }}
-                          >
-                            {qualityObj.name}
+                      <div className="p-1">
+                        <h3 className="text-[8px] font-bold text-white line-clamp-1 mb-0.5 group-hover/card:text-indigo-400 transition-colors">
+                          {content.title}
+                        </h3>
+                        <div className="flex flex-col gap-0.5 text-[6px] text-zinc-400">
+                          <div className="flex items-center justify-between">
+                            <span>{content.year}</span>
                           </div>
-                        )}
-                      </div>
-
-                      {isLocked && (
-                        <div className="absolute inset-0 flex items-center justify-center z-20 pointer-events-none">
-                          <Lock className="w-8 h-8 text-red-500 drop-shadow-[0_0_8px_rgba(0,0,0,0.8)]" />
+                          {contentLangs && <div className="line-clamp-1 text-zinc-500 italic">{contentLangs}</div>}
+                          {contentGenres && <div className="line-clamp-1 text-zinc-600">{contentGenres}</div>}
                         </div>
-                      )}
-                    </div>
-
-                    <div className="p-2 flex-1 flex flex-col">
-                      <h3 className="font-bold text-xs line-clamp-1 mb-1 group-hover:text-emerald-500 transition-colors">{formatContentTitle(content)}</h3>
-                      <div className="flex items-center gap-1 text-[10px] text-zinc-400 mb-1">
-                        <span>{content.year}</span>
-                        {contentLangs && (
-                          <>
-                            <span>•</span>
-                            <span className="line-clamp-1">{contentLangs}</span>
-                          </>
-                        )}
                       </div>
-                      {contentGenres && (
-                        <div className="text-[9px] text-zinc-500 line-clamp-1 mt-auto">
-                          {contentGenres}
-                        </div>
-                      )}
-                    </div>
-                  </Link>
-                );
-              })}
+                    </Link>
+                  );
+                })}
+              </div>
             </div>
           </div>
         )}
@@ -570,6 +593,7 @@ export default function Home({ onOpenMediaModal }: { onOpenMediaModal: () => voi
               onChange={(e) => setSort(e.target.value as any)}
               className="bg-zinc-950 border border-zinc-800 rounded-lg px-2 py-1 text-xs focus:border-emerald-500"
             >
+              <option value="default">Default Order</option>
               <option value="newest">Recently Added</option>
               <option value="year">Release Year</option>
               <option value="az">A-Z</option>
@@ -636,67 +660,18 @@ export default function Home({ onOpenMediaModal }: { onOpenMediaModal: () => voi
         ) : (
           <>
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4 md:gap-6">
-              {paginatedContent.map((content) => {
-                const isAssigned = (profile?.role === 'temporary' || profile?.role === 'selected_content') && profile.assignedContent?.some(id => id === content.id || id.startsWith(`${content.id}:`));
-                const isLocked = profile?.status !== 'active' || ((profile?.role === 'temporary' || profile?.role === 'selected_content') && !isAssigned);
-                
-                const qualityObj = qualities.find(q => q.id === content.qualityId);
-                const contentLangs = languages.filter(l => content.languageIds?.includes(l.id)).map(l => l.name).join(', ');
-                const contentGenres = genres.filter(g => content.genreIds?.includes(g.id)).map(g => g.name).join(', ');
-
-                return (
-                  <Link
-                    key={content.id}
-                    to={`/movie/${content.id}`}
-                    className={`group relative flex flex-col bg-zinc-900 border border-zinc-800 rounded-2xl overflow-hidden transition-transform hover:scale-105 hover:border-emerald-500/50`}
-                  >
-                    <div className="relative aspect-[2/3] w-full bg-zinc-800">
-                      <LazyLoadImage
-                        src={content.posterUrl || 'https://picsum.photos/seed/movie/400/600'}
-                        alt={content.title}
-                        className="w-full h-full object-cover"
-                        referrerPolicy="no-referrer"
-                        wrapperClassName="w-full h-full"
-                      />
-                      <div className={`absolute top-2 right-2 px-2 py-1 rounded text-xs font-bold uppercase tracking-wider text-white ${content.type === 'movie' ? 'bg-blue-500/90' : 'bg-purple-500/90'}`}>
-                        {content.type}
-                      </div>
-                      {qualityObj && (
-                        <div 
-                          className="absolute top-9 right-2 px-2 py-1 rounded text-[10px] font-bold uppercase tracking-wider text-black shadow-lg"
-                          style={{ backgroundColor: qualityObj.color || '#10b981' }}
-                        >
-                          {qualityObj.name}
-                        </div>
-                      )}
-                      {isLocked && (
-                        <div className="absolute top-2 left-2 bg-red-500 px-2 py-1 rounded text-xs font-bold uppercase tracking-wider flex items-center gap-1 shadow-lg text-white z-20">
-                          <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
-                          Locked
-                        </div>
-                      )}
-                    </div>
-                    <div className="p-4 flex flex-col flex-1">
-                      <h3 className="font-bold text-base md:text-lg leading-tight mb-2">{formatContentTitle(content)}</h3>
-                      <div className="flex flex-wrap items-center gap-2 text-zinc-400 text-xs mb-2">
-                        <span>{content.year}</span>
-                      </div>
-                      <div className="flex flex-col gap-1 mt-auto">
-                        {contentGenres && (
-                          <p className="text-zinc-500 text-xs line-clamp-1">
-                            {contentGenres}
-                          </p>
-                        )}
-                        {contentLangs && (
-                          <p className="text-zinc-500 text-xs line-clamp-1">
-                            {contentLangs}
-                          </p>
-                        )}
-                      </div>
-                    </div>
-                  </Link>
-                );
-              })}
+              {paginatedContent.map((content) => (
+                <ContentCard
+                  key={content.id}
+                  content={content}
+                  profile={profile}
+                  qualities={qualities}
+                  languages={languages}
+                  genres={genres}
+                  onToggleFavorite={toggleFavorite}
+                  onToggleWatchLater={toggleWatchLater}
+                />
+              ))}
             </div>
 
             {/* Pagination */}

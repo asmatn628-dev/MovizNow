@@ -6,10 +6,10 @@ import { Film, Clock, ArrowLeft } from 'lucide-react';
 import { formatContentTitle } from '../../utils/contentUtils';
 import { NotificationMenu } from '../../components/NotificationMenu';
 import { LazyLoadImage } from 'react-lazy-load-image-component';
+import ContentCard from '../../components/ContentCard';
 
-// Force rebuild
 export default function WatchLater() {
-  const { profile } = useAuth();
+  const { profile, toggleFavorite, toggleWatchLater } = useAuth();
   const { contentList, genres, languages, qualities } = useContent();
 
   const watchLaterContent = contentList.filter(c => 
@@ -20,7 +20,12 @@ export default function WatchLater() {
         profile?.assignedContent?.some(id => id === c.id || id.startsWith(`${c.id}:`))
       )
     ))
-  );
+  ).sort((a, b) => {
+    if (a.order !== undefined && b.order !== undefined) return a.order - b.order;
+    if (a.order === undefined && b.order !== undefined) return -1;
+    if (a.order !== undefined && b.order === undefined) return 1;
+    return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+  });
 
   return (
     <div className="min-h-screen bg-zinc-950 text-white flex flex-col">
@@ -35,71 +40,24 @@ export default function WatchLater() {
               Watch Later
             </h1>
           </div>
-          {profile && <NotificationMenu profile={profile} />}
+          {profile && <NotificationMenu />}
         </div>
       </header>
 
       <main className="flex-1 max-w-7xl mx-auto w-full px-4 py-8">
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4 md:gap-6">
-          {watchLaterContent.map((content) => {
-            const isAssigned = profile?.assignedContent?.some(id => id === content.id || id.startsWith(`${content.id}:`));
-            const isLocked = profile?.status !== 'active' || ((profile?.role === 'temporary' || profile?.role === 'selected_content' || content.status === 'selected_content') && !isAssigned);
-            
-            const qualityObj = qualities.find(q => q.id === content.qualityId);
-            const contentLangs = languages.filter(l => content.languageIds?.includes(l.id)).map(l => l.name).join(', ');
-            const contentGenres = genres.filter(g => content.genreIds?.includes(g.id)).map(g => g.name).join(', ');
-
-            return (
-              <Link
-                key={content.id}
-                to={`/movie/${content.id}`}
-                className={`group relative flex flex-col bg-zinc-900 border border-zinc-800 rounded-2xl overflow-hidden transition-transform hover:scale-105 hover:border-emerald-500/50`}
-              >
-                <div className="relative aspect-[2/3] w-full bg-zinc-800">
-                  <LazyLoadImage
-                    src={content.posterUrl || 'https://picsum.photos/seed/movie/400/600'}
-                    alt={content.title}
-                    className="w-full h-full object-cover"
-                    referrerPolicy="no-referrer"
-                    wrapperClassName="w-full h-full"
-                  />
-                  <div className={`absolute top-2 right-2 px-2 py-1 rounded text-xs font-bold uppercase tracking-wider text-white ${content.type === 'movie' ? 'bg-blue-500/90' : 'bg-purple-500/90'}`}>
-                    {content.type}
-                  </div>
-                  {isLocked && (
-                    <div className="absolute top-2 left-2 bg-red-500 px-2 py-1 rounded text-xs font-bold uppercase tracking-wider flex items-center gap-1 shadow-lg text-white z-20">
-                      <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
-                      Locked
-                    </div>
-                  )}
-                </div>
-                <div className="p-4 flex flex-col flex-1">
-                  <h3 className="font-bold text-base md:text-lg leading-tight mb-2">{formatContentTitle(content)}</h3>
-                  <div className="flex flex-wrap items-center gap-2 text-zinc-400 text-xs mb-2">
-                    <span>{content.year}</span>
-                    {qualityObj && (
-                      <>
-                        <span>•</span>
-                        <span className="font-medium" style={{ color: qualityObj.color || '#34d399' }}>{qualityObj.name}</span>
-                      </>
-                    )}
-                  </div>
-                  <div className="flex flex-col gap-1 mt-auto">
-                    {contentGenres && (
-                      <p className="text-zinc-500 text-xs line-clamp-1">
-                        {contentGenres}
-                      </p>
-                    )}
-                    {contentLangs && (
-                      <p className="text-zinc-500 text-xs line-clamp-1">
-                        {contentLangs}
-                      </p>
-                    )}
-                  </div>
-                </div>
-              </Link>
-            );
-          })}
+          {watchLaterContent.map((content) => (
+            <ContentCard
+              key={content.id}
+              content={content}
+              profile={profile}
+              qualities={qualities}
+              languages={languages}
+              genres={genres}
+              onToggleFavorite={toggleFavorite}
+              onToggleWatchLater={toggleWatchLater}
+            />
+          ))}
         </div>
         
         {watchLaterContent.length === 0 && (

@@ -12,6 +12,7 @@ import ConfirmModal from '../../components/ConfirmModal';
 import AlertModal from '../../components/AlertModal';
 import { MediaModal, findTMDBByImdb, searchTMDBByTitle, fetchTMDBDetails, fetchSeriesSeasons, fetchIMDbRating } from '../../components/MediaModal';
 import { LinkCheckerModal } from '../../components/LinkCheckerModal';
+import { AdjustContentsModal } from '../../components/AdjustContentsModal';
 import { formatContentTitle, formatReleaseDate, formatRuntime, formatDateToMonthDDYYYY } from '../../utils/contentUtils';
 import { smartSearch } from '../../utils/searchUtils';
 import { handleFirestoreError, OperationType } from '../../utils/firestoreErrorHandler';
@@ -264,7 +265,7 @@ export default function ContentManagement() {
   const [filterYear, setFilterYear] = useState<string>('all');
   const [filterStatus, setFilterStatus] = useState<'all' | 'published' | 'draft' | 'selected_content'>('all');
   const [filterAddedBy, setFilterAddedBy] = useState<string>('all');
-  const [filterDateAdded, setFilterDateAdded] = useState<'newest' | 'oldest'>('newest');
+  const [filterSort, setFilterSort] = useState<'default' | 'newest' | 'oldest'>('default');
   const [selectedContent, setSelectedContent] = useState<string[]>([]);
 
   const [genreSearchTerm, setGenreSearchTerm] = useState('');
@@ -275,6 +276,7 @@ export default function ContentManagement() {
   const [searchParams, setSearchParams] = useSearchParams();
   const [isMasterFetchModalOpen, setIsMasterFetchModalOpen] = useState(false);
   const [isLinkCheckerOpen, setIsLinkCheckerOpen] = useState(false);
+  const [isAdjustContentsModalOpen, setIsAdjustContentsModalOpen] = useState(false);
   const [fetchingPoster, setFetchingPoster] = useState(false);
   const [isAutoFillModalOpen, setIsAutoFillModalOpen] = useState(false);
   const [loadingShareId, setLoadingShareId] = useState<string | null>(null);
@@ -390,7 +392,7 @@ export default function ContentManagement() {
     setFilterYear('all');
     setFilterStatus('all');
     setFilterAddedBy('all');
-    setFilterDateAdded('newest');
+    setFilterSort('newest');
   };
 
   useEffect(() => {
@@ -1908,24 +1910,28 @@ export default function ContentManagement() {
     }
     
     result.sort((a, b) => {
+      if (filterSort === 'default') {
+        if (a.order !== undefined && b.order !== undefined) return a.order - b.order;
+        if (a.order === undefined && b.order !== undefined) return -1;
+        if (a.order !== undefined && b.order === undefined) return 1;
+        return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+      }
       const timeA = new Date(a.createdAt).getTime();
       const timeB = new Date(b.createdAt).getTime();
-      return filterDateAdded === 'newest' ? timeB - timeA : timeA - timeB;
+      return filterSort === 'newest' ? timeB - timeA : timeA - timeB;
     });
     
     return result;
-  }, [contentList, searchTerm, filterType, filterGenre, filterLanguage, filterQuality, filterYear, filterStatus, filterDateAdded, filterAddedBy, profile, user]);
+  }, [contentList, searchTerm, filterType, filterGenre, filterLanguage, filterQuality, filterYear, filterStatus, filterSort, filterAddedBy, profile, user]);
 
   const filteredGenres = useMemo(() => {
     if (!genreSearchTerm) return genres;
-    const lower = genreSearchTerm.toLowerCase();
-    return genres.filter(g => g.name.toLowerCase().includes(lower));
+    return smartSearch(genres, genreSearchTerm);
   }, [genres, genreSearchTerm]);
 
   const filteredLanguages = useMemo(() => {
     if (!languageSearchTerm) return languages;
-    const lower = languageSearchTerm.toLowerCase();
-    return languages.filter(l => l.name.toLowerCase().includes(lower));
+    return smartSearch(languages, languageSearchTerm);
   }, [languages, languageSearchTerm]);
 
   const handleSelectAll = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -2014,7 +2020,18 @@ export default function ContentManagement() {
     <div className="p-4 md:p-8">
       <div className="flex flex-col gap-4 mb-8">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <h1 className="text-2xl md:text-3xl font-bold">Movies & Series</h1>
+          <div className="flex items-center gap-3">
+            <h1 className="text-xl md:text-2xl font-bold whitespace-nowrap">Movies & Series</h1>
+            {(profile?.role === 'admin' || profile?.role === 'owner') && (
+              <button
+                onClick={() => setIsAdjustContentsModalOpen(true)}
+                className="flex items-center gap-1.5 bg-zinc-800 hover:bg-zinc-700 text-white px-3 py-1.5 rounded-lg transition-colors font-medium text-xs md:text-sm whitespace-nowrap"
+              >
+                <GripVertical className="w-3.5 h-3.5" />
+                Adjust Contents
+              </button>
+            )}
+          </div>
           <div className="flex flex-col sm:flex-row gap-4">
             <div className="relative w-full sm:w-64">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-zinc-500" />
@@ -2080,7 +2097,8 @@ export default function ContentManagement() {
               <option value="all">Years</option>
               {uniqueYears.map(y => <option key={y} value={y.toString()}>{y}</option>)}
             </select>
-            <select value={filterDateAdded} onChange={(e) => setFilterDateAdded(e.target.value as any)} className="bg-zinc-950 border border-zinc-800 rounded-lg px-2 py-1 text-xs focus:border-emerald-500">
+            <select value={filterSort} onChange={(e) => setFilterSort(e.target.value as any)} className="bg-zinc-950 border border-zinc-800 rounded-lg px-2 py-1 text-xs focus:border-emerald-500">
+              <option value="default">Default Order</option>
               <option value="newest">Newest Added</option>
               <option value="oldest">Oldest Added</option>
             </select>
@@ -3164,6 +3182,11 @@ export default function ContentManagement() {
         onCancel={() => setShareAnywayConfig({ isOpen: false, content: null })}
       />
 
+      <AdjustContentsModal
+        isOpen={isAdjustContentsModalOpen}
+        onClose={() => setIsAdjustContentsModalOpen(false)}
+        contentList={contentList}
+      />
     </div>
   );
 }

@@ -14,6 +14,8 @@ interface AuthContextType {
   error: string | null;
   signInWithGoogle: () => Promise<void>;
   logout: () => Promise<void>;
+  toggleFavorite: (contentId: string) => Promise<void>;
+  toggleWatchLater: (contentId: string) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -24,7 +26,64 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [authLoading, setAuthLoading] = useState(!auth.currentUser);
   const [error, setError] = useState<string | null>(null);
+  const [isOnline, setIsOnline] = useState(navigator.onLine);
   const sessionStartTimeRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    const handleOnline = () => setIsOnline(true);
+    const handleOffline = () => setIsOnline(false);
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, []);
+
+  // Sync offline actions when coming back online
+  useEffect(() => {
+    if (isOnline && user) {
+      const syncOfflineActions = async () => {
+        const pendingFavorites = JSON.parse(localStorage.getItem('pending_favorites') || '[]');
+        const pendingWatchLater = JSON.parse(localStorage.getItem('pending_watch_later') || '[]');
+
+        if (pendingFavorites.length > 0 || pendingWatchLater.length > 0) {
+          const userRef = doc(db, 'users', user.uid);
+          const docSnap = await getDoc(userRef);
+          if (docSnap.exists()) {
+            const currentProfile = docSnap.data() as UserProfile;
+            let newFavorites = [...(currentProfile.favorites || [])];
+            let newWatchLater = [...(currentProfile.watchLater || [])];
+
+            pendingFavorites.forEach((id: string) => {
+              if (newFavorites.includes(id)) {
+                newFavorites = newFavorites.filter(fid => fid !== id);
+              } else {
+                newFavorites.push(id);
+              }
+            });
+
+            pendingWatchLater.forEach((id: string) => {
+              if (newWatchLater.includes(id)) {
+                newWatchLater = newWatchLater.filter(wid => wid !== id);
+              } else {
+                newWatchLater.push(id);
+              }
+            });
+
+            await updateDoc(userRef, {
+              favorites: newFavorites,
+              watchLater: newWatchLater
+            });
+
+            localStorage.removeItem('pending_favorites');
+            localStorage.removeItem('pending_watch_later');
+          }
+        }
+      };
+      syncOfflineActions().catch(console.error);
+    }
+  }, [isOnline, user]);
 
   useEffect(() => {
     // Load from cache initially
@@ -46,13 +105,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setAuthLoading(false);
       
       if (currentUser) {
+        const userRef = doc(db, 'users', currentUser.uid);
+
         if (!sessionStorage.getItem('session_started')) {
           sessionStorage.setItem('session_started', 'true');
           sessionStartTimeRef.current = Date.now();
           logEvent('session_start', currentUser.uid);
+          
+          // Update lastActive on session start
+          updateDoc(userRef, { lastActive: new Date().toISOString() }).catch(console.error);
         }
-
-        const userRef = doc(db, 'users', currentUser.uid);
         
         // Listen to profile changes
         unsubProfile = onSnapshot(userRef, async (docSnap) => {
@@ -172,6 +234,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const timeTrackerInterval = setInterval(() => {
       if (auth.currentUser && sessionStartTimeRef.current) {
         updateTimeSpent(auth.currentUser.uid, 1);
+        
+        // Update lastActive every 5 minutes
+        const minutesSinceStart = Math.floor((Date.now() - sessionStartTimeRef.current) / 60000);
+        if (minutesSinceStart % 5 === 0) {
+          updateDoc(doc(db, 'users', auth.currentUser.uid), { lastActive: new Date().toISOString() }).catch(console.error);
+        }
       }
     }, 60000);
 
@@ -215,8 +283,65 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     await signOut(auth);
   };
 
+  const toggleFavorite = async (contentId: string) => {
+    if (!profile || !user) return;
+
+    const newFavorites = profile.favorites?.includes(contentId)
+      ? profile.favorites.filter(id => id !== contentId)
+      : [...(profile.favorites || []), contentId];
+
+    // Optimistic update
+    const updatedProfile = { ...profile, favorites: newFavorites };
+    setProfile(updatedProfile);
+    localStorage.setItem('profile_cache', JSON.stringify(updatedProfile));
+
+    if (isOnline) {
+      try {
+        await updateDoc(doc(db, 'users', user.uid), { favorites: newFavorites });
+      } catch (err) {
+        console.error("Failed to update favorites online:", err);
+        // If it failed despite being online, queue it
+        const pending = JSON.parse(localStorage.getItem('pending_favorites') || '[]');
+        pending.push(contentId);
+        localStorage.setItem('pending_favorites', JSON.stringify(pending));
+      }
+    } else {
+      const pending = JSON.parse(localStorage.getItem('pending_favorites') || '[]');
+      pending.push(contentId);
+      localStorage.setItem('pending_favorites', JSON.stringify(pending));
+    }
+  };
+
+  const toggleWatchLater = async (contentId: string) => {
+    if (!profile || !user) return;
+
+    const newWatchLater = profile.watchLater?.includes(contentId)
+      ? profile.watchLater.filter(id => id !== contentId)
+      : [...(profile.watchLater || []), contentId];
+
+    // Optimistic update
+    const updatedProfile = { ...profile, watchLater: newWatchLater };
+    setProfile(updatedProfile);
+    localStorage.setItem('profile_cache', JSON.stringify(updatedProfile));
+
+    if (isOnline) {
+      try {
+        await updateDoc(doc(db, 'users', user.uid), { watchLater: newWatchLater });
+      } catch (err) {
+        console.error("Failed to update watch later online:", err);
+        const pending = JSON.parse(localStorage.getItem('pending_watch_later') || '[]');
+        pending.push(contentId);
+        localStorage.setItem('pending_watch_later', JSON.stringify(pending));
+      }
+    } else {
+      const pending = JSON.parse(localStorage.getItem('pending_watch_later') || '[]');
+      pending.push(contentId);
+      localStorage.setItem('pending_watch_later', JSON.stringify(pending));
+    }
+  };
+
   return (
-    <AuthContext.Provider value={{ user, profile, loading, authLoading, error, signInWithGoogle, logout }}>
+    <AuthContext.Provider value={{ user, profile, loading, authLoading, error, signInWithGoogle, logout, toggleFavorite, toggleWatchLater }}>
       {children}
     </AuthContext.Provider>
   );

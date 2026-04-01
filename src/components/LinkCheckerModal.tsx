@@ -237,10 +237,7 @@ export const LinkCheckerModal: React.FC<Props> = ({
   const handleAddLinks = () => {
     if (!onAddLinks || results.length === 0) return;
     
-    const validResults = results.filter(r => 
-      (r.statusLabel === "WORKING" && selectedUrls.has(r.url)) || 
-      (r.statusLabel === "MISSING_METADATA")
-    );
+    const validResults = results.filter(r => selectedUrls.has(r.url));
     if (validResults.length === 0) return;
 
     // Collect metadata to pass back
@@ -407,6 +404,28 @@ export const LinkCheckerModal: React.FC<Props> = ({
     return { working, broken, protectedCount, redirect, unavailable, unknown, mismatches, missingFilename, missingMetadata };
   }, [results]);
 
+  const sortedResults = useMemo(() => {
+    const isSeries = results.some(r => r.season || r.episode || r.isFullSeasonMKV || r.isFullSeasonZIP);
+    
+    return [...results].sort((a, b) => {
+      if (isSeries) {
+        if (a.isFullSeasonZIP && !b.isFullSeasonZIP) return -1;
+        if (!a.isFullSeasonZIP && b.isFullSeasonZIP) return 1;
+        
+        if (a.isFullSeasonMKV && !b.isFullSeasonMKV) return -1;
+        if (!a.isFullSeasonMKV && b.isFullSeasonMKV) return 1;
+        
+        if (a.season !== b.season) {
+          return (a.season || 0) - (b.season || 0);
+        }
+        
+        return (a.episode || 0) - (b.episode || 0);
+      } else {
+        return (b.fileSize || 0) - (a.fileSize || 0);
+      }
+    });
+  }, [results]);
+
   return (
     <AnimatePresence>
       {isOpen ? (
@@ -458,10 +477,10 @@ export const LinkCheckerModal: React.FC<Props> = ({
                     </button>
                   )}
 
-                  {onAddLinks && results.some(r => r.statusLabel === "WORKING" || r.statusLabel === "MISSING_METADATA") && !loading && (
+                  {onAddLinks && selectedUrls.size > 0 && !loading && (
                     <button onClick={handleAddLinks} className="inline-flex items-center justify-center rounded-2xl bg-emerald-600 px-4 py-2 text-sm font-bold text-white hover:bg-emerald-700 gap-2 ml-auto transition-colors">
                       <Plus className="h-4 w-4" />
-                      Add {results.filter(r => (r.statusLabel === "WORKING" && selectedUrls.has(r.url)) || r.statusLabel === "MISSING_METADATA").length} Link(s)
+                      Add {selectedUrls.size} Link(s)
                     </button>
                   )}
                 </div>
@@ -490,7 +509,7 @@ export const LinkCheckerModal: React.FC<Props> = ({
                 )}
 
                 <div className="space-y-3 max-h-[500px] overflow-auto pr-1">
-                  {results.map((result) => {
+                  {sortedResults.map((result) => {
                     const statusLabel = result.statusLabel || (result.ok ? "WORKING" : "UNKNOWN");
                     const openRow = !!expanded[result.url];
                     

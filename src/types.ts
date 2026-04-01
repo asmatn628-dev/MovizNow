@@ -21,6 +21,7 @@ export interface UserProfile {
   managedBy?: string; // UID of the User Manager who added this user
   isUserManager?: boolean; // Flag to keep user in User Managers list even if role changes
   previousStatus?: 'active' | 'pending' | 'suspended' | 'expired'; // Store previous status when manager role changes
+  lastActive?: string; // ISO string
 }
 
 export interface AppNotification {
@@ -136,6 +137,7 @@ export interface Content {
   seasons?: string; // JSON stringified Season[]
   imdbRating?: string; // Added imdbRating
   subtitles?: boolean; // Added subtitles
+  order?: number; // Added order for sorting
 }
 
 export interface ErrorLinkInfo {

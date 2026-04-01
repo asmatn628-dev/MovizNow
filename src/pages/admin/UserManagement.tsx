@@ -2,14 +2,15 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { db } from '../../firebase';
 import { collection, doc, updateDoc, onSnapshot, query, where, getDocs, writeBatch, deleteDoc, setDoc } from 'firebase/firestore';
 import { UserProfile, Role, Status, AnalyticsEvent } from '../../types';
-import { Edit2, MessageCircle, X, Check, Search, ArrowUp, ArrowDown, Clock, MousePointerClick, Film, Trash2, Tv, Plus, Loader2, ArrowRight, UserPlus } from 'lucide-react';
-import { format } from 'date-fns';
+import { Edit2, MessageCircle, X, Check, Search, ArrowUp, ArrowDown, Clock, MousePointerClick, Film, Trash2, Tv, Plus, Loader2, ArrowRight, UserPlus, Calendar, Heart, Bookmark } from 'lucide-react';
+import { format, formatDistanceToNow } from 'date-fns';
 import clsx from 'clsx';
 import AlertModal from '../../components/AlertModal';
 import ConfirmModal from '../../components/ConfirmModal';
 import { handleFirestoreError, OperationType } from '../../utils/firestoreErrorHandler';
 import { formatDateToMonthDDYYYY } from '../../utils/contentUtils';
 import { useAuth } from '../../contexts/AuthContext';
+import { smartSearch } from '../../utils/searchUtils';
 
 import { useLocation, useNavigate } from 'react-router-dom';
 
@@ -581,12 +582,7 @@ export default function UserManagement() {
     result = result.filter(u => u.role !== 'owner');
     
     if (searchTerm) {
-      const lower = searchTerm.toLowerCase();
-      result = result.filter(u => 
-        (u.displayName?.toLowerCase() || '').includes(lower) ||
-        (u.email?.toLowerCase() || '').includes(lower) ||
-        (u.phone?.toLowerCase() || '').includes(lower)
-      );
+      result = smartSearch(result, searchTerm, ['displayName', 'email', 'phone']);
     }
     if (filterRole !== 'all') {
       result = result.filter(u => u.role === filterRole);
@@ -720,7 +716,7 @@ export default function UserManagement() {
 
   return (
     <div className="p-4 md:p-8">
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-4">
         <div className="flex items-center gap-4">
           <h1 className="text-2xl md:text-3xl font-bold">Membership Management</h1>
           {managedByFilter && (
@@ -840,6 +836,7 @@ export default function UserManagement() {
                 <th className="px-4 md:px-6 py-4 cursor-pointer hover:text-white transition-colors" onClick={() => toggleSort('expiryDate')}>
                   Expiry Date <SortIcon field="expiryDate" />
                 </th>
+                <th className="px-4 md:px-6 py-4">Last Active</th>
                 {(profile?.role === 'admin' || profile?.role === 'owner') && (
                   <th className="px-4 md:px-6 py-4">Managed By</th>
                 )}
@@ -918,6 +915,11 @@ export default function UserManagement() {
                   <td className="px-4 md:px-6 py-4">
                     <span className="text-zinc-300">
                       {user.role === 'owner' ? 'Lifetime' : user.expiryDate ? format(new Date(user.expiryDate), 'MMM dd, yyyy') : '-'}
+                    </span>
+                  </td>
+                  <td className="px-4 md:px-6 py-4">
+                    <span className="text-zinc-400 text-xs">
+                      {user.lastActive ? formatDistanceToNow(new Date(user.lastActive), { addSuffix: true }) : 'Never'}
                     </span>
                   </td>
                   {(profile?.role === 'admin' || profile?.role === 'owner') && (
@@ -1251,6 +1253,15 @@ export default function UserManagement() {
                         <div className="space-y-2">
                           <div className="flex items-center justify-between bg-zinc-950 p-3 rounded-xl border border-zinc-800">
                             <div className="flex items-center gap-3 text-zinc-300">
+                              <Calendar className="w-4 h-4 text-emerald-500" />
+                              <span className="text-xs font-medium">Last Active</span>
+                            </div>
+                            <span className="font-bold text-white text-xs">
+                              {selectedUser.lastActive ? format(new Date(selectedUser.lastActive), 'MMM dd, HH:mm') : 'Never'}
+                            </span>
+                          </div>
+                          <div className="flex items-center justify-between bg-zinc-950 p-3 rounded-xl border border-zinc-800">
+                            <div className="flex items-center gap-3 text-zinc-300">
                               <Clock className="w-4 h-4 text-emerald-500" />
                               <span className="text-xs font-medium">Time in App</span>
                             </div>
@@ -1283,6 +1294,24 @@ export default function UserManagement() {
                                 {userAnalytics.clickedLinks.join(', ')}
                               </div>
                             )}
+                          </div>
+                          <div className="bg-zinc-950 p-3 rounded-xl border border-zinc-800">
+                            <div className="flex items-center justify-between mb-1">
+                              <div className="flex items-center gap-3 text-zinc-300">
+                                <Heart className="w-4 h-4 text-emerald-500" />
+                                <span className="text-xs font-medium">Favorites</span>
+                              </div>
+                              <span className="font-bold text-white text-xs">{(selectedUser.favorites || []).length}</span>
+                            </div>
+                          </div>
+                          <div className="bg-zinc-950 p-3 rounded-xl border border-zinc-800">
+                            <div className="flex items-center justify-between mb-1">
+                              <div className="flex items-center gap-3 text-zinc-300">
+                                <Bookmark className="w-4 h-4 text-emerald-500" />
+                                <span className="text-xs font-medium">Watch Later</span>
+                              </div>
+                              <span className="font-bold text-white text-xs">{(selectedUser.watchLater || []).length}</span>
+                            </div>
                           </div>
                         </div>
                       </div>
@@ -1367,8 +1396,7 @@ export default function UserManagement() {
             
             <div className="flex-1 overflow-y-auto p-6">
               <div className="space-y-2">
-                {allContent
-                  .filter(c => c.title.toLowerCase().includes(contentSearchTerm.toLowerCase()))
+                {smartSearch(allContent, contentSearchTerm)
                   .map((content) => {
                     const isSeries = content.type === 'series';
                     const seasons = isSeries && content.seasons ? (typeof content.seasons === 'string' ? JSON.parse(content.seasons) : content.seasons) : [];

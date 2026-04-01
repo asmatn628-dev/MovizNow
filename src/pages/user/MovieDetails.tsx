@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useMemo } from 'react';
 import { useParams, Link, useNavigate, useLocation } from 'react-router-dom';
 import { Helmet } from 'react-helmet-async';
 import { db } from '../../firebase';
-import { doc, updateDoc, arrayUnion, arrayRemove, deleteDoc, addDoc, collection, serverTimestamp, query, where, getDocs } from 'firebase/firestore';
+import { doc, getDoc, updateDoc, arrayUnion, arrayRemove, deleteDoc, addDoc, collection, serverTimestamp, query, where, getDocs } from 'firebase/firestore';
 import { Content, QualityLinks, Season } from '../../types';
 import { useAuth } from '../../contexts/AuthContext';
 import { useContent } from '../../contexts/ContentContext';
@@ -18,8 +18,8 @@ import { LazyLoadImage } from 'react-lazy-load-image-component';
 
 export default function MovieDetails() {
   const { id } = useParams<{ id: string }>();
-  const { profile, loading: profileLoading } = useAuth();
-  const { contentList, genres, languages, qualities, loading: contentLoading } = useContent();
+  const { profile, loading: profileLoading, toggleFavorite: authToggleFavorite, toggleWatchLater: authToggleWatchLater } = useAuth();
+  const { contentList, genres, languages, qualities, loading: contentLoading, isOffline } = useContent();
   const content = useMemo(() => {
     console.log('DEBUG: id=', id, 'contentList length=', contentList.length);
     if (contentList.length > 0) {
@@ -78,13 +78,39 @@ export default function MovieDetails() {
     }
   }, [id]);
 
+  const [fullContent, setFullContent] = useState<Content | null>(null);
+  const [fetchFailed, setFetchFailed] = useState(false);
+
+  useEffect(() => {
+    if ((!content || (!content.movieLinks && !content.seasons)) && !fullContent && id && !fetchFailed && !isOffline) {
+      const fetchFullContent = async () => {
+        try {
+          const docRef = doc(db, 'content', id);
+          const docSnap = await getDoc(docRef);
+          if (docSnap.exists()) {
+            const data = { id: docSnap.id, ...docSnap.data() } as Content;
+            setFullContent(data);
+            sessionStorage.setItem(`content_cache_${id}`, JSON.stringify(data));
+          } else {
+            setFetchFailed(true);
+          }
+        } catch (e) {
+          console.error("Failed to fetch full content", e);
+          setFetchFailed(true);
+        }
+      };
+      fetchFullContent();
+    }
+  }, [content, fullContent, id, fetchFailed, isOffline]);
+
   const mergedContent = useMemo(() => {
-    if (!content) return null;
+    if (!content && !fullContent) return null;
     return {
-      ...content,
-      ...cachedMetadata
-    };
-  }, [content, cachedMetadata]);
+      ...(content || {}),
+      ...cachedMetadata,
+      ...(fullContent || {})
+    } as Content;
+  }, [content, cachedMetadata, fullContent]);
 
   const title = mergedContent ? `${formatContentTitle(mergedContent)} (${mergedContent.year}) - MovizNow` : 'MovizNow';
   const description = mergedContent?.description || 'Watch the latest movies and series on MovizNow.';
@@ -114,16 +140,46 @@ export default function MovieDetails() {
 
   useEffect(() => {
     if (!contentLoading) {
+      if ((!content || (!content.movieLinks && !content.seasons)) && !fullContent && !fetchFailed && !isOffline) {
+        // Still fetching full content
+        return;
+      }
       setLoading(false);
-      if (content && !hasLoggedView.current && profile?.uid) {
+      if (mergedContent && !hasLoggedView.current && profile?.uid) {
         hasLoggedView.current = true;
         logEvent('content_click', profile.uid, {
-          contentId: content.id,
-          contentTitle: content.title
+          contentId: mergedContent.id,
+          contentTitle: mergedContent.title
         });
+
+        // Add to recently viewed
+        try {
+          const recentStr = localStorage.getItem('recently_viewed');
+          let recent: Content[] = recentStr ? JSON.parse(recentStr) : [];
+          // Remove if already exists
+          recent = recent.filter(c => c.id !== mergedContent.id);
+          // Add to front, keep only minimal data to save space
+          const minimalContent = {
+            id: mergedContent.id,
+            title: mergedContent.title,
+            year: mergedContent.year,
+            posterUrl: mergedContent.posterUrl,
+            type: mergedContent.type,
+            qualityId: mergedContent.qualityId,
+            languageIds: mergedContent.languageIds,
+            genreIds: mergedContent.genreIds,
+            createdAt: mergedContent.createdAt
+          } as Content;
+          recent.unshift(minimalContent);
+          // Keep max 100
+          if (recent.length > 100) recent = recent.slice(0, 100);
+          localStorage.setItem('recently_viewed', JSON.stringify(recent));
+        } catch (e) {
+          console.error("Failed to update recently viewed", e);
+        }
       }
     }
-  }, [content, contentLoading, profile?.uid]);
+  }, [content, contentLoading, profile?.uid, fullContent, mergedContent, fetchFailed, isOffline]);
 
   useEffect(() => {
     if (linkPopup) {
@@ -154,7 +210,7 @@ export default function MovieDetails() {
   const hasAttemptedFetch = useRef<Record<string, boolean>>({});
 
   useEffect(() => {
-    if (!mergedContent || !id || hasAttemptedFetch.current[id]) return;
+    if (!mergedContent || !id || hasAttemptedFetch.current[id] || isOffline) return;
 
     const fetchMissingData = async () => {
       const seasons = mergedContent.type === 'series' && mergedContent.seasons ? JSON.parse(mergedContent.seasons) : [];
@@ -332,7 +388,7 @@ export default function MovieDetails() {
     };
 
     fetchMissingData();
-  }, [mergedContent?.id, id, genres, cachedMetadata]);
+  }, [mergedContent?.id, id, genres, cachedMetadata, isOffline]);
 
   const getYouTubeEmbedUrl = (url?: string) => {
     if (!url) return null;
@@ -378,12 +434,7 @@ export default function MovieDetails() {
     if (!profile) return;
     setIsWatchLaterLoading(true);
     try {
-      const userRef = doc(db, 'users', profile.uid);
-      if (profile.watchLater?.includes(content.id)) {
-        await updateDoc(userRef, { watchLater: arrayRemove(content.id) });
-      } else {
-        await updateDoc(userRef, { watchLater: arrayUnion(content.id) });
-      }
+      await authToggleWatchLater(content.id);
     } catch (error) {
       console.error("Error toggling watch later:", error);
     } finally {
@@ -395,12 +446,7 @@ export default function MovieDetails() {
     if (!profile) return;
     setIsFavoriteLoading(true);
     try {
-      const userRef = doc(db, 'users', profile.uid);
-      if (profile.favorites?.includes(content.id)) {
-        await updateDoc(userRef, { favorites: arrayRemove(content.id) });
-      } else {
-        await updateDoc(userRef, { favorites: arrayUnion(content.id) });
-      }
+      await authToggleFavorite(content.id);
     } catch (error) {
       console.error("Error toggling favorite:", error);
     } finally {
@@ -426,7 +472,7 @@ export default function MovieDetails() {
       return;
     }
 
-    if (!navigator.onLine) {
+    if (isOffline) {
       setAlertConfig({ isOpen: true, title: 'No Internet', message: 'You need an internet connection to open this link.' });
       return;
     }

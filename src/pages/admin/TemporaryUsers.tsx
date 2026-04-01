@@ -5,6 +5,7 @@ import { UserProfile, Content } from '../../types';
 import { Settings, X, Check, Search } from 'lucide-react';
 import AlertModal from '../../components/AlertModal';
 import { handleFirestoreError, OperationType } from '../../utils/firestoreErrorHandler';
+import { smartSearch } from '../../utils/searchUtils';
 
 export default function TemporaryUsers() {
   const [users, setUsers] = useState<UserProfile[]>([]);
@@ -137,17 +138,12 @@ export default function TemporaryUsers() {
 
   const filteredUsers = useMemo(() => {
     if (!userSearchTerm) return users;
-    const lower = userSearchTerm.toLowerCase();
-    return users.filter(u => 
-      (u.displayName?.toLowerCase() || '').includes(lower) ||
-      (u.email?.toLowerCase() || '').includes(lower)
-    );
+    return smartSearch(users, userSearchTerm, ['displayName', 'email', 'phone']);
   }, [users, userSearchTerm]);
 
   const filteredContent = useMemo(() => {
     if (!contentSearchTerm) return contentList;
-    const lower = contentSearchTerm.toLowerCase();
-    return contentList.filter(c => c.title.toLowerCase().includes(lower));
+    return smartSearch(contentList, contentSearchTerm);
   }, [contentList, contentSearchTerm]);
 
   return (

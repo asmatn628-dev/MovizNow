@@ -89,6 +89,11 @@ service cloud.firestore {
       allow write: if isAdminOrEditor();
     }
 
+    match /metadata/{docId} {
+      allow read: if true;
+      allow write: if isAdminOrEditor();
+    }
+
     match /analytics/{eventId} {
       allow read: if isAdmin() || isManager() || (isUserManager() && get(/databases/$(database)/documents/users/$(resource.data.userId)).data.managedBy == request.auth.uid);
       allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid;

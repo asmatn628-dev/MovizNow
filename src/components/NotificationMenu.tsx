@@ -2,20 +2,21 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Bell } from 'lucide-react';
 import { collection, query, orderBy, onSnapshot, doc, updateDoc } from 'firebase/firestore';
 import { db } from '../firebase';
-import { AppNotification, UserProfile } from '../types';
+import { useAuth } from '../contexts/AuthContext';
+import { AppNotification } from '../types';
 import { formatDistanceToNow } from 'date-fns';
 import { Link } from 'react-router-dom';
 
-interface NotificationMenuProps {
-  profile: UserProfile;
-}
+interface NotificationMenuProps {}
 
-export const NotificationMenu: React.FC<NotificationMenuProps> = ({ profile }) => {
+export const NotificationMenu: React.FC<NotificationMenuProps> = () => {
+  const { profile } = useAuth();
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [isOpen, setIsOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
+    if (!profile) return;
     const q = query(collection(db, 'notifications'), orderBy('createdAt', 'desc'));
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const notifs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as AppNotification))
@@ -24,7 +25,7 @@ export const NotificationMenu: React.FC<NotificationMenuProps> = ({ profile }) =
     });
 
     return () => unsubscribe();
-  }, []);
+  }, [profile]);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -39,7 +40,7 @@ export const NotificationMenu: React.FC<NotificationMenuProps> = ({ profile }) =
 
   const handleOpen = async () => {
     setIsOpen(!isOpen);
-    if (!isOpen && profile.uid) {
+    if (!isOpen && profile?.uid) {
       // Update lastNotificationCheck when opening the menu
       try {
         const userRef = doc(db, 'users', profile.uid);
@@ -51,6 +52,8 @@ export const NotificationMenu: React.FC<NotificationMenuProps> = ({ profile }) =
       }
     }
   };
+
+  if (!profile) return null;
 
   const unreadCount = notifications.filter(n => {
     const notifDate = new Date(n.createdAt);

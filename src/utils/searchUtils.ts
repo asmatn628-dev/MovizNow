@@ -31,42 +31,94 @@ export const levenshteinDistance = (a: string, b: string): number => {
   return matrix[b.length][a.length];
 };
 
-export const isFuzzyMatch = (searchWord: string, targetWord: string, maxErrors: number = 3): boolean => {
-  if (searchWord.length === 0) return false;
-  
-  // Exact or substring match is always true
-  if (targetWord.includes(searchWord)) return true;
-
-  // If search word is very short, require exact match or prefix match
-  if (searchWord.length <= 2) {
-    return targetWord.startsWith(searchWord);
-  }
-
-  // Check Levenshtein distance
-  const distance = levenshteinDistance(searchWord, targetWord);
-  
-  // Allow more errors for longer words
-  const allowedErrors = Math.min(maxErrors, Math.floor(searchWord.length / 2));
-  
-  return distance <= allowedErrors;
-};
-
-export const smartSearch = <T extends { title: string }>(
+export const smartSearch = <T extends Record<string, any>>(
   items: T[],
   query: string,
-  maxErrors: number = 3
+  fields: (keyof T)[] = ['title', 'name', 'displayName', 'email', 'phone'] as (keyof T)[]
 ): T[] => {
   if (!query.trim()) return [];
 
   const searchWords = query.toLowerCase().split(/[\s\-:]+/).filter(w => w.length > 0);
   if (searchWords.length === 0) return [];
 
-  return items.filter(item => {
-    const titleWords = item.title.toLowerCase().split(/[\s\-:]+/).filter(w => w.length > 0);
+  const scoredItems = items.map(item => {
+    // Combine all searchable fields into one string for matching
+    const searchableText = fields
+      .map(f => String(item[f] || '').toLowerCase())
+      .join(' ');
     
-    // For each search word, check if it fuzzy matches ANY word in the title
-    return searchWords.some(searchWord => {
-      return titleWords.some(titleWord => isFuzzyMatch(searchWord, titleWord, maxErrors));
-    });
+    const itemWords = searchableText.split(/[\s\-:]+/).filter(w => w.length > 0);
+    
+    let exactMatches = 0;
+    let fuzzyMatches = 0;
+    let fuzzyWordsUsed = 0;
+    
+    const matchedIndices = new Set<number>();
+
+    for (const searchWord of searchWords) {
+      let foundMatch = false;
+      
+      // 1. Try exact or prefix match
+      for (let i = 0; i < itemWords.length; i++) {
+        if (matchedIndices.has(i)) continue;
+        const itemWord = itemWords[i];
+        if (itemWord === searchWord || itemWord.startsWith(searchWord)) {
+          exactMatches++;
+          matchedIndices.add(i);
+          foundMatch = true;
+          break;
+        }
+      }
+
+      // 2. Try fuzzy match (up to 2 spelling relaxations) for up to 2 words
+      if (!foundMatch && fuzzyWordsUsed < 2 && searchWord.length > 2) {
+        for (let i = 0; i < itemWords.length; i++) {
+          if (matchedIndices.has(i)) continue;
+          const itemWord = itemWords[i];
+          
+          const distance = levenshteinDistance(searchWord, itemWord);
+          if (distance <= 2) {
+            fuzzyMatches++;
+            fuzzyWordsUsed++;
+            matchedIndices.add(i);
+            foundMatch = true;
+            break;
+          }
+        }
+      }
+    }
+
+    const totalMatches = exactMatches + fuzzyMatches;
+    const matchRatio = totalMatches / searchWords.length;
+    
+    // Requirement: if half words match then also show results
+    const isMatch = matchRatio >= 0.5;
+
+    let score = 0;
+    if (isMatch) {
+      // Exact substring match in any field gets highest priority
+      if (searchableText.includes(query.toLowerCase())) {
+        score += 10000;
+      }
+      
+      // Boost for exact word matches
+      score += exactMatches * 1000;
+      
+      // Boost for fuzzy matches (less than exact)
+      score += fuzzyMatches * 100;
+      
+      // Boost for match ratio
+      score += matchRatio * 500;
+      
+      // Tie-breaker: shorter searchable text first if scores are equal
+      score -= searchableText.length * 0.1;
+    }
+
+    return { item, score, isMatch };
   });
+
+  return scoredItems
+    .filter(si => si.isMatch)
+    .sort((a, b) => b.score - a.score)
+    .map(si => si.item);
 };

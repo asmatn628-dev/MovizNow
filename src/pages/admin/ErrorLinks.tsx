@@ -75,6 +75,7 @@ export default function ErrorLinks() {
     if (d.includes('redirect')) return 'Redirect';
     if (d.includes('unavailable') || d.includes('503') || d.includes('500')) return 'Unavailable';
     if (d.includes('size mismatch')) return 'Size Mismatch';
+    if (d.includes('missing size') || d.includes('missing unit')) return 'Missing Size/Unit';
     if (d.includes('mismatch')) return 'Mismatches';
     if (d.includes('missing filename')) return 'Missing Filename';
     if (d.includes('missing url')) return 'Missing URL';
@@ -449,18 +450,19 @@ export default function ErrorLinks() {
           languages, 
           qualities, 
           controller.signal,
-          item.link?.size,
-          item.link?.unit
+          item.info.link?.size,
+          item.info.link?.unit
         );
         results.push(res);
         
         // Show new results as they are found
-        if (!res.ok || res.statusLabel === "BROKEN" || res.statusLabel === "MISSING_FILENAME") {
+        if (!res.ok || res.statusLabel === "BROKEN" || res.statusLabel === "MISSING_FILENAME" || res.statusLabel === "MISSING_METADATA" || (res.mismatchWarnings && res.mismatchWarnings.length > 0)) {
           setErrorLinks(prev => {
+            const errorDetail = (res.mismatchWarnings && res.mismatchWarnings.length > 0) ? res.mismatchWarnings.join(', ') : (res.message || res.statusLabel || "Unknown Error");
             const newError: ErrorLinkInfo = {
               ...item.info,
-              errorDetail: res.message || res.statusLabel || "Unknown Error",
-              errorCategory: categorizeError(res.message || res.statusLabel || "Unknown Error"),
+              errorDetail: errorDetail,
+              errorCategory: categorizeError(errorDetail),
               fetchedSize: res.fileSizeText?.split(' ')[0],
               fetchedUnit: res.fileSizeText?.split(' ')[1] as 'MB' | 'GB',
               createdAt: new Date().toISOString()

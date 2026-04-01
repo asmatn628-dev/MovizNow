@@ -5,6 +5,7 @@ import { UserProfile, Role } from '../../types';
 import { Users, ChevronRight, Search, X } from 'lucide-react';
 import { format } from 'date-fns';
 import { useNavigate } from 'react-router-dom';
+import { smartSearch } from '../../utils/searchUtils';
 
 export default function UserManagers() {
   const [managers, setManagers] = useState<UserProfile[]>([]);
@@ -40,10 +41,7 @@ export default function UserManagers() {
     }
   };
 
-  const filteredManagers = managers.filter(m => 
-    (m.displayName?.toLowerCase() || '').includes(searchTerm.toLowerCase()) ||
-    (m.email?.toLowerCase() || '').includes(searchTerm.toLowerCase())
-  );
+  const filteredManagers = smartSearch(managers, searchTerm, ['displayName', 'email']);
 
   return (
     <div className="p-4 md:p-8">

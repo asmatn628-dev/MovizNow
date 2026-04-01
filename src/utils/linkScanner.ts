@@ -87,21 +87,21 @@ export function formatQuality(q?: string) {
   return lower;
 }
 
-export function normalizePrintQuality(v?: string, fileName?: string) {
-  if (!v && !fileName) return undefined;
-  if (fileName && /\bHD\b/i.test(fileName)) return "WEB-DL";
-  if (!v) return undefined;
-  const s = v.toUpperCase().replace(/[\s\.\-_]+/g, "");
-  if (s.includes("WEBDL")) return "WEB-DL";
-  if (s.includes("WEBRIP")) return "WEBRip";
-  if (s.includes("HDRIP")) return "HDRip";
-  if (s.includes("BLURAY")) return "BluRay";
-  if (s.includes("HQHDTC")) return "HQ HDTC";
-  if (s.includes("HDTC")) return "HDTC";
-  if (s.includes("HDCAM")) return "HDCAM";
-  if (s.includes("DVDRIP")) return "DVDRip";
-  if (s.includes("BRRIP")) return "BRRip";
-  return s;
+export function normalizePrintQuality(text?: string) {
+  if (!text) return undefined;
+  
+  if (/(web[\.\-\s_]*rip)/i.test(text)) return "WEB-Rip";
+  if (/(hd[\.\-\s_]*rip)/i.test(text)) return "HD-Rip";
+  if (/(blu[\.\-\s_]*ray|bd[\.\-\s_]*rip|br[\.\-\s_]*rip)/i.test(text)) return "Blu-Ray";
+  if (/(web[\.\-\s_]*dl)/i.test(text)) return "WEB-DL";
+  if (/(hq[\.\-\s_]*hdtc)/i.test(text)) return "HQ HDTC";
+  if (/(hdtc)/i.test(text)) return "HDTC";
+  if (/(hdcam)/i.test(text)) return "HDCAM";
+  if (/(dvd[\.\-\s_]*rip)/i.test(text)) return "DVDRip";
+  
+  if (/\bHD\b/i.test(text)) return "WEB-DL";
+  
+  return undefined;
 }
 
 export function detectMetadataForLink(text: string, url: string, languages?: Language[], qualities?: Quality[]) {
@@ -245,7 +245,7 @@ export function detectMetadataForLink(text: string, url: string, languages?: Lan
     codecLabel: codec,
     audioLabel: audio,
     subtitleLabel: /subtitles|subs|softsub|hardsub|esub|esubs|msub|msubs/i.test(lower) ? "Yes" : undefined,
-    printQualityLabel: normalizePrintQuality(undefined, lower),
+    printQualityLabel: normalizePrintQuality(lower),
     season: parseInt(lower.match(/(?<=^|[^a-zA-Z0-9])S(?:eason)?\s*(\d+)\b/i)?.[1] || "0") || undefined,
     episode: parseInt(lower.match(/(?<=^|[^a-zA-Z0-9])E(?:pisode|p)?\s*(\d+)\b/i)?.[1] || "0") || undefined,
     isFullSeasonMKV: /full\s*season|complete\s*season/i.test(lower) && lower.includes(".mkv"),
@@ -419,7 +419,7 @@ export function detectFromFilename(fileName?: string, finalUrl?: string, languag
 
   const subtitle = /subtitles|subs|softsub|hardsub|esub|esubs|msub|msubs/i.test(source) ? "Subtitles" : undefined;
   
-  let printQuality = normalizePrintQuality(source.match(/\b(web[ -]?dl|web[ -]?rip|hdrip|blu[ -]?ray|hq[ - ]?hdtc|hdtc|hdcam|dvdrip|brrip)\b/i)?.[1], fileName);
+  let printQuality = normalizePrintQuality(source);
 
   if (!printQuality && qualities && qualities.length > 0) {
     qualities.forEach(q => {
@@ -536,7 +536,10 @@ export async function performFullLinkScan(
   }
 
   // Size mismatch validation
-  if (result.ok && result.fileSize && expectedSize && expectedUnit) {
+  if (url && (!expectedSize || !expectedUnit)) {
+    result.statusLabel = "BROKEN";
+    result.message = "Missing size or unit";
+  } else if (result.ok && result.fileSize && expectedSize && expectedUnit) {
     const expectedSizeBytes = parseFloat(expectedSize) * (expectedUnit === 'GB' ? 1000 * 1000 * 1000 : 1000 * 1000);
     const diff = Math.abs(result.fileSize - expectedSizeBytes);
     if (diff > 50 * 1000 * 1000) { // 50MB tolerance
@@ -547,9 +550,8 @@ export async function performFullLinkScan(
 
   // Filename validation
   if (result.ok && result.fileName) {
-    const fileName = result.fileName.toLowerCase();
-    const hasQuality = /\b(2160p|4k|1440p|1080p|720p|480p|360p|540p)\b/i.test(fileName);
-    const hasLanguage = /\b(hindi|english|urdu|tamil|telugu|punjabi|marathi|bengali|gujarati|kannada|malayalam|odia|assamese|spanish|french|german|italian|japanese|korean|chinese|arabic|russian|portuguese|dutch|turkish|vietnamese|thai|indonesian|malay|filipino|persian|polish|ukrainian|greek|hebrew|swedish|danish|norwegian|finnish|czech|hungarian|romanian|bulgarian|serbian|croatian|slovak|slovenian|lithuanian|latvian|estonian|icelandic|irish|welsh|scottish gaelic|basque|catalan|galician|afrikaans|swahili|zulu|xhosa|amharic|somali|yoruba|igbo|hausa|nepali|sinhala|burmese|khmer|lao|tibetan|mongolian|uzbek|kazakh|kyrgyz|tajik|turkmen|azerbaijani|armenian|georgian|pashto|kurdish|sindhi|kashmiri|dual[ ._-]?audio)\b/i.test(fileName);
+    const hasQuality = !!result.qualityLabel;
+    const hasLanguage = !!result.audioLabel;
     
     if (!hasQuality && result.statusLabel === "WORKING") {
       result.statusLabel = "MISSING_METADATA";
