@@ -460,6 +460,7 @@ export default function ErrorLinks() {
             const newError: ErrorLinkInfo = {
               ...item.info,
               errorDetail: res.message || res.statusLabel || "Unknown Error",
+              errorCategory: categorizeError(res.message || res.statusLabel || "Unknown Error"),
               fetchedSize: res.fileSizeText?.split(' ')[0],
               fetchedUnit: res.fileSizeText?.split(' ')[1] as 'MB' | 'GB',
               createdAt: new Date().toISOString()
