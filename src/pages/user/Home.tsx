@@ -517,7 +517,7 @@ export default function Home({ onOpenMediaModal }: { onOpenMediaModal: () => voi
                         <h3 className="text-[8px] font-bold text-white line-clamp-1 mb-0.5 group-hover/card:text-indigo-400 transition-colors">
                           {content.title}
                         </h3>
-                        <div className="flex flex-col gap-0.5 text-[6px] text-zinc-400">
+                        <div className="flex flex-col gap-0.5 text-[8px] text-zinc-400">
                           <div className="flex items-center justify-between">
                             <span>{content.year}</span>
                           </div>

@@ -113,7 +113,7 @@ const ContentCard = React.memo(({
         <Link to={`/movie/${content.id}`} className="hover:text-emerald-500 transition-colors">
           <h3 className="font-bold text-sm md:text-base leading-tight mb-1 line-clamp-2">{formatContentTitle(content)}</h3>
         </Link>
-        <div className="flex items-center gap-2 text-zinc-500 text-[10px] mb-2">
+        <div className="flex items-center gap-2 text-zinc-500 text-xs mb-2">
           <span>{content.year}</span>
           {content.runtime && (
             <>
@@ -121,17 +121,16 @@ const ContentCard = React.memo(({
               <span>{content.runtime}</span>
             </>
           )}
-          {contentLangs && (
-            <>
-              <span className="w-1 h-1 bg-zinc-700 rounded-full"></span>
-              <span className="line-clamp-1">{contentLangs}</span>
-            </>
-          )}
         </div>
         <div className="flex flex-col gap-0.5 mt-auto">
           {contentGenres && (
             <p className="text-zinc-500 text-[10px] line-clamp-1 italic">
               {contentGenres}
+            </p>
+          )}
+          {contentLangs && (
+            <p className="text-zinc-400 text-xs font-medium line-clamp-1">
+              {contentLangs}
             </p>
           )}
         </div>
