@@ -61,6 +61,7 @@ const badgeMap: Record<StatusLabel, string> = {
   UNKNOWN: "bg-zinc-500/15 text-zinc-300 border-zinc-700",
   MISSING_FILENAME: "bg-pink-500/15 text-pink-400 border-pink-800/80",
   MISSING_METADATA: "bg-pink-500/15 text-pink-400 border-pink-800/80",
+  SMALL_FILE: "bg-orange-500/15 text-orange-400 border-orange-800/80",
 };
 
 export const LinkCheckerModal: React.FC<Props> = ({
@@ -191,7 +192,7 @@ export const LinkCheckerModal: React.FC<Props> = ({
           allResults.push(result);
           completedCount++;
 
-          if (result.statusLabel === "WORKING") {
+          if (result.statusLabel === "WORKING" || result.statusLabel === "SMALL_FILE" || result.statusLabel === "MISSING_FILENAME" || result.statusLabel === "MISSING_METADATA") {
             setSelectedUrls((prev) => new Set(prev).add(result.url));
           }
 
@@ -401,7 +402,8 @@ export const LinkCheckerModal: React.FC<Props> = ({
     const mismatches = results.filter((r) => (r.mismatchWarnings?.length || 0) > 0).length;
     const missingFilename = results.filter((r) => r.statusLabel === "MISSING_FILENAME").length;
     const missingMetadata = results.filter((r) => r.statusLabel === "MISSING_METADATA").length;
-    return { working, broken, protectedCount, redirect, unavailable, unknown, mismatches, missingFilename, missingMetadata };
+    const smallFile = results.filter((r) => r.statusLabel === "SMALL_FILE").length;
+    return { working, broken, protectedCount, redirect, unavailable, unknown, mismatches, missingFilename, missingMetadata, smallFile };
   }, [results]);
 
   const sortedResults = useMemo(() => {
@@ -498,7 +500,8 @@ export const LinkCheckerModal: React.FC<Props> = ({
                       ["Unknown", summary.unknown, "text-zinc-300"],
                       ["Mismatches", summary.mismatches, "text-pink-400"],
                       ["Missing Filename", summary.missingFilename, "text-pink-400"],
-                      ["Missing Metadata", summary.missingMetadata, "text-pink-400"]
+                      ["Missing Metadata", summary.missingMetadata, "text-pink-400"],
+                      ["Small File", summary.smallFile, "text-orange-400"]
                     ].map(([label, count, color]) => (
                       <div key={String(label)} className="rounded-2xl border border-zinc-800 bg-zinc-900/60 p-4">
                         <div className={`text-sm ${color}`}>{label}</div>

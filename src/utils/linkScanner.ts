@@ -8,7 +8,8 @@ export type StatusLabel =
   | "UNAVAILABLE"
   | "UNKNOWN"
   | "MISSING_FILENAME"
-  | "MISSING_METADATA";
+  | "MISSING_METADATA"
+  | "SMALL_FILE";
 
 export type LinkCheckResult = {
   url: string;
@@ -531,15 +532,12 @@ export async function performFullLinkScan(
   }
   
   if (result.ok && result.fileSize && result.fileSize < 20 * 1000 * 1000) {
-    result.statusLabel = "BROKEN";
+    result.statusLabel = "SMALL_FILE";
     result.message = "File size too small (< 20MB)";
   }
 
   // Size mismatch validation
-  if (url && (!expectedSize || !expectedUnit)) {
-    result.statusLabel = "BROKEN";
-    result.message = "Missing size or unit";
-  } else if (result.ok && result.fileSize && expectedSize && expectedUnit) {
+  if (result.ok && result.fileSize && expectedSize && expectedUnit) {
     const expectedSizeBytes = parseFloat(expectedSize) * (expectedUnit === 'GB' ? 1000 * 1000 * 1000 : 1000 * 1000);
     const diff = Math.abs(result.fileSize - expectedSizeBytes);
     if (diff > 50 * 1000 * 1000) { // 50MB tolerance
