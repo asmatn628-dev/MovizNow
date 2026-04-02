@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { db } from '../../firebase';
-import { collection, onSnapshot, query, where, doc, updateDoc } from 'firebase/firestore';
+import { collection, onSnapshot, query, where, doc, updateDoc, getDocs } from 'firebase/firestore';
 import { UserProfile, Role } from '../../types';
 import { Users, ChevronRight, Search, X } from 'lucide-react';
 import { format } from 'date-fns';
@@ -16,7 +16,6 @@ export default function UserManagers() {
   useEffect(() => {
     const fetchManagers = async () => {
       try {
-        const { getDocs } = await import('firebase/firestore');
         const q = query(collection(db, 'users'), where('isUserManager', '==', true));
         const snapshot = await getDocs(q);
         const data = snapshot.docs.map(doc => ({ ...doc.data() } as UserProfile));

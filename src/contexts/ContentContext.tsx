@@ -149,7 +149,6 @@ export function ContentProvider({ children }: { children: React.ReactNode }) {
     const fetchStaticData = async () => {
       if (!navigator.onLine) return;
       try {
-        const { getDocs } = await import('firebase/firestore');
         
         // Fetch Genres
         const genresSnap = await getDocs(collection(db, 'genres'));

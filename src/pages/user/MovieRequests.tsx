@@ -40,7 +40,6 @@ export default function MovieRequests() {
 
     const fetchRequests = async () => {
       try {
-        const { getDocs } = await import('firebase/firestore');
         const q = query(
           collection(db, 'movie_requests'), 
           where('userId', '==', profile.uid),

@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { db } from '../../firebase';
-import { collection, doc, updateDoc, onSnapshot, query, where } from 'firebase/firestore';
+import { collection, doc, updateDoc, onSnapshot, query, where, getDocs, writeBatch } from 'firebase/firestore';
 import { UserProfile, Content } from '../../types';
 import { Settings, X, Check, Search } from 'lucide-react';
 import AlertModal from '../../components/AlertModal';
@@ -20,7 +20,6 @@ export default function TemporaryUsers() {
   useEffect(() => {
     const fetchUsers = async () => {
       try {
-        const { getDocs, writeBatch } = await import('firebase/firestore');
         const q = query(collection(db, 'users'), where('role', '==', 'temporary'));
         const snapshot = await getDocs(q);
         const data = snapshot.docs.map((doc) => ({ ...doc.data() } as UserProfile));
@@ -59,7 +58,6 @@ export default function TemporaryUsers() {
   useEffect(() => {
     const fetchContent = async () => {
       try {
-        const { getDocs } = await import('firebase/firestore');
         const snapshot = await getDocs(collection(db, 'content'));
         const data = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() } as Content));
         setContentList(data.sort((a, b) => a.title.localeCompare(b.title)));

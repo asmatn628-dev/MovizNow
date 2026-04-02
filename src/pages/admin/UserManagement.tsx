@@ -138,7 +138,6 @@ export default function UserManagement() {
     if (profile?.role === 'admin' || profile?.role === 'owner') {
       const fetchManagers = async () => {
         try {
-          const { getDocs } = await import('firebase/firestore');
           const q = query(collection(db, 'users'), where('isUserManager', '==', true));
           const snapshot = await getDocs(q);
           const managersData: Record<string, string> = {};
@@ -158,7 +157,6 @@ export default function UserManagement() {
   useEffect(() => {
     const fetchContent = async () => {
       try {
-        const { getDocs } = await import('firebase/firestore');
         const snapshot = await getDocs(collection(db, 'content'));
         setAllContent(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
       } catch (error) {

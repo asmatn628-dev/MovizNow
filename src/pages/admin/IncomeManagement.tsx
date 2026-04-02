@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { db } from '../../firebase';
-import { collection, addDoc, deleteDoc, doc, onSnapshot, query, orderBy } from 'firebase/firestore';
+import { collection, addDoc, deleteDoc, doc, onSnapshot, query, orderBy, getDocs } from 'firebase/firestore';
 import { Income } from '../../types';
 import { Plus, Trash2, DollarSign, Calendar, TrendingUp } from 'lucide-react';
 import { format } from 'date-fns';
@@ -23,7 +23,6 @@ export default function IncomeManagement() {
   useEffect(() => {
     const fetchIncome = async () => {
       try {
-        const { getDocs } = await import('firebase/firestore');
         const q = query(collection(db, 'income'), orderBy('date', 'desc'));
         const snapshot = await getDocs(q);
         setIncomes(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Income)));

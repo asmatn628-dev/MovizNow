@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { db } from '../../firebase';
-import { collection, addDoc, deleteDoc, doc, updateDoc, onSnapshot, writeBatch } from 'firebase/firestore';
+import { collection, addDoc, deleteDoc, doc, updateDoc, onSnapshot, writeBatch, getDocs } from 'firebase/firestore';
 import { Language } from '../../types';
 import { Plus, Edit2, Trash2, X, Check, Search, GripVertical } from 'lucide-react';
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
@@ -19,7 +19,6 @@ export default function LanguageManagement() {
   useEffect(() => {
     const fetchLanguages = async () => {
       try {
-        const { getDocs } = await import('firebase/firestore');
         const snapshot = await getDocs(collection(db, 'languages'));
         const data = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() } as Language));
         setLanguages(data.sort((a, b) => {

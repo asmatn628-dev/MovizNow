@@ -4,7 +4,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { Film, Users, Tags, Languages, Clock, LogOut, Menu, X, MonitorPlay, BarChart3, DollarSign, AlertTriangle, Bell, MessageCircle } from 'lucide-react';
 import { clsx } from 'clsx';
 import ConfirmModal from '../../components/ConfirmModal';
-import { collection, onSnapshot, query, where } from 'firebase/firestore';
+import { collection, onSnapshot, query, where, getDocs } from 'firebase/firestore';
 import { db } from '../../firebase';
 
 export default function AdminLayout() {
@@ -20,7 +20,6 @@ export default function AdminLayout() {
 
     const fetchReportedLinksCount = async () => {
       try {
-        const { getDocs } = await import('firebase/firestore');
         const q = query(collection(db, 'reported_links'), where('status', '==', 'pending'));
         const snapshot = await getDocs(q);
         setReportedLinksCount(snapshot.size);

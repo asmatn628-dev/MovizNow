@@ -173,6 +173,10 @@ export const LinkCheckerModal: React.FC<Props> = ({
       }
     }
 
+    if (!onlyUrls?.length) {
+      setSelectedUrls(new Set());
+    }
+
     setLoading(true);
     try {
       const concurrency = 10;
@@ -311,7 +315,7 @@ export const LinkCheckerModal: React.FC<Props> = ({
       return {
         id: Math.random().toString(36).substr(2, 9),
         name: finalName,
-        url: r.finalUrl || r.url,
+        url: normalizeUrl(r.finalUrl || r.url),
         size: sizeStr,
         unit: unit,
         season: r.season,
@@ -410,24 +414,20 @@ export const LinkCheckerModal: React.FC<Props> = ({
   }, [results]);
 
   const sortedResults = useMemo(() => {
-    const isSeries = results.some(r => r.season || r.episode || r.isFullSeasonMKV || r.isFullSeasonZIP);
-    
     return [...results].sort((a, b) => {
-      if (isSeries) {
-        if (a.isFullSeasonZIP && !b.isFullSeasonZIP) return -1;
-        if (!a.isFullSeasonZIP && b.isFullSeasonZIP) return 1;
-        
-        if (a.isFullSeasonMKV && !b.isFullSeasonMKV) return -1;
-        if (!a.isFullSeasonMKV && b.isFullSeasonMKV) return 1;
-        
-        if (a.season !== b.season) {
-          return (a.season || 0) - (b.season || 0);
-        }
-        
-        return (a.episode || 0) - (b.episode || 0);
-      } else {
-        return (b.fileSize || 0) - (a.fileSize || 0);
+      // Group by type: ZIP, MKV, Episode, Movie
+      const typeA = a.isFullSeasonZIP ? 1 : a.isFullSeasonMKV ? 2 : (a.season || a.episode) ? 3 : 4;
+      const typeB = b.isFullSeasonZIP ? 1 : b.isFullSeasonMKV ? 2 : (b.season || b.episode) ? 3 : 4;
+
+      if (typeA !== typeB) return typeA - typeB;
+
+      if (typeA === 3) { // Episodes
+        if (a.season !== b.season) return (a.season || 0) - (b.season || 0);
+        if (a.episode !== b.episode) return (a.episode || 0) - (b.episode || 0);
       }
+
+      // If same type (and same season/episode if applicable), sort by size ascending (smallest to largest)
+      return (a.fileSize || 0) - (b.fileSize || 0);
     });
   }, [results]);
 
@@ -558,6 +558,9 @@ export const LinkCheckerModal: React.FC<Props> = ({
                                   {result.isFullSeasonZIP ? <span className="rounded-full border border-purple-800 bg-purple-500/10 px-2.5 py-1 text-[11px] font-bold text-purple-300">Full Season ZIP</span> : null}
                                 </div>
                                 <div className="mt-2 break-all text-sm text-zinc-200">{result.url}</div>
+                                {result.finalUrl && result.finalUrl !== result.url && (
+                                  <div className="mt-1 break-all text-xs text-zinc-400">Redirects to: {result.finalUrl}</div>
+                                )}
                                 <p className="text-sm text-zinc-400 mt-1">{result.message || (result.ok ? "The link is reachable." : "The link could not be verified.")}</p>
                               </div>
                             </div>

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { db } from '../../firebase';
-import { collection, onSnapshot, query, orderBy, deleteDoc, doc, updateDoc, where } from 'firebase/firestore';
+import { collection, onSnapshot, query, orderBy, deleteDoc, doc, updateDoc, where, getDocs } from 'firebase/firestore';
 import { useAuth } from '../../contexts/AuthContext';
 import { Film, Search, Clock, CheckCircle2, XCircle, MessageCircle, Trash2, Tv, Filter, User, Mail, Calendar, ArrowUp, ArrowDown, Plus, X, Eye, MessageSquare } from 'lucide-react';
 import { clsx } from 'clsx';
@@ -60,7 +60,6 @@ export default function MovieRequestsManagement() {
   useEffect(() => {
     const fetchContent = async () => {
       try {
-        const { getDocs } = await import('firebase/firestore');
         const snapshot = await getDocs(collection(db, 'content'));
         setAllContent(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
       } catch (error) {

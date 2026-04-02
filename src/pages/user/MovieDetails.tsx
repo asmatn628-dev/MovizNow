@@ -6,7 +6,7 @@ import { doc, getDoc, updateDoc, arrayUnion, arrayRemove, deleteDoc, addDoc, col
 import { Content, QualityLinks, Season } from '../../types';
 import { useAuth } from '../../contexts/AuthContext';
 import { useContent } from '../../contexts/ContentContext';
-import { Film, ArrowLeft, Play, Clock, Heart, MessageCircle, AlertCircle, Download, Share2, Chrome, Copy, Youtube, X, Edit2, Trash2, Settings, Lock, ChevronDown, ChevronUp, Loader2, Search, AlertTriangle } from 'lucide-react';
+import { Film, ArrowLeft, Play, Clock, Heart, MessageCircle, AlertCircle, Download, Share2, Chrome, Copy, Youtube, X, Edit2, Trash2, Settings, Lock, ChevronDown, ChevronUp, Loader2, Search, AlertTriangle, Globe } from 'lucide-react';
 import { logEvent } from '../../services/analytics';
 import AlertModal from '../../components/AlertModal';
 import ConfirmModal from '../../components/ConfirmModal';
@@ -14,6 +14,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { formatContentTitle, formatReleaseDate, formatRuntime } from '../../utils/contentUtils';
 import { generateTinyUrl } from '../../utils/tinyurl';
 import { MediaModal } from '../../components/MediaModal';
+import ContentCard from '../../components/ContentCard';
 import { LazyLoadImage } from 'react-lazy-load-image-component';
 
 export default function MovieDetails() {
@@ -80,6 +81,18 @@ export default function MovieDetails() {
 
   const [fullContent, setFullContent] = useState<Content | null>(null);
   const [fetchFailed, setFetchFailed] = useState(false);
+  const [recentlyViewed, setRecentlyViewed] = useState<Content[]>([]);
+
+  useEffect(() => {
+    try {
+      const recentStr = localStorage.getItem('recently_viewed');
+      if (recentStr) {
+        setRecentlyViewed(JSON.parse(recentStr));
+      }
+    } catch (e) {
+      console.error("Failed to load recently viewed", e);
+    }
+  }, []);
 
   useEffect(() => {
     if ((!content || (!content.movieLinks && !content.seasons)) && !fullContent && id && !fetchFailed && !isOffline) {
@@ -129,6 +142,7 @@ export default function MovieDetails() {
         genres: genres.filter(g => mergedContent.genreIds?.includes(g.id)).map(g => g.name).join(', '),
         releaseDate: mergedContent.releaseDate,
         duration: mergedContent.runtime,
+        country: mergedContent.country,
         type: mergedContent.type,
         rating: mergedContent.imdbRating,
         isFetched: !!mergedContent.imdbRating
@@ -137,6 +151,50 @@ export default function MovieDetails() {
       setImdbData(initialData);
     }
   }, [mergedContent, genres]);
+
+  const recommendedMovies = useMemo(() => {
+    if (!mergedContent || contentList.length === 0) return [];
+    
+    const currentId = mergedContent.id;
+    const currentGenres = mergedContent.genreIds || [];
+    const currentLangs = mergedContent.languageIds || [];
+    
+    const scored = contentList
+      .filter(c => c.id !== currentId && c.status === 'published')
+      .map(c => {
+        let score = 0;
+        
+        if (c.genreIds) {
+          const commonGenres = c.genreIds.filter(g => currentGenres.includes(g));
+          score += commonGenres.length * 2;
+        }
+        
+        if (c.languageIds) {
+          const commonLangs = c.languageIds.filter(l => currentLangs.includes(l));
+          score += commonLangs.length * 1;
+        }
+        
+        recentlyViewed.forEach(rv => {
+          if (rv.id !== c.id) {
+             if (c.genreIds && rv.genreIds) {
+               const common = c.genreIds.filter(g => rv.genreIds?.includes(g));
+               score += common.length * 0.5;
+             }
+          }
+        });
+        
+        return { content: c, score };
+      });
+      
+    scored.sort((a, b) => {
+      if (b.score !== a.score) return b.score - a.score;
+      const aTime = a.content.createdAt ? new Date(a.content.createdAt).getTime() : 0;
+      const bTime = b.content.createdAt ? new Date(b.content.createdAt).getTime() : 0;
+      return bTime - aTime;
+    });
+    
+    return scored.slice(0, 10).map(s => s.content);
+  }, [mergedContent, contentList, recentlyViewed]);
 
   useEffect(() => {
     if (!contentLoading) {
@@ -297,6 +355,14 @@ export default function MovieDetails() {
           if (!mergedContent.runtime) {
             if (details.runtime) { updates.runtime = `${details.runtime} min`; hasUpdates = true; }
             else if (details.episode_run_time && details.episode_run_time.length > 0) { updates.runtime = `${details.episode_run_time[0]} min/episode`; hasUpdates = true; }
+          }
+
+          if (!mergedContent.country) {
+            const countryStr = details.production_countries?.map((c: any) => c.name).join(', ') || (details.origin_country ? details.origin_country.join(', ') : '');
+            if (countryStr) {
+              updates.country = countryStr;
+              hasUpdates = true;
+            }
           }
 
           if ((!mergedContent.cast || mergedContent.cast.length === 0) && details.credits?.cast) {
@@ -1058,7 +1124,7 @@ export default function MovieDetails() {
                       </h3>
                     </div>
                     
-                    <div className="grid grid-cols-2 md:grid-cols-3 gap-4 text-sm font-medium text-cyan-400/80">
+                    <div className="flex flex-wrap gap-6 text-sm font-medium text-cyan-400/80">
                       {imdbData.releaseDate && (
                         <div className="flex flex-col">
                           <span className="text-zinc-500 text-[10px] uppercase tracking-wider">Release Date</span>
@@ -1071,9 +1137,21 @@ export default function MovieDetails() {
                           <span>{formatRuntime(imdbData.duration)}</span>
                         </div>
                       )}
+                      {imdbData.country && !imdbData.country.includes(',') && (
+                        <div className="flex flex-col">
+                          <span className="text-zinc-500 text-[10px] uppercase tracking-wider">Country</span>
+                          <span>{imdbData.country}</span>
+                        </div>
+                      )}
                     </div>
 
                     <div className="flex flex-col gap-2 pt-2 border-t border-cyan-500/10">
+                      {imdbData.country && imdbData.country.includes(',') && (
+                        <div className="flex items-baseline gap-2">
+                          <span className="text-zinc-500 text-xs font-medium">Country</span>
+                          <span className="text-sm font-medium text-cyan-400/80">{imdbData.country}</span>
+                        </div>
+                      )}
                       {imdbData.genres && (
                         <div className="flex items-baseline gap-2">
                           <span className="text-zinc-500 text-xs font-medium">Genre</span>
@@ -1135,8 +1213,9 @@ export default function MovieDetails() {
 
                     <div className="flex flex-wrap gap-6 mb-8 text-sm font-medium text-cyan-400/80">
                       {mergedContent.year && <span className="flex items-center gap-2 bg-cyan-500/10 px-3 py-1.5 rounded-lg"><Clock className="w-4 h-4 text-cyan-500" /> {mergedContent.year}</span>}
-                      {mergedContent.runtime && mergedContent.type !== 'series' && <span className="flex items-center gap-2 bg-cyan-500/10 px-3 py-1.5 rounded-lg"><Clock className="w-4 h-4 text-cyan-500" /> {formatRuntime(mergedContent.runtime)}</span>}
                       {mergedContent.releaseDate && <span className="flex items-center gap-2 bg-cyan-500/10 px-3 py-1.5 rounded-lg"><Film className="w-4 h-4 text-cyan-500" /> {formatReleaseDate(mergedContent.releaseDate)}</span>}
+                      {mergedContent.runtime && mergedContent.type !== 'series' && <span className="flex items-center gap-2 bg-cyan-500/10 px-3 py-1.5 rounded-lg"><Clock className="w-4 h-4 text-cyan-500" /> {formatRuntime(mergedContent.runtime)}</span>}
+                      {mergedContent.country && <span className="flex items-center gap-2 bg-cyan-500/10 px-3 py-1.5 rounded-lg"><Globe className="w-4 h-4 text-cyan-500" /> {mergedContent.country}</span>}
                       {contentGenres && <span className="flex items-center gap-2 bg-cyan-500/10 px-3 py-1.5 rounded-lg">Genre: {contentGenres}</span>}
                       {contentLangs && <span className="flex items-center gap-2 bg-cyan-500/10 px-3 py-1.5 rounded-lg">Language: {contentLangs}</span>}
                       {mergedContent.qualityId && (() => {
@@ -1302,6 +1381,38 @@ export default function MovieDetails() {
                 </div>
               )}
             </section>
+
+            {/* Recommended Movies Section */}
+            {recommendedMovies.length > 0 && (
+              <div className="mt-12">
+                <div className="flex items-center justify-between mb-6">
+                  <h2 className="text-xl font-bold text-white flex items-center gap-2">
+                    <Heart className="w-5 h-5 text-cyan-500" />
+                    Recommended For You
+                  </h2>
+                </div>
+                <div className="relative group">
+                  <div 
+                    className="flex overflow-x-auto gap-4 pb-4 snap-x snap-mandatory hide-scrollbar"
+                    style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
+                  >
+                    {recommendedMovies.map(recContent => (
+                      <div key={recContent.id} className="min-w-[160px] sm:min-w-[200px] md:min-w-[240px] snap-start">
+                        <ContentCard
+                          content={recContent}
+                          profile={profile}
+                          qualities={qualities}
+                          languages={languages}
+                          genres={genres}
+                          onToggleFavorite={authToggleFavorite}
+                          onToggleWatchLater={authToggleWatchLater}
+                        />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </div>

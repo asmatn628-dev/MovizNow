@@ -137,6 +137,7 @@ export interface Content {
   seasons?: string; // JSON stringified Season[]
   imdbRating?: string; // Added imdbRating
   subtitles?: boolean; // Added subtitles
+  country?: string; // Added country
   order?: number; // Added order for sorting
 }
 

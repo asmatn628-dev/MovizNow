@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { db } from '../../firebase';
-import { collection, onSnapshot, doc, updateDoc, deleteDoc, getDoc, addDoc } from 'firebase/firestore';
+import { collection, onSnapshot, doc, updateDoc, deleteDoc, getDoc, addDoc, getDocs } from 'firebase/firestore';
 import { AlertTriangle, Edit2, Trash2, Bell, CheckCircle2, X, Save } from 'lucide-react';
 import { handleFirestoreError, OperationType } from '../../utils/firestoreErrorHandler';
 import { Content, QualityLinks, Season } from '../../types';
@@ -34,7 +34,6 @@ export default function ReportedLinks() {
   useEffect(() => {
     const fetchReports = async () => {
       try {
-        const { getDocs } = await import('firebase/firestore');
         const snapshot = await getDocs(collection(db, 'reported_links'));
         const data = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() } as ReportedLink));
         // Sort by status (pending first) then by date

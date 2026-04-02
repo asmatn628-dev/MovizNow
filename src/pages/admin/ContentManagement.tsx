@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useSearchParams, Link, useLocation } from 'react-router-dom';
 import { db } from '../../firebase';
-import { collection, addDoc, deleteDoc, doc, updateDoc, onSnapshot, writeBatch } from 'firebase/firestore';
+import { collection, addDoc, deleteDoc, doc, updateDoc, onSnapshot, writeBatch, getDocs } from 'firebase/firestore';
 import { useAuth } from '../../contexts/AuthContext';
 import { useContent } from '../../contexts/ContentContext';
 import { Content, Genre, Language, Quality, QualityLinks, Season, Episode, LinkDef, Role } from '../../types';
@@ -243,11 +243,13 @@ export default function ContentManagement() {
   const [selectedQuality, setSelectedQuality] = useState<string>('');
   const [subtitles, setSubtitles] = useState(false);
   const [cast, setCast] = useState('');
+  const [country, setCountry] = useState('');
   const [year, setYear] = useState(new Date().getFullYear());
   const [releaseDate, setReleaseDate] = useState('');
   const [runtime, setRuntime] = useState('');
   const [isDescriptionExpanded, setIsDescriptionExpanded] = useState(false);
   const [isCastExpanded, setIsCastExpanded] = useState(false);
+  const [isCountryExpanded, setIsCountryExpanded] = useState(false);
   
   // Movie specific
   const [movieLinks, setMovieLinks] = useState<QualityLinks>([]);
@@ -312,6 +314,7 @@ export default function ContentManagement() {
       setReleaseDate('');
       setRuntime('');
       setCast('');
+      setCountry('');
       setType('movie');
       setSelectedGenres([]);
       setSeasons([]);
@@ -335,7 +338,6 @@ export default function ContentManagement() {
   useEffect(() => {
     const fetchManagers = async () => {
       try {
-        const { getDocs } = await import('firebase/firestore');
         const snapshot = await getDocs(collection(db, 'users'));
         const managersData: Record<string, string> = {};
         snapshot.docs.forEach(doc => {
@@ -450,6 +452,7 @@ export default function ContentManagement() {
     setSelectedQuality('');
     setSubtitles(false);
     setCast('');
+    setCountry('');
     setYear(new Date().getFullYear());
     setReleaseDate('');
     setRuntime('');
@@ -498,6 +501,7 @@ export default function ContentManagement() {
     setSelectedQuality(content.qualityId || '');
     setSubtitles(content.subtitles || false);
     setCast((content.cast || []).join(', '));
+    setCountry(content.country || '');
     setYear(content.year);
     setReleaseDate(content.releaseDate || '');
     setRuntime(content.runtime || '');
@@ -594,6 +598,7 @@ export default function ContentManagement() {
         qualityId: selectedQuality,
         subtitles,
         cast: cast.split(',').map(c => c.trim()).filter(Boolean),
+        country,
         year,
         releaseDate,
         runtime,
@@ -939,6 +944,7 @@ export default function ContentManagement() {
     if (data.type) setType(data.type);
     if (data.description) setDescription(data.description);
     if (data.cast) setCast(data.cast);
+    if (data.country) setCountry(data.country);
     if (data.releaseDate) setReleaseDate(data.releaseDate);
     if (data.runtime) setRuntime(data.runtime);
     if (data.imdbLink) setImdbLink(data.imdbLink);
@@ -2438,8 +2444,8 @@ export default function ContentManagement() {
                     )}
                   </div>
 
-                  {/* 8. Description+Cast (with Arrows) */}
-                  <div className="grid grid-cols-2 gap-4">
+                  {/* 8. Description+Cast+Country (with Arrows) */}
+                  <div className="grid grid-cols-3 gap-4">
                     <div className="relative">
                       <div 
                         className="flex items-center justify-between bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-1 cursor-pointer"
@@ -2465,6 +2471,20 @@ export default function ContentManagement() {
                       {isCastExpanded && (
                         <div className="mt-1">
                           <textarea rows={3} value={cast} onChange={(e) => setCast(e.target.value)} className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-emerald-500" placeholder="Enter cast (comma separated)..." />
+                        </div>
+                      )}
+                    </div>
+                    <div className="relative">
+                      <div 
+                        className="flex items-center justify-between bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-1 cursor-pointer"
+                        onClick={() => setIsCountryExpanded(!isCountryExpanded)}
+                      >
+                        <span className="text-xs font-medium text-zinc-400">Country</span>
+                        {isCountryExpanded ? <ChevronUp className="w-3.5 h-3.5 text-zinc-400" /> : <ChevronDown className="w-3.5 h-3.5 text-zinc-400" />}
+                      </div>
+                      {isCountryExpanded && (
+                        <div className="mt-1">
+                          <textarea rows={3} value={country} onChange={(e) => setCountry(e.target.value)} className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-emerald-500" placeholder="Enter country (comma separated)..." />
                         </div>
                       )}
                     </div>

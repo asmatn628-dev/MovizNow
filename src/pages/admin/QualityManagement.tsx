@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { db } from '../../firebase';
-import { collection, addDoc, deleteDoc, doc, updateDoc, onSnapshot, writeBatch } from 'firebase/firestore';
+import { collection, addDoc, deleteDoc, doc, updateDoc, onSnapshot, writeBatch, getDocs } from 'firebase/firestore';
 import { Quality } from '../../types';
 import { Plus, Edit2, Trash2, X, Check, Search, GripVertical } from 'lucide-react';
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
@@ -21,7 +21,6 @@ export default function QualityManagement() {
   useEffect(() => {
     const fetchQualities = async () => {
       try {
-        const { getDocs } = await import('firebase/firestore');
         const snapshot = await getDocs(collection(db, 'qualities'));
         const data = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() } as Quality));
         setQualities(data.sort((a, b) => {

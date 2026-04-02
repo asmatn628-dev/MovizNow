@@ -42,22 +42,50 @@ export type LinkCheckResult = {
 export function normalizeUrl(input: string) {
   let trimmed = input.trim();
   if (!trimmed) return "";
+  
+  // Basic protocol check
   if (!/^https?:\/\//i.test(trimmed)) {
     trimmed = `https://${trimmed}`;
   }
 
-  // Pixeldrain conversion
-  if (trimmed.includes("pixeldrain.com/") || trimmed.includes("pixeldrain.dev/")) {
-    trimmed = trimmed.replace(/\?download$/i, "");
-    trimmed = trimmed.replace(/\/api\/file\//i, "/u/");
-    trimmed = trimmed.replace(/pixeldrain\.com\//i, "pixeldrain.dev/");
+  try {
+    const url = new URL(trimmed);
+    const host = url.hostname.toLowerCase().replace(/^www\./, "");
+    
+    if (host.includes("pixeldrain.com") || host.includes("pixeldrain.dev")) {
+      // Pixeldrain conversion
+      const fileIdMatch = url.pathname.match(/\/(?:u|api\/file)\/([^/?#]+)/i);
+      const listIdMatch = url.pathname.match(/\/(?:l|api\/list)\/([^/?#]+)/i);
+      
+      if (fileIdMatch?.[1]) {
+        return `https://pixeldrain.dev/u/${fileIdMatch[1]}`;
+      } else if (listIdMatch?.[1]) {
+        return `https://pixeldrain.dev/l/${listIdMatch[1]}`;
+      }
+      
+      // Fallback for other pixeldrain paths
+      url.hostname = "pixeldrain.dev";
+      url.search = "";
+      url.hash = "";
+      return url.toString().replace(/\/$/, "");
+    } else {
+      // For other links, remove query parameters and hash
+      url.search = "";
+      url.hash = "";
+      return url.toString().replace(/\/$/, "");
+    }
+  } catch (e) {
+    // Fallback logic if URL is invalid
+    if (trimmed.includes("pixeldrain.com/") || trimmed.includes("pixeldrain.dev/")) {
+      trimmed = trimmed.replace(/\?download$/i, "");
+      trimmed = trimmed.replace(/\/api\/file\//i, "/u/");
+      trimmed = trimmed.replace(/pixeldrain\.com\//i, "pixeldrain.dev/");
+    }
+    if (trimmed.includes("pixeldrain.com/api/list/") || trimmed.includes("pixeldrain.dev/api/list/")) {
+      trimmed = trimmed.replace(/\/api\/list\//i, "/l/");
+    }
+    return trimmed.replace(/\/$/, "");
   }
-
-  if (trimmed.includes("pixeldrain.com/api/list/") || trimmed.includes("pixeldrain.dev/api/list/")) {
-    trimmed = trimmed.replace(/\/api\/list\//i, "/l/");
-  }
-
-  return trimmed;
 }
 
 export function splitLinks(text: string) {
@@ -507,6 +535,16 @@ export async function performFullLinkScan(
     }
   } else {
     base = await serverCheckLink(url, signal);
+  }
+
+  if ((!base.ok || base.statusLabel === "REDIRECT") && base.finalUrl && base.finalUrl !== url) {
+    try {
+      const retryBase = await serverCheckLink(base.finalUrl, signal);
+      base = retryBase;
+      finalUrlToUse = base.finalUrl || base.url;
+    } catch (e) {
+      // Ignore retry error and stick with original base
+    }
   }
 
   const postMeta = extractedMeta[url] || {};

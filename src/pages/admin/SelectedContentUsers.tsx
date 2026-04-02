@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { db } from '../../firebase';
-import { collection, doc, updateDoc, onSnapshot } from 'firebase/firestore';
+import { collection, doc, updateDoc, onSnapshot, getDocs, writeBatch } from 'firebase/firestore';
 import { UserProfile, Content, Role, Status } from '../../types';
 import { Settings, X, Check, Search } from 'lucide-react';
 import AlertModal from '../../components/AlertModal';
@@ -22,7 +22,6 @@ export default function SelectedContentUsers() {
   useEffect(() => {
     const fetchUsers = async () => {
       try {
-        const { getDocs, writeBatch } = await import('firebase/firestore');
         const snapshot = await getDocs(collection(db, 'users'));
         const data = snapshot.docs.map((doc) => ({ ...doc.data() } as UserProfile));
         
@@ -58,7 +57,6 @@ export default function SelectedContentUsers() {
   useEffect(() => {
     const fetchContent = async () => {
       try {
-        const { getDocs } = await import('firebase/firestore');
         const snapshot = await getDocs(collection(db, 'content'));
         const data = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() } as Content));
         setContentList(data.sort((a, b) => a.title.localeCompare(b.title)));

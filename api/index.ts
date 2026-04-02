@@ -384,7 +384,10 @@ async function startServer() {
         return res.status(400).json({ ok: false, statusLabel: "BROKEN", message: "Invalid URL" });
       }
 
-      const host = parsed.hostname.replace(/^www\./, "");
+      let currentUrl = url;
+      let currentHost = parsed.hostname.replace(/^www\./, "");
+      let currentParsed = parsed;
+
       const headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
         Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
@@ -393,9 +396,30 @@ async function startServer() {
         Pragma: "no-cache",
       };
 
+      // Try to resolve redirects first if it's not already a known special host
+      if (!currentHost.includes("pixeldrain.com") && !currentHost.includes("pixeldrain.dev") && !currentHost.includes("raj.lat")) {
+        try {
+          const redirectCheck = await fetch(currentUrl, { method: "HEAD", headers, redirect: "follow" });
+          if (redirectCheck.url && redirectCheck.url !== currentUrl) {
+            currentUrl = redirectCheck.url;
+            currentParsed = new URL(currentUrl);
+            currentHost = currentParsed.hostname.replace(/^www\./, "");
+          }
+        } catch (e) {
+          try {
+            const redirectCheckGet = await fetch(currentUrl, { method: "GET", headers: { ...headers, Range: "bytes=0-0" }, redirect: "follow" });
+            if (redirectCheckGet.url && redirectCheckGet.url !== currentUrl) {
+              currentUrl = redirectCheckGet.url;
+              currentParsed = new URL(currentUrl);
+              currentHost = currentParsed.hostname.replace(/^www\./, "");
+            }
+          } catch (e2) {}
+        }
+      }
+
       // PIXELDRAIN SPECIAL CHECK
-      if (host.includes("pixeldrain.com") || host.includes("pixeldrain.dev")) {
-        const match = parsed.pathname.match(/\/u\/([^/?#]+)/);
+      if (currentHost.includes("pixeldrain.com") || currentHost.includes("pixeldrain.dev")) {
+        const match = currentParsed.pathname.match(/\/u\/([^/?#]+)/);
         if (match?.[1]) {
           const fileId = match[1];
           try {
@@ -405,11 +429,11 @@ async function startServer() {
             );
 
             if (infoRes.status === 404) {
-              return res.json({ ok: false, status: 404, statusLabel: "BROKEN", message: "Pixeldrain file not found or deleted", finalUrl: url, source: "pixeldrain-api", host });
+              return res.json({ ok: false, status: 404, statusLabel: "BROKEN", message: "Pixeldrain file not found or deleted", finalUrl: currentUrl, source: "pixeldrain-api", host: currentHost });
             }
 
             if (infoRes.status === 429) {
-              return res.json({ ok: false, status: 429, statusLabel: "UNAVAILABLE", message: "Pixeldrain temporarily unavailable or rate-limited", finalUrl: url, source: "pixeldrain-api", host });
+              return res.json({ ok: false, status: 429, statusLabel: "UNAVAILABLE", message: "Pixeldrain temporarily unavailable or rate-limited", finalUrl: currentUrl, source: "pixeldrain-api", host: currentHost });
             }
 
             if (infoRes.ok) {
@@ -429,29 +453,29 @@ async function startServer() {
               const fileName = data?.name || (fileNameMatch?.[1] ? decodeURIComponent(fileNameMatch[1]) : undefined);
 
               if (!dlRes) {
-                return res.json({ ok: false, statusLabel: "UNAVAILABLE", message: "Pixeldrain metadata exists but file is temporarily unavailable.", finalUrl: url, contentType, isDirectDownload: false, fileName, fileSize, fileSizeText, source: "pixeldrain-download-probe", host });
+                return res.json({ ok: false, statusLabel: "UNAVAILABLE", message: "Pixeldrain metadata exists but file is temporarily unavailable.", finalUrl: currentUrl, contentType, isDirectDownload: false, fileName, fileSize, fileSizeText, source: "pixeldrain-download-probe", host: currentHost });
               }
 
               if (dlRes.status === 403 || dlRes.status === 451) {
-                return res.json({ ok: false, status: dlRes.status, statusLabel: "UNAVAILABLE", message: "Pixeldrain file exists but is not available for download right now.", finalUrl: url, contentType, isDirectDownload: false, fileName, fileSize, fileSizeText, source: "pixeldrain-download-probe", host });
+                return res.json({ ok: false, status: dlRes.status, statusLabel: "UNAVAILABLE", message: "Pixeldrain file exists but is not available for download right now.", finalUrl: currentUrl, contentType, isDirectDownload: false, fileName, fileSize, fileSizeText, source: "pixeldrain-download-probe", host: currentHost });
               }
 
               if (dlRes.ok || dlRes.status === 206 || dlRes.status === 302) {
-                return res.json({ ok: true, status: dlRes.status || 200, statusLabel: "WORKING", message: fileName ? `Pixeldrain file available: ${fileName}` : "Pixeldrain file is available", finalUrl: url, contentType, isDirectDownload: true, fileName, fileSize, fileSizeText, source: "pixeldrain-api+download-probe", host });
+                return res.json({ ok: true, status: dlRes.status || 200, statusLabel: "WORKING", message: fileName ? `Pixeldrain file available: ${fileName}` : "Pixeldrain file is available", finalUrl: currentUrl, contentType, isDirectDownload: true, fileName, fileSize, fileSizeText, source: "pixeldrain-api+download-probe", host: currentHost });
               }
 
-              return res.json({ ok: false, status: dlRes.status, statusLabel: "UNAVAILABLE", message: "Pixeldrain file metadata exists, but download appears unavailable.", finalUrl: url, contentType, isDirectDownload: false, fileName, fileSize, fileSizeText, source: "pixeldrain-api+download-probe", host });
+              return res.json({ ok: false, status: dlRes.status, statusLabel: "UNAVAILABLE", message: "Pixeldrain file metadata exists, but download appears unavailable.", finalUrl: currentUrl, contentType, isDirectDownload: false, fileName, fileSize, fileSizeText, source: "pixeldrain-api+download-probe", host: currentHost });
             }
           } catch {
-            return res.json({ ok: false, statusLabel: "UNAVAILABLE", message: "Pixeldrain could not be verified right now.", finalUrl: url, source: "pixeldrain-api", host });
+            return res.json({ ok: false, statusLabel: "UNAVAILABLE", message: "Pixeldrain could not be verified right now.", finalUrl: currentUrl, source: "pixeldrain-api", host: currentHost });
           }
         }
       }
 
       // RAJ / GATE CHECK
-      if (host === "hub.raj.lat" || host.endsWith(".raj.lat")) {
+      if (currentHost === "hub.raj.lat" || currentHost.endsWith(".raj.lat")) {
         try {
-          const fetchRes = await fetch(url, { method: "GET", headers, redirect: "manual" });
+          const fetchRes = await fetch(currentUrl, { method: "GET", headers, redirect: "manual" });
           const location = fetchRes.headers.get("location") || undefined;
           const contentType = fetchRes.headers.get("content-type") || undefined;
           const disposition = fetchRes.headers.get("content-disposition") || "";
@@ -466,32 +490,32 @@ async function startServer() {
           const fileName = fileNameMatch?.[1] ? decodeURIComponent(fileNameMatch[1]) : undefined;
 
           if (isDirectDownload && (fetchRes.ok || isPartial)) {
-            return res.json({ ok: true, status: fetchRes.status, statusLabel: "WORKING", message: "Valid direct file / download link detected.", finalUrl: url, contentType, isDirectDownload: true, fileName, fileSize, fileSizeText, source: "download-detect", host });
+            return res.json({ ok: true, status: fetchRes.status, statusLabel: "WORKING", message: "Valid direct file / download link detected.", finalUrl: currentUrl, contentType, isDirectDownload: true, fileName, fileSize, fileSizeText, source: "download-detect", host: currentHost });
           }
 
           if (fetchRes.status >= 300 && fetchRes.status < 400) {
-            return res.json({ ok: true, status: fetchRes.status, statusLabel: "REDIRECT", message: "Protected redirect link is alive", finalUrl: location || url, contentType, source: "redirect-probe", host });
+            return res.json({ ok: true, status: fetchRes.status, statusLabel: "REDIRECT", message: "Protected redirect link is alive", finalUrl: location || currentUrl, contentType, source: "redirect-probe", host: currentHost });
           }
 
           const html = await fetchRes.text().catch(() => "");
           const lower = html.toLowerCase();
           if (lower.includes("not found") || lower.includes("invalid link") || lower.includes("link expired") || lower.includes("expired") || lower.includes("404")) {
-            return res.json({ ok: false, status: fetchRes.status || 404, statusLabel: "BROKEN", message: "Protected link exists but target appears invalid or expired", finalUrl: url, contentType, source: "html-scan", host });
+            return res.json({ ok: false, status: fetchRes.status || 404, statusLabel: "BROKEN", message: "Protected link exists but target appears invalid or expired", finalUrl: currentUrl, contentType, source: "html-scan", host: currentHost });
           }
           if (lower.includes("cloudflare") || lower.includes("checking your browser") || lower.includes("captcha") || lower.includes("access denied") || lower.includes("forbidden")) {
-            return res.json({ ok: true, status: fetchRes.status || 200, statusLabel: "PROTECTED", message: "Link is alive but protected by anti-bot or gateway", finalUrl: url, contentType, source: "protection-detect", host });
+            return res.json({ ok: true, status: fetchRes.status || 200, statusLabel: "PROTECTED", message: "Link is alive but protected by anti-bot or gateway", finalUrl: currentUrl, contentType, source: "protection-detect", host: currentHost });
           }
           if (fetchRes.ok) {
-            return res.json({ ok: true, status: fetchRes.status, statusLabel: "WORKING", message: "Protected landing page is reachable", finalUrl: url, contentType, source: "html-scan", host });
+            return res.json({ ok: true, status: fetchRes.status, statusLabel: "WORKING", message: "Protected landing page is reachable", finalUrl: currentUrl, contentType, source: "html-scan", host: currentHost });
           }
         } catch {}
       }
 
       // GENERAL CHECK
       try {
-        let res_fetch = await fetch(url, { method: "HEAD", headers, redirect: "follow" });
+        let res_fetch = await fetch(currentUrl, { method: "HEAD", headers, redirect: "follow" });
         if (!res_fetch.ok || res_fetch.status === 405) {
-          res_fetch = await fetch(url, { method: "GET", headers: { ...headers, Range: "bytes=0-0" }, redirect: "follow" });
+          res_fetch = await fetch(currentUrl, { method: "GET", headers: { ...headers, Range: "bytes=0-0" }, redirect: "follow" });
         }
 
         const contentType = res_fetch.headers.get("content-type") || undefined;
@@ -507,12 +531,12 @@ async function startServer() {
         const fileName = fileNameMatch?.[1] ? decodeURIComponent(fileNameMatch[1]) : undefined;
 
         if (res_fetch.ok || res_fetch.status === 206) {
-          return res.json({ ok: true, status: res_fetch.status, statusLabel: "WORKING", message: isDirectDownload ? "Valid direct file / download link detected." : "Link is reachable", finalUrl: res_fetch.url, contentType, isDirectDownload, fileName, fileSize, fileSizeText, source: "general-check", host });
+          return res.json({ ok: true, status: res_fetch.status, statusLabel: "WORKING", message: isDirectDownload ? "Valid direct file / download link detected." : "Link is reachable", finalUrl: res_fetch.url, contentType, isDirectDownload, fileName, fileSize, fileSizeText, source: "general-check", host: currentHost });
         }
 
-        return res.json({ ok: false, status: res_fetch.status, statusLabel: "BROKEN", message: `HTTP ${res_fetch.status}`, finalUrl: res_fetch.url || url, contentType, source: "general-check", host });
+        return res.json({ ok: false, status: res_fetch.status, statusLabel: "BROKEN", message: `HTTP ${res_fetch.status}`, finalUrl: res_fetch.url || currentUrl, contentType, source: "general-check", host: currentHost });
       } catch {
-        return res.json({ ok: false, statusLabel: "UNKNOWN", message: "Could not verify this host", finalUrl: url, source: "general-check", host });
+        return res.json({ ok: false, statusLabel: "UNKNOWN", message: "Could not verify this host", finalUrl: currentUrl, source: "general-check", host: currentHost });
       }
     } catch (error) {
       console.error("Check Link Error:", error);
