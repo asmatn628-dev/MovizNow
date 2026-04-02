@@ -140,11 +140,16 @@ export default function MovieDetails() {
 
   useEffect(() => {
     if (!contentLoading) {
-      if ((!content || (!content.movieLinks && !content.seasons)) && !fullContent && !fetchFailed && !isOffline) {
-        // Still fetching full content
-        return;
+      // If we have at least the basic content from the list, stop loading
+      // This allows the page to show metadata while links fetch in background
+      if (content) {
+        setLoading(false);
+      } 
+      // If not in list, wait for the full fetch to complete or fail
+      else if (fullContent || fetchFailed || isOffline) {
+        setLoading(false);
       }
-      setLoading(false);
+
       if (mergedContent && !hasLoggedView.current && profile?.uid) {
         hasLoggedView.current = true;
         logEvent('content_click', profile.uid, {

@@ -431,7 +431,7 @@ export default function Home({ onOpenMediaModal }: { onOpenMediaModal: () => voi
       )}
 
       {/* Main Content */}
-      <main className="flex-1 max-w-7xl mx-auto w-full px-4 py-8">
+      <main className="flex-1 max-w-7xl mx-auto w-full px-4 pt-4 pb-8">
         {/* Status Banner */}
         {profile?.status === 'pending' && (
           <div className="bg-yellow-500/10 border border-yellow-500/20 text-yellow-500 p-4 rounded-2xl mb-8 flex items-center justify-between">
@@ -460,10 +460,10 @@ export default function Home({ onOpenMediaModal }: { onOpenMediaModal: () => voi
 
         {/* Recently Viewed Section */}
         {!search && selectedType === '' && selectedGenre === '' && selectedLanguage === '' && selectedQuality === '' && selectedYear === '' && recentlyViewed.length > 0 && (
-          <div className="mb-8">
+          <div className="mb-6">
             <div className="flex items-center justify-between mb-3">
-              <h2 className="text-sm font-bold text-zinc-400 flex items-center gap-2 uppercase tracking-wider">
-                <Clock className="w-4 h-4 text-indigo-500" />
+              <h2 className="text-[10px] font-bold text-zinc-500 flex items-center gap-2 uppercase tracking-wider">
+                <Clock className="w-3 h-3 text-indigo-500" />
                 Recently Viewed
               </h2>
             </div>
@@ -534,7 +534,7 @@ export default function Home({ onOpenMediaModal }: { onOpenMediaModal: () => voi
         )}
 
         {/* Filters */}
-        <div className="flex flex-col gap-4 mb-8">
+        <div className="flex flex-col gap-4 mb-6">
           <div className="relative w-full">
             <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-zinc-500" />
             <input

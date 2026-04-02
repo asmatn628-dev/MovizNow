@@ -79,7 +79,8 @@ export default function ErrorLinks() {
     if (d.includes('mismatch')) return 'Mismatches';
     if (d.includes('missing filename')) return 'Missing Filename';
     if (d.includes('missing url')) return 'Missing URL';
-    if (d.includes('missing quality') || d.includes('missing language')) return 'Missing Metadata';
+    if (d.includes('missing quality')) return 'Missing Quality';
+    if (d.includes('missing language')) return 'Missing Language';
     return 'Unknown';
   };
 
@@ -392,12 +393,15 @@ export default function ErrorLinks() {
     const newErrorLinks: ErrorLinkInfo[] = [];
 
     results.forEach(res => {
-      if (!res.ok || res.statusLabel === "BROKEN" || res.statusLabel === "MISSING_FILENAME") {
+      const isMissingLanguageOnly = res.statusLabel === "MISSING_METADATA" && res.message === "Missing Language in filename";
+      if (!isMissingLanguageOnly && (!res.ok || res.statusLabel === "BROKEN" || res.statusLabel === "SIZE_MISMATCH" || res.statusLabel === "MISSING_FILENAME" || res.statusLabel === "MISSING_METADATA" || (res.mismatchWarnings && res.mismatchWarnings.length > 0))) {
         const original = allLinksToScan.find(l => l.url === res.url);
         if (original) {
+          const errorDetail = (res.mismatchWarnings && res.mismatchWarnings.length > 0) ? res.mismatchWarnings.join(', ') : (res.message || res.statusLabel || "Unknown Error");
           newErrorLinks.push({
             ...original.info,
-            errorDetail: res.message || res.statusLabel || "Unknown Error",
+            errorDetail: errorDetail,
+            errorCategory: categorizeError(errorDetail),
             fetchedSize: res.fileSizeText?.split(' ')[0],
             fetchedUnit: res.fileSizeText?.split(' ')[1] as 'MB' | 'GB',
             createdAt: new Date().toISOString()
@@ -456,7 +460,8 @@ export default function ErrorLinks() {
         results.push(res);
         
         // Show new results as they are found
-        if (!res.ok || res.statusLabel === "BROKEN" || res.statusLabel === "MISSING_FILENAME" || res.statusLabel === "MISSING_METADATA" || (res.mismatchWarnings && res.mismatchWarnings.length > 0)) {
+        const isMissingLanguageOnly = res.statusLabel === "MISSING_METADATA" && res.message === "Missing Language in filename";
+        if (!isMissingLanguageOnly && (!res.ok || res.statusLabel === "BROKEN" || res.statusLabel === "SIZE_MISMATCH" || res.statusLabel === "MISSING_FILENAME" || res.statusLabel === "MISSING_METADATA" || (res.mismatchWarnings && res.mismatchWarnings.length > 0))) {
           setErrorLinks(prev => {
             const errorDetail = (res.mismatchWarnings && res.mismatchWarnings.length > 0) ? res.mismatchWarnings.join(', ') : (res.message || res.statusLabel || "Unknown Error");
             const newError: ErrorLinkInfo = {

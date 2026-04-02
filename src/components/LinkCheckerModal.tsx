@@ -62,6 +62,7 @@ const badgeMap: Record<StatusLabel, string> = {
   MISSING_FILENAME: "bg-pink-500/15 text-pink-400 border-pink-800/80",
   MISSING_METADATA: "bg-pink-500/15 text-pink-400 border-pink-800/80",
   SMALL_FILE: "bg-orange-500/15 text-orange-400 border-orange-800/80",
+  SIZE_MISMATCH: "bg-red-500/15 text-red-400 border-red-800/80",
 };
 
 export const LinkCheckerModal: React.FC<Props> = ({
@@ -192,7 +193,7 @@ export const LinkCheckerModal: React.FC<Props> = ({
           allResults.push(result);
           completedCount++;
 
-          if (result.statusLabel === "WORKING" || result.statusLabel === "SMALL_FILE" || result.statusLabel === "MISSING_FILENAME" || result.statusLabel === "MISSING_METADATA") {
+          if (result.statusLabel === "WORKING" || result.statusLabel === "SMALL_FILE" || result.statusLabel === "MISSING_FILENAME" || result.statusLabel === "MISSING_METADATA" || result.statusLabel === "SIZE_MISMATCH") {
             setSelectedUrls((prev) => new Set(prev).add(result.url));
           }
 
@@ -401,9 +402,11 @@ export const LinkCheckerModal: React.FC<Props> = ({
     const unknown = results.filter((r) => r.statusLabel === "UNKNOWN").length;
     const mismatches = results.filter((r) => (r.mismatchWarnings?.length || 0) > 0).length;
     const missingFilename = results.filter((r) => r.statusLabel === "MISSING_FILENAME").length;
-    const missingMetadata = results.filter((r) => r.statusLabel === "MISSING_METADATA").length;
+    const missingQuality = results.filter((r) => r.statusLabel === "MISSING_METADATA" && r.message?.includes("Quality")).length;
+    const missingLanguage = results.filter((r) => r.statusLabel === "MISSING_METADATA" && r.message?.includes("Language")).length;
     const smallFile = results.filter((r) => r.statusLabel === "SMALL_FILE").length;
-    return { working, broken, protectedCount, redirect, unavailable, unknown, mismatches, missingFilename, missingMetadata, smallFile };
+    const sizeMismatch = results.filter((r) => r.statusLabel === "SIZE_MISMATCH").length;
+    return { working, broken, protectedCount, redirect, unavailable, unknown, mismatches, missingFilename, missingQuality, missingLanguage, smallFile, sizeMismatch };
   }, [results]);
 
   const sortedResults = useMemo(() => {
@@ -494,13 +497,15 @@ export const LinkCheckerModal: React.FC<Props> = ({
                     {[
                       ["Working", summary.working, "text-emerald-400"],
                       ["Broken", summary.broken, "text-red-400"],
+                      ["Size Mismatch", summary.sizeMismatch, "text-red-400"],
                       ["Protected", summary.protectedCount, "text-yellow-400"],
                       ["Redirect", summary.redirect, "text-cyan-400"],
                       ["Unavailable", summary.unavailable, "text-orange-400"],
                       ["Unknown", summary.unknown, "text-zinc-300"],
                       ["Mismatches", summary.mismatches, "text-pink-400"],
                       ["Missing Filename", summary.missingFilename, "text-pink-400"],
-                      ["Missing Metadata", summary.missingMetadata, "text-pink-400"],
+                      ["Missing Quality", summary.missingQuality, "text-pink-400"],
+                      ["Missing Language", summary.missingLanguage, "text-pink-400"],
                       ["Small File", summary.smallFile, "text-orange-400"]
                     ].map(([label, count, color]) => (
                       <div key={String(label)} className="rounded-2xl border border-zinc-800 bg-zinc-900/60 p-4">

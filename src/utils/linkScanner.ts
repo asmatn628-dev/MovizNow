@@ -9,7 +9,8 @@ export type StatusLabel =
   | "UNKNOWN"
   | "MISSING_FILENAME"
   | "MISSING_METADATA"
-  | "SMALL_FILE";
+  | "SMALL_FILE"
+  | "SIZE_MISMATCH";
 
 export type LinkCheckResult = {
   url: string;
@@ -541,7 +542,7 @@ export async function performFullLinkScan(
     const expectedSizeBytes = parseFloat(expectedSize) * (expectedUnit === 'GB' ? 1000 * 1000 * 1000 : 1000 * 1000);
     const diff = Math.abs(result.fileSize - expectedSizeBytes);
     if (diff > 50 * 1000 * 1000) { // 50MB tolerance
-      result.statusLabel = "BROKEN";
+      result.statusLabel = "SIZE_MISMATCH";
       result.message = `Size mismatch: Expected ${expectedSize}${expectedUnit}, got ${result.fileSizeText}`;
     }
   }
