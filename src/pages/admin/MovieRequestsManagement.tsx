@@ -215,10 +215,10 @@ export default function MovieRequestsManagement() {
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="bg-zinc-950/50 border-b border-zinc-800">
-                <th className="px-6 py-4 text-[10px] font-bold text-zinc-500 uppercase tracking-wider">Request Details</th>
-                <th className="px-6 py-4 text-[10px] font-bold text-zinc-500 uppercase tracking-wider">User Info</th>
-                <th className="px-6 py-4 text-[10px] font-bold text-zinc-500 uppercase tracking-wider">Status</th>
-                <th className="px-6 py-4 text-[10px] font-bold text-zinc-500 uppercase tracking-wider text-right">Actions</th>
+                <th className="px-6 py-4 text-[10px] font-bold text-zinc-500 uppercase tracking-wider whitespace-nowrap">Request Details</th>
+                <th className="px-6 py-4 text-[10px] font-bold text-zinc-500 uppercase tracking-wider whitespace-nowrap">User Info</th>
+                <th className="px-6 py-4 text-[10px] font-bold text-zinc-500 uppercase tracking-wider whitespace-nowrap">Status</th>
+                <th className="px-6 py-4 text-[10px] font-bold text-zinc-500 uppercase tracking-wider text-right whitespace-nowrap">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-zinc-800">

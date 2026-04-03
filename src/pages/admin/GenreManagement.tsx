@@ -95,7 +95,7 @@ export default function GenreManagement() {
   return (
     <div className="p-8">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
-        <h1 className="text-3xl font-bold">Genre Management</h1>
+        <h1 className="text-3xl font-bold text-zinc-900 dark:text-white transition-colors duration-300">Genre Management</h1>
         <div className="relative w-full md:w-64">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-zinc-500" />
           <input
@@ -103,20 +103,20 @@ export default function GenreManagement() {
             placeholder="Search genres..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full bg-zinc-900 border border-zinc-800 rounded-xl pl-10 pr-4 py-3 focus:outline-none focus:border-emerald-500"
+            className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl pl-10 pr-4 py-3 focus:outline-none focus:border-emerald-500 text-zinc-900 dark:text-white transition-colors duration-300"
           />
         </div>
       </div>
 
-      <div className="bg-zinc-900 rounded-2xl p-6 border border-zinc-800 mb-8 max-w-2xl">
-        <h2 className="text-xl font-semibold mb-4">Add New Genre</h2>
+      <div className="bg-white dark:bg-zinc-900 rounded-2xl p-6 border border-zinc-200 dark:border-zinc-800 mb-8 max-w-2xl transition-colors duration-300">
+        <h2 className="text-xl font-semibold mb-4 text-zinc-900 dark:text-white transition-colors duration-300">Add New Genre</h2>
         <form onSubmit={handleAdd} className="flex flex-col gap-4">
           <input
             type="text"
             value={newGenre}
             onChange={(e) => setNewGenre(e.target.value)}
             placeholder="e.g., Action, Comedy, Sci-Fi"
-            className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-3 focus:outline-none focus:border-emerald-500"
+            className="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-3 focus:outline-none focus:border-emerald-500 text-zinc-900 dark:text-white transition-colors duration-300"
           />
           <button
             type="submit"
@@ -128,7 +128,7 @@ export default function GenreManagement() {
         </form>
       </div>
 
-      {searchTerm && <p className="text-zinc-400 mb-4 text-sm">Drag and drop is disabled while searching.</p>}
+      {searchTerm && <p className="text-zinc-500 dark:text-zinc-400 mb-4 text-sm transition-colors duration-300">Drag and drop is disabled while searching.</p>}
 
       {loading ? (
         <div className="flex justify-center items-center py-20">
@@ -150,7 +150,7 @@ export default function GenreManagement() {
                     <div
                       ref={provided.innerRef}
                       {...provided.draggableProps}
-                      className={`bg-zinc-900 border ${snapshot.isDragging ? 'border-emerald-500 shadow-lg shadow-emerald-500/20 z-10' : 'border-zinc-800'} rounded-xl p-4 flex items-center justify-between transition-colors`}
+                      className={`bg-white dark:bg-zinc-900 border ${snapshot.isDragging ? 'border-emerald-500 shadow-lg shadow-emerald-500/20 z-10' : 'border-zinc-200 dark:border-zinc-800'} rounded-xl p-4 flex items-center justify-between transition-colors duration-300`}
                     >
                       {editingId === genre.id ? (
                         <div className="flex items-center gap-2 w-full">
@@ -158,26 +158,26 @@ export default function GenreManagement() {
                             type="text"
                             value={editName}
                             onChange={(e) => setEditName(e.target.value)}
-                            className="flex-1 bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-1.5 focus:outline-none focus:border-emerald-500 text-sm"
+                            className="flex-1 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg px-3 py-1.5 focus:outline-none focus:border-emerald-500 text-sm text-zinc-900 dark:text-white transition-colors duration-300"
                             autoFocus
                           />
                           <button onClick={handleSaveEdit} className="text-emerald-500 hover:text-emerald-400 p-1">
                             <Check className="w-4 h-4" />
                           </button>
-                          <button onClick={() => setEditingId(null)} className="text-zinc-400 hover:text-zinc-300 p-1">
+                          <button onClick={() => setEditingId(null)} className="text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white p-1 transition-colors">
                             <X className="w-4 h-4" />
                           </button>
                         </div>
                       ) : (
                         <>
                           <div className="flex items-center gap-3">
-                            <div {...provided.dragHandleProps} className={`cursor-grab active:cursor-grabbing p-1 hover:bg-zinc-800 rounded ${searchTerm ? 'opacity-50 pointer-events-none' : ''}`}>
+                            <div {...provided.dragHandleProps} className={`cursor-grab active:cursor-grabbing p-1 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded transition-colors ${searchTerm ? 'opacity-50 pointer-events-none' : ''}`}>
                               <GripVertical className="w-4 h-4 text-zinc-500" />
                             </div>
-                            <span className="font-medium">{genre.name}</span>
+                            <span className="font-medium text-zinc-900 dark:text-white transition-colors duration-300">{genre.name}</span>
                           </div>
                           <div className="flex items-center gap-2">
-                            <button onClick={() => handleEdit(genre)} className="text-zinc-400 hover:text-white p-2 transition-colors">
+                            <button onClick={() => handleEdit(genre)} className="text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white p-2 transition-colors">
                               <Edit2 className="w-4 h-4" />
                             </button>
                             <button onClick={() => setDeleteId(genre.id)} className="text-red-500/70 hover:text-red-500 p-2 transition-colors">

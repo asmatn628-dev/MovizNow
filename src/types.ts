@@ -141,6 +141,29 @@ export interface Content {
   order?: number; // Added order for sorting
 }
 
+export interface CartItem {
+  contentId: string;
+  title: string;
+  type: 'movie' | 'season';
+  seasonId?: string;
+  seasonNumber?: number;
+  price: number;
+}
+
+export interface Order {
+  id: string;
+  userId: string;
+  userName: string;
+  userEmail: string;
+  userRole: Role;
+  type: 'membership' | 'content';
+  amount: number;
+  status: 'pending' | 'approved' | 'declined';
+  createdAt: string;
+  months?: number; // For membership
+  items?: CartItem[]; // For content
+}
+
 export interface ErrorLinkInfo {
   contentId: string;
   contentTitle: string;

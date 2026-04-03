@@ -13,6 +13,7 @@ import AlertModal from '../../components/AlertModal';
 import { MediaModal, findTMDBByImdb, searchTMDBByTitle, fetchTMDBDetails, fetchSeriesSeasons, fetchIMDbRating } from '../../components/MediaModal';
 import { LinkCheckerModal } from '../../components/LinkCheckerModal';
 import { AdjustContentsModal } from '../../components/AdjustContentsModal';
+import ManageModal from '../../components/ManageModal';
 import { formatContentTitle, formatReleaseDate, formatRuntime, formatDateToMonthDDYYYY } from '../../utils/contentUtils';
 import { smartSearch } from '../../utils/searchUtils';
 import { handleFirestoreError, OperationType } from '../../utils/firestoreErrorHandler';
@@ -279,6 +280,7 @@ export default function ContentManagement() {
   const [isMasterFetchModalOpen, setIsMasterFetchModalOpen] = useState(false);
   const [isLinkCheckerOpen, setIsLinkCheckerOpen] = useState(false);
   const [isAdjustContentsModalOpen, setIsAdjustContentsModalOpen] = useState(false);
+  const [manageModal, setManageModal] = useState<{ isOpen: boolean; type: 'genre' | 'language' | 'quality' | null }>({ isOpen: false, type: null });
   const [fetchingPoster, setFetchingPoster] = useState(false);
   const [isAutoFillModalOpen, setIsAutoFillModalOpen] = useState(false);
   const [loadingShareId, setLoadingShareId] = useState<string | null>(null);
@@ -2492,7 +2494,10 @@ export default function ContentManagement() {
 
                   {/* 9. Genres */}
                   <div>
-                    <label className="block text-xs font-medium text-zinc-500 mb-1">Genres</label>
+                    <div className="flex justify-between items-center mb-1">
+                      <label className="text-xs font-medium text-zinc-500">Genres</label>
+                      <button type="button" onClick={() => setManageModal({ isOpen: true, type: 'genre' })} className="text-[10px] bg-zinc-800 text-zinc-300 px-2 py-0.5 rounded hover:bg-zinc-700">Manage</button>
+                    </div>
                     <div className="flex flex-wrap gap-2">
                       {genres.map(g => {
                         const isSelected = selectedGenres.includes(g.id);
@@ -2522,7 +2527,10 @@ export default function ContentManagement() {
 
                   {/* 10. Languages */}
                   <div>
-                    <label className="block text-xs font-medium text-zinc-500 mb-1">Languages</label>
+                    <div className="flex justify-between items-center mb-1">
+                      <label className="text-xs font-medium text-zinc-500">Languages</label>
+                      <button type="button" onClick={() => setManageModal({ isOpen: true, type: 'language' })} className="text-[10px] bg-zinc-800 text-zinc-300 px-2 py-0.5 rounded hover:bg-zinc-700">Manage</button>
+                    </div>
                     <div className="flex flex-wrap gap-2">
                       {languages.map(l => {
                         const isSelected = selectedLanguages.includes(l.id);
@@ -2552,7 +2560,10 @@ export default function ContentManagement() {
 
                   {/* 11. Print Quality */}
                   <div>
-                    <label className="block text-xs font-medium text-zinc-500 mb-1">Print Quality</label>
+                    <div className="flex justify-between items-center mb-1">
+                      <label className="text-xs font-medium text-zinc-500">Print Quality</label>
+                      <button type="button" onClick={() => setManageModal({ isOpen: true, type: 'quality' })} className="text-[10px] bg-zinc-800 text-zinc-300 px-2 py-0.5 rounded hover:bg-zinc-700">Manage</button>
+                    </div>
                     <div className="flex flex-wrap gap-2">
                       {qualities.map(q => (
                         <button
@@ -3206,6 +3217,37 @@ export default function ContentManagement() {
         isOpen={isAdjustContentsModalOpen}
         onClose={() => setIsAdjustContentsModalOpen(false)}
         contentList={contentList}
+      />
+      <ManageModal
+        isOpen={manageModal.isOpen}
+        title={`Manage ${manageModal.type ? manageModal.type.charAt(0).toUpperCase() + manageModal.type.slice(1) : ''}s`}
+        onClose={() => setManageModal({ isOpen: false, type: null })}
+        type={manageModal.type || 'genre'}
+        items={
+          manageModal.type === 'genre' ? genres :
+          manageModal.type === 'language' ? languages :
+          manageModal.type === 'quality' ? qualities : []
+        }
+        onSave={async (items) => {
+          if (!manageModal.type) return;
+          const collectionName = `${manageModal.type}s`;
+          const batch = writeBatch(db);
+          
+          // Delete all existing
+          const snapshot = await getDocs(collection(db, collectionName));
+          snapshot.docs.forEach(doc => batch.delete(doc.ref));
+          
+          // Add new
+          items.forEach((item, idx) => {
+            const docRef = doc(collection(db, collectionName), item.id);
+            const data: any = { name: item.name, order: idx };
+            if (manageModal.type === 'quality') data.color = item.color;
+            batch.set(docRef, data);
+          });
+          
+          await batch.commit();
+          setManageModal({ isOpen: false, type: null });
+        }}
       />
     </div>
   );

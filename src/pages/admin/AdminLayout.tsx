@@ -32,10 +32,8 @@ export default function AdminLayout() {
 
   const allNavItems = [
     { path: '/admin/analytics', label: 'Analytics', icon: BarChart3 },
+    { path: '/admin/orders', label: 'Orders', icon: DollarSign },
     { path: '/admin/content', label: 'Movies & Series', icon: Film },
-    { path: '/admin/genres', label: 'Genres', icon: Tags },
-    { path: '/admin/languages', label: 'Languages', icon: Languages },
-    { path: '/admin/qualities', label: 'Qualities', icon: MonitorPlay },
     { path: '/admin/users', label: 'Membership', icon: Users },
     { path: '/admin/user-managers', label: 'User Managers', icon: Users },
     { path: '/admin/temporary-users', label: 'Temporary Users', icon: Clock },

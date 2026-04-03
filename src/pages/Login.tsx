@@ -31,16 +31,16 @@ export default function Login() {
   if (authLoading) return null;
 
   return (
-    <div className="min-h-screen bg-zinc-950 flex flex-col items-center justify-center text-white p-4">
-      <div className="max-w-md w-full bg-zinc-900 rounded-2xl p-8 shadow-2xl border border-zinc-800 text-center">
+    <div className="min-h-screen bg-white dark:bg-zinc-950 flex flex-col items-center justify-center text-zinc-900 dark:text-white p-4 transition-colors duration-300">
+      <div className="max-w-md w-full bg-zinc-50 dark:bg-zinc-900 rounded-2xl p-8 shadow-2xl border border-zinc-200 dark:border-zinc-800 text-center transition-colors duration-300">
         <div className="flex justify-center mb-6">
           <LazyLoadImage src="/logo.svg?v=2" alt="MovizNow Logo" className="w-24 h-24" />
         </div>
         <h1 className="text-3xl font-bold mb-2">MovizNow</h1>
-        <p className="text-zinc-400 mb-8">Your ultimate movies & series destination</p>
+        <p className="text-zinc-500 dark:text-zinc-400 mb-8">Your ultimate movies & series destination</p>
         
         {error && !isLoggingIn && (
-          <div className="mb-6 p-4 bg-red-500/10 border border-red-500/20 rounded-xl text-red-500 text-sm">
+          <div className="mb-6 p-4 bg-red-500/10 border border-red-500/20 rounded-xl text-red-600 dark:text-red-500 text-sm transition-colors">
             {error}
           </div>
         )}
@@ -48,11 +48,11 @@ export default function Login() {
         <button
           onClick={handleLogin}
           disabled={isLoggingIn}
-          className="w-full bg-white text-zinc-900 font-semibold py-3 px-4 rounded-xl hover:bg-zinc-200 transition-colors flex items-center justify-center gap-3 disabled:opacity-70 disabled:cursor-not-allowed"
+          className="w-full bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 font-semibold py-3 px-4 rounded-xl hover:bg-zinc-800 dark:hover:bg-zinc-200 transition-colors flex items-center justify-center gap-3 disabled:opacity-70 disabled:cursor-not-allowed"
         >
           {isLoggingIn ? (
             <div className="flex items-center gap-2">
-              <div className="animate-spin rounded-full h-5 w-5 border-t-2 border-b-2 border-zinc-900"></div>
+              <div className="animate-spin rounded-full h-5 w-5 border-t-2 border-b-2 border-white dark:border-zinc-900"></div>
               <span>Connecting...</span>
             </div>
           ) : (

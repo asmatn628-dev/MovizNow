@@ -396,18 +396,18 @@ export const MediaModal: React.FC<MediaModalProps> = ({ isOpen, onClose, initial
           exit={{ opacity: 0 }}
           className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4"
         >
-      <div className="bg-zinc-900 border border-zinc-800 rounded-xl w-full max-w-3xl max-h-[90vh] flex flex-col shadow-2xl">
-        <div className="flex items-center justify-between p-4 border-b border-zinc-800">
-          <h2 className="text-lg font-semibold text-white">Master Fetch</h2>
-          <button onClick={onClose} className="text-zinc-400 hover:text-white"><X className="w-5 h-5" /></button>
+      <div className="bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl w-full max-w-3xl max-h-[90vh] flex flex-col shadow-2xl transition-colors duration-300">
+        <div className="flex items-center justify-between p-4 border-b border-zinc-100 dark:border-zinc-800 transition-colors duration-300">
+          <h2 className="text-lg font-semibold text-zinc-900 dark:text-white">Master Fetch</h2>
+          <button onClick={onClose} className="text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white transition-colors"><X className="w-5 h-5" /></button>
         </div>
         
-        <div className="p-4 border-b border-zinc-800 bg-zinc-950/50">
+        <div className="p-4 border-b border-zinc-100 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-950/50 transition-colors duration-300">
           <div className="flex flex-wrap gap-3 items-center">
-            <input type="text" value={imdbId} onChange={e => setImdbId(e.target.value)} placeholder="IMDb ID (e.g., tt21842982)" className="flex-1 min-w-[140px] p-2 bg-zinc-900 border border-zinc-700 rounded-lg text-sm text-white" />
+            <input type="text" value={imdbId} onChange={e => setImdbId(e.target.value)} placeholder="IMDb ID (e.g., tt21842982)" className="flex-1 min-w-[140px] p-2 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg text-sm text-zinc-900 dark:text-white focus:outline-none focus:border-emerald-500 transition-colors duration-300" />
             <span className="text-zinc-500 font-medium text-sm">OR</span>
-            <input type="text" value={title} onChange={e => setTitle(e.target.value)} placeholder="Movie/Series title" className="flex-1 min-w-[140px] p-2 bg-zinc-900 border border-zinc-700 rounded-lg text-sm text-white" />
-            <input type="text" value={year} onChange={e => setYear(e.target.value)} placeholder="Year" className="w-24 p-2 bg-zinc-900 border border-zinc-700 rounded-lg text-sm text-white" />
+            <input type="text" value={title} onChange={e => setTitle(e.target.value)} placeholder="Movie/Series title" className="flex-1 min-w-[140px] p-2 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg text-sm text-zinc-900 dark:text-white focus:outline-none focus:border-emerald-500 transition-colors duration-300" />
+            <input type="text" value={year} onChange={e => setYear(e.target.value)} placeholder="Year" className="w-24 p-2 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg text-sm text-zinc-900 dark:text-white focus:outline-none focus:border-emerald-500 transition-colors duration-300" />
             <div className="flex gap-2">
               <button 
                 onClick={() => handleFetchWithParams(imdbId, title, year)} 
@@ -447,7 +447,7 @@ export const MediaModal: React.FC<MediaModalProps> = ({ isOpen, onClose, initial
           {searchResults && (
             <div className="space-y-4">
               <div className="flex items-center justify-between gap-2">
-                <h3 className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider truncate">Search Results ({sortedAndFilteredResults.length})</h3>
+                <h3 className="text-[10px] font-bold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider truncate">Search Results ({sortedAndFilteredResults.length})</h3>
                 <div className="flex gap-1 shrink-0">
                   {(['all', 'movie', 'tv'] as const).map((t) => (
                     <button
@@ -456,7 +456,7 @@ export const MediaModal: React.FC<MediaModalProps> = ({ isOpen, onClose, initial
                       className={`px-2 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider transition-all ${
                         filterType === t 
                           ? 'bg-emerald-500 text-white' 
-                          : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'
+                          : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-200 dark:hover:bg-zinc-700'
                       }`}
                     >
                       {t === 'tv' ? 'Series' : t}
@@ -469,23 +469,23 @@ export const MediaModal: React.FC<MediaModalProps> = ({ isOpen, onClose, initial
                   <button
                     key={`${res.item.id}-${idx}`}
                     onClick={() => fetchFullDetails(res.item.id, res.type)}
-                    className="flex items-center gap-4 p-3 bg-zinc-800/50 border border-zinc-700 rounded-xl hover:bg-zinc-800 hover:border-emerald-500/50 transition-all text-left group"
+                    className="flex items-center gap-4 p-3 bg-zinc-50 dark:bg-zinc-800/50 border border-zinc-200 dark:border-zinc-700 rounded-xl hover:bg-zinc-100 dark:hover:bg-zinc-800 hover:border-emerald-500/50 transition-all text-left group"
                   >
-                    <div className="w-12 h-18 bg-zinc-700 rounded overflow-hidden shrink-0">
+                    <div className="w-12 h-18 bg-zinc-200 dark:bg-zinc-700 rounded overflow-hidden shrink-0">
                       {res.item.poster_path ? (
                         <img src={`https://image.tmdb.org/t/p/w92${res.item.poster_path}`} alt="" className="w-full h-full object-cover" />
                       ) : (
-                        <div className="w-full h-full flex items-center justify-center text-zinc-500">
+                        <div className="w-full h-full flex items-center justify-center text-zinc-400 dark:text-zinc-500">
                           <Film className="w-6 h-6" />
                         </div>
                       )}
                     </div>
                     <div className="flex-1 min-w-0">
-                      <div className="font-bold text-white group-hover:text-emerald-500 transition-colors truncate">
+                      <div className="font-bold text-zinc-900 dark:text-white group-hover:text-emerald-500 transition-colors truncate">
                         {res.item.title || res.item.name}
                       </div>
-                      <div className="text-xs text-zinc-400 flex items-center gap-2 mt-1">
-                        <span className="capitalize px-1.5 py-0.5 bg-zinc-700 rounded text-[10px] font-bold">
+                      <div className="text-xs text-zinc-500 dark:text-zinc-400 flex items-center gap-2 mt-1">
+                        <span className="capitalize px-1.5 py-0.5 bg-zinc-200 dark:bg-zinc-700 rounded text-[10px] font-bold">
                           {res.type === 'movie' ? 'Movie' : 'Series'}
                         </span>
                         <span>{(res.item.release_date || res.item.first_air_date || '').split('-')[0]}</span>
@@ -526,11 +526,11 @@ export const MediaModal: React.FC<MediaModalProps> = ({ isOpen, onClose, initial
                         type="checkbox" 
                         checked={!!selectedFields[field.key]} 
                         onChange={() => toggleField(field.key)}
-                        className="mt-1 rounded bg-zinc-800 border-zinc-700 text-emerald-500 focus:ring-emerald-500 cursor-pointer"
+                        className="mt-1 rounded bg-zinc-100 dark:bg-zinc-800 border-zinc-300 dark:border-zinc-700 text-emerald-500 focus:ring-emerald-500 cursor-pointer"
                       />
                       <div>
-                        <div className="text-xs text-zinc-500 font-medium uppercase">{field.label}</div>
-                        <div className="text-sm text-white break-all">{field.value}</div>
+                        <div className="text-xs text-zinc-500 dark:text-zinc-500 font-medium uppercase">{field.label}</div>
+                        <div className="text-sm text-zinc-900 dark:text-white break-all">{field.value}</div>
                         {field.key === 'trailerUrl' && fetchedData.trailerTitle && (
                           <div className="text-xs text-emerald-500 mt-1 font-medium">
                             Title: {fetchedData.trailerTitle}
@@ -548,11 +548,11 @@ export const MediaModal: React.FC<MediaModalProps> = ({ isOpen, onClose, initial
                     type="checkbox" 
                     checked={!!selectedFields.description} 
                     onChange={() => toggleField('description')}
-                    className="mt-1 rounded bg-zinc-800 border-zinc-700 text-emerald-500 focus:ring-emerald-500 cursor-pointer"
+                    className="mt-1 rounded bg-zinc-100 dark:bg-zinc-800 border-zinc-300 dark:border-zinc-700 text-emerald-500 focus:ring-emerald-500 cursor-pointer"
                   />
                   <div>
-                    <div className="text-xs text-zinc-500 font-medium uppercase">Synopsis</div>
-                    <div className="text-sm text-zinc-300">{fetchedData.description}</div>
+                    <div className="text-xs text-zinc-500 dark:text-zinc-500 font-medium uppercase">Synopsis</div>
+                    <div className="text-sm text-zinc-700 dark:text-zinc-300">{fetchedData.description}</div>
                   </div>
                 </div>
               )}
@@ -563,11 +563,11 @@ export const MediaModal: React.FC<MediaModalProps> = ({ isOpen, onClose, initial
                     type="checkbox" 
                     checked={!!selectedFields.cast} 
                     onChange={() => toggleField('cast')}
-                    className="mt-1 rounded bg-zinc-800 border-zinc-700 text-emerald-500 focus:ring-emerald-500 cursor-pointer"
+                    className="mt-1 rounded bg-zinc-100 dark:bg-zinc-800 border-zinc-300 dark:border-zinc-700 text-emerald-500 focus:ring-emerald-500 cursor-pointer"
                   />
                   <div>
-                    <div className="text-xs text-zinc-500 font-medium uppercase">Cast</div>
-                    <div className="text-sm text-zinc-300">{fetchedData.cast}</div>
+                    <div className="text-xs text-zinc-500 dark:text-zinc-500 font-medium uppercase">Cast</div>
+                    <div className="text-sm text-zinc-700 dark:text-zinc-300">{fetchedData.cast}</div>
                   </div>
                 </div>
               )}
@@ -578,33 +578,33 @@ export const MediaModal: React.FC<MediaModalProps> = ({ isOpen, onClose, initial
                     type="checkbox" 
                     checked={!!selectedFields.genres} 
                     onChange={() => toggleField('genres')}
-                    className="mt-1 rounded bg-zinc-800 border-zinc-700 text-emerald-500 focus:ring-emerald-500 cursor-pointer"
+                    className="mt-1 rounded bg-zinc-100 dark:bg-zinc-800 border-zinc-300 dark:border-zinc-700 text-emerald-500 focus:ring-emerald-500 cursor-pointer"
                   />
                   <div>
-                    <div className="text-xs text-zinc-500 font-medium uppercase">Genres</div>
-                    <div className="text-sm text-zinc-300">{fetchedData.genres.join(', ')}</div>
+                    <div className="text-xs text-zinc-500 dark:text-zinc-500 font-medium uppercase">Genres</div>
+                    <div className="text-sm text-zinc-700 dark:text-zinc-300">{fetchedData.genres.join(', ')}</div>
                   </div>
                 </div>
               )}
 
               {fetchedData.seasons && fetchedData.seasons.length > 0 && (
-                <div className="border-t border-zinc-800 pt-4 mt-4">
+                <div className="border-t border-zinc-100 dark:border-zinc-800 pt-4 mt-4 transition-colors duration-300">
                   <div className="flex items-center justify-between mb-3">
-                    <h4 className="font-semibold text-white">Select Seasons:</h4>
-                    <label className="flex items-center gap-2 text-sm text-zinc-400 cursor-pointer hover:text-zinc-300 transition-colors">
+                    <h4 className="font-semibold text-zinc-900 dark:text-white">Select Seasons:</h4>
+                    <label className="flex items-center gap-2 text-sm text-zinc-500 dark:text-zinc-400 cursor-pointer hover:text-zinc-700 dark:hover:text-zinc-300 transition-colors">
                       <input 
                         type="checkbox" 
                         checked={includeEpisodeDescriptions}
                         onChange={(e) => setIncludeEpisodeDescriptions(e.target.checked)}
-                        className="rounded bg-zinc-900 border-zinc-700 text-emerald-500 focus:ring-emerald-500"
+                        className="rounded bg-zinc-100 dark:bg-zinc-900 border-zinc-300 dark:border-zinc-700 text-emerald-500 focus:ring-emerald-500"
                       />
                       Include Episode Descriptions
                     </label>
                   </div>
                   <div className="space-y-3">
                     {fetchedData.seasons.map((s: any) => (
-                      <div key={s.season} className="border border-zinc-800 rounded-xl overflow-hidden bg-zinc-950/30">
-                        <label className="flex items-center gap-3 p-4 cursor-pointer hover:bg-zinc-900/50 transition-colors">
+                      <div key={s.season} className="border border-zinc-100 dark:border-zinc-800 rounded-xl overflow-hidden bg-zinc-50/30 dark:bg-zinc-950/30 transition-colors duration-300">
+                        <label className="flex items-center gap-3 p-4 cursor-pointer hover:bg-zinc-100/50 dark:hover:bg-zinc-900/50 transition-colors">
                           <input 
                             type="checkbox" 
                             checked={selectedSeasons.includes(s.season)}
@@ -612,26 +612,26 @@ export const MediaModal: React.FC<MediaModalProps> = ({ isOpen, onClose, initial
                               if (e.target.checked) setSelectedSeasons([...selectedSeasons, s.season]);
                               else setSelectedSeasons(selectedSeasons.filter(sn => sn !== s.season));
                             }}
-                            className="rounded bg-zinc-900 border-zinc-600 text-emerald-500 focus:ring-emerald-500"
+                            className="rounded bg-zinc-100 dark:bg-zinc-900 border-zinc-300 dark:border-zinc-600 text-emerald-500 focus:ring-emerald-500"
                           />
-                          <div className="font-medium text-white">Season {s.season}</div>
-                          <div className="text-xs text-zinc-500 ml-auto">
+                          <div className="font-medium text-zinc-900 dark:text-white">Season {s.season}</div>
+                          <div className="text-xs text-zinc-500 dark:text-zinc-500 ml-auto">
                             {s.year !== 'N/A' ? `${s.year} • ` : ''}
                             {s.episodes?.length || 0} Episodes
                           </div>
                         </label>
                         
                         {selectedSeasons.includes(s.season) && s.episodes && (
-                          <div className="px-4 pb-4 pt-1 border-t border-zinc-800/50">
+                          <div className="px-4 pb-4 pt-1 border-t border-zinc-100 dark:border-zinc-800/50 transition-colors duration-300">
                             <div className="max-h-48 overflow-y-auto custom-scrollbar pr-2 space-y-2">
                               {s.episodes.map((ep: any) => (
-                                <div key={ep.episode_number} className="text-sm flex gap-3 p-2 rounded-lg bg-zinc-900/50">
-                                  <div className="text-zinc-500 font-mono w-6 shrink-0">{ep.episode_number}.</div>
+                                <div key={ep.episode_number} className="text-sm flex gap-3 p-2 rounded-lg bg-zinc-100/50 dark:bg-zinc-900/50 transition-colors duration-300">
+                                  <div className="text-zinc-400 dark:text-zinc-500 font-mono w-6 shrink-0">{ep.episode_number}.</div>
                                   <div className="flex-1 min-w-0">
-                                    <div className="text-zinc-200 font-medium truncate">{ep.name}</div>
-                                    {ep.overview && <div className="text-xs text-zinc-500 line-clamp-1 mt-0.5">{ep.overview}</div>}
+                                    <div className="text-zinc-800 dark:text-zinc-200 font-medium truncate">{ep.name}</div>
+                                    {ep.overview && <div className="text-xs text-zinc-500 dark:text-zinc-500 line-clamp-1 mt-0.5">{ep.overview}</div>}
                                   </div>
-                                  {ep.runtime && <div className="text-xs text-zinc-600 shrink-0">{ep.runtime}m</div>}
+                                  {ep.runtime && <div className="text-xs text-zinc-400 dark:text-zinc-600 shrink-0">{ep.runtime}m</div>}
                                 </div>
                               ))}
                             </div>

@@ -8,6 +8,7 @@ interface AlertModalProps {
   message: string;
   onClose: () => void;
   buttonText?: string;
+  children?: React.ReactNode;
 }
 
 export default function AlertModal({
@@ -15,12 +16,13 @@ export default function AlertModal({
   title,
   message,
   onClose,
-  buttonText = 'OK'
+  buttonText = 'OK',
+  children
 }: AlertModalProps) {
   return (
     <AnimatePresence>
       {isOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
           <motion.div 
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -47,14 +49,18 @@ export default function AlertModal({
                   <X className="w-5 h-5" />
                 </button>
               </div>
-              <p className="text-zinc-300 mb-6">{message}</p>
-              <div className="flex justify-end">
-                <button
-                  onClick={onClose}
-                  className="px-6 py-2 rounded-xl font-medium bg-emerald-500 hover:bg-emerald-600 text-white transition-colors"
-                >
-                  {buttonText}
-                </button>
+              <p className="text-zinc-300 mb-6 text-lg font-medium leading-relaxed">{message}</p>
+              <div className="flex flex-col gap-3">
+                {children ? children : (
+                  <div className="flex justify-end">
+                    <button
+                      onClick={onClose}
+                      className="px-6 py-2 rounded-xl font-medium bg-emerald-500 hover:bg-emerald-600 text-white transition-colors"
+                    >
+                      {buttonText}
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
           </motion.div>

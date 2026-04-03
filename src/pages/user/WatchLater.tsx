@@ -1,8 +1,10 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
+import { ThemeToggle } from '../../components/ThemeToggle';
 import { useAuth } from '../../contexts/AuthContext';
 import { useContent } from '../../contexts/ContentContext';
-import { Film, Clock, ArrowLeft } from 'lucide-react';
+import { Film, Clock, ArrowLeft, ShoppingCart } from 'lucide-react';
+import { useCart } from '../../contexts/CartContext';
 import { formatContentTitle } from '../../utils/contentUtils';
 import { NotificationMenu } from '../../components/NotificationMenu';
 import { LazyLoadImage } from 'react-lazy-load-image-component';
@@ -11,6 +13,7 @@ import ContentCard from '../../components/ContentCard';
 export default function WatchLater() {
   const { profile, toggleFavorite, toggleWatchLater } = useAuth();
   const { contentList, genres, languages, qualities } = useContent();
+  const { cart } = useCart();
 
   const watchLaterContent = contentList.filter(c => 
     profile?.watchLater?.includes(c.id) && 
@@ -28,11 +31,11 @@ export default function WatchLater() {
   });
 
   return (
-    <div className="min-h-screen bg-zinc-950 text-white flex flex-col">
-      <header className="sticky top-0 z-40 bg-zinc-950 border-b border-zinc-800">
+    <div className="min-h-screen bg-white dark:bg-zinc-950 text-zinc-900 dark:text-white flex flex-col transition-colors duration-300">
+      <header className="sticky top-0 z-40 bg-white dark:bg-zinc-950 border-b border-zinc-200 dark:border-zinc-800 transition-colors duration-300">
         <div className="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between">
           <div className="flex items-center gap-4">
-            <Link to="/" className="text-zinc-400 hover:text-white transition-colors">
+            <Link to="/" className="text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white transition-colors">
               <ArrowLeft className="w-5 h-5" />
             </Link>
             <h1 className="text-xl font-bold flex items-center gap-2">
@@ -40,7 +43,20 @@ export default function WatchLater() {
               Watch Later
             </h1>
           </div>
-          {profile && <NotificationMenu />}
+          <div className="flex items-center gap-4">
+            <ThemeToggle />
+            {((profile?.role === 'selected_content' && profile?.status !== 'expired') || profile?.status === 'pending') && (
+              <Link to="/cart" className="text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white transition-colors relative" title="Cart">
+                <ShoppingCart className="w-5 h-5" />
+                {cart.length > 0 && (
+                  <span className="absolute -top-1.5 -right-1.5 bg-red-500 text-white text-[10px] font-bold w-4 h-4 flex items-center justify-center rounded-full">
+                    {cart.length}
+                  </span>
+                )}
+              </Link>
+            )}
+            {profile && <NotificationMenu />}
+          </div>
         </div>
       </header>
 

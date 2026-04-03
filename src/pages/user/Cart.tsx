@@ -1,0 +1,157 @@
+import React, { useState } from 'react';
+import { useCart } from '../../contexts/CartContext';
+import { useAuth } from '../../contexts/AuthContext';
+import { ArrowLeft, Trash2, Copy, Check, Send, Loader2, Wallet, Smartphone, CreditCard, Banknote } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { db } from '../../firebase';
+import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
+import { motion } from 'framer-motion';
+import PreviousOrders from '../../components/PreviousOrders';
+
+import PaymentMethods from '../../components/PaymentMethods';
+
+export default function Cart() {
+  const { cart, removeFromCart, totalPrice, clearCart } = useCart();
+  const { profile } = useAuth();
+  const navigate = useNavigate();
+  const [copied, setCopied] = useState(false);
+  const [loading, setLoading] = useState(false);
+
+  React.useEffect(() => {
+    if (profile?.status === 'expired') {
+      navigate('/');
+    }
+  }, [profile, navigate]);
+
+  const handleCopy = () => {
+    navigator.clipboard.writeText('03416286423');
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  const handleCheckout = async () => {
+    if (!profile || cart.length === 0) return;
+    setLoading(true);
+    try {
+      const orderId = Math.floor(10000000 + Math.random() * 90000000).toString();
+
+      await setDoc(doc(db, 'orders', orderId), {
+        userId: profile.uid,
+        userName: profile.displayName || 'Unknown',
+        userEmail: profile.email,
+        userRole: profile.role,
+        type: 'content',
+        amount: totalPrice,
+        items: cart,
+        status: 'pending',
+        createdAt: serverTimestamp(),
+      });
+
+      const message = `Add Content\nOrder ID: ${orderId}\nItems: ${cart.length}\nTotal Amount: Rs ${totalPrice}`;
+      const whatsappUrl = `https://wa.me/923363284466?text=${encodeURIComponent(message)}`;
+      
+      clearCart();
+      window.open(whatsappUrl, '_blank');
+      navigate('/');
+    } catch (error) {
+      console.error('Error creating order:', error);
+      alert('Failed to create order. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (cart.length === 0) {
+    return (
+      <motion.div 
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="min-h-screen bg-zinc-950 text-white p-4 md:p-8 flex flex-col items-center justify-center"
+      >
+        <h2 className="text-2xl font-bold mb-4">Your Cart is Empty</h2>
+        <button onClick={() => navigate('/')} className="text-red-500 hover:text-red-400 flex items-center">
+          <ArrowLeft className="w-5 h-5 mr-2" />
+          Back to Home
+        </button>
+        <div className="w-full max-w-2xl mt-12">
+          <PreviousOrders />
+        </div>
+      </motion.div>
+    );
+  }
+
+  return (
+    <motion.div 
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      className="min-h-screen bg-zinc-950 text-white p-4 md:p-8"
+    >
+      <div className="max-w-2xl mx-auto">
+        <button onClick={() => navigate('/')} className="flex items-center text-zinc-400 hover:text-white mb-6">
+          <ArrowLeft className="w-5 h-5 mr-2" />
+          Back to Home
+        </button>
+
+        <h1 className="text-2xl font-bold mb-6">Your Cart</h1>
+
+        <div className="bg-zinc-900 rounded-xl p-6 mb-6">
+          <div className="space-y-4">
+            {cart.map((item, index) => (
+              <div key={index} className="flex items-start sm:items-center justify-between gap-4 border-b border-zinc-800 pb-4 last:border-0 last:pb-0">
+                <div className="flex-1 min-w-0">
+                  <h3 className="font-semibold truncate">{item.title}</h3>
+                  <p className="text-sm text-zinc-400">
+                    {item.type === 'season' ? `Season ${item.seasonNumber}` : 'Movie'}
+                  </p>
+                </div>
+                <div className="flex items-center gap-3 shrink-0">
+                  <span className="font-bold whitespace-nowrap">Rs {item.price}</span>
+                  <button 
+                    onClick={() => removeFromCart(item.contentId, item.seasonId)}
+                    className="text-red-500 hover:text-red-400 p-2 -mr-2"
+                  >
+                    <Trash2 className="w-5 h-5" />
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+          
+          <div className="flex justify-between items-center border-t border-zinc-800 pt-4 mt-4">
+            <span className="text-lg font-semibold">Total Amount</span>
+            <span className="text-2xl font-bold text-red-500">Rs {totalPrice}</span>
+          </div>
+        </div>
+
+        <div className="bg-zinc-900 rounded-xl p-6 mb-6 shadow-2xl border border-zinc-800/50">
+          <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
+            <Wallet className="w-5 h-5 text-emerald-500" />
+            Payment Details
+          </h2>
+          <p className="text-zinc-400 mb-6 text-sm">
+            Please send the payment to the following account via any of these methods:
+          </p>
+          
+          <PaymentMethods copied={copied} onCopy={handleCopy} />
+        </div>
+
+        <div className="text-center mb-6">
+          <p className="text-zinc-400 text-sm">
+            After Payment Send Screenshot for Confirmation
+          </p>
+        </div>
+
+        <button
+          onClick={handleCheckout}
+          disabled={loading}
+          className="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-4 rounded-xl flex items-center justify-center gap-2 transition-colors disabled:opacity-50"
+        >
+          {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Send className="w-5 h-5" />}
+          {loading ? 'Processing...' : 'Send Now'}
+        </button>
+
+        <PreviousOrders />
+      </div>
+    </motion.div>
+  );
+}

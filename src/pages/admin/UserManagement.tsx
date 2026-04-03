@@ -819,7 +819,7 @@ export default function UserManagement() {
             <table className="w-full text-left text-sm">
               <thead className="bg-zinc-950/50 text-zinc-400 uppercase font-semibold">
                 <tr>
-                  <th className="px-4 py-4 w-12">
+                  <th className="px-4 py-4 w-12 whitespace-nowrap">
                     <input 
                       type="checkbox" 
                       checked={selectedUsers.length === filteredAndSortedUsers.length && filteredAndSortedUsers.length > 0}
@@ -827,21 +827,21 @@ export default function UserManagement() {
                       className="w-4 h-4 rounded border-zinc-700 bg-zinc-900 text-emerald-500 focus:ring-emerald-500 focus:ring-offset-zinc-950"
                     />
                   </th>
-                  <th className="px-4 md:px-6 py-4 cursor-pointer hover:text-white transition-colors" onClick={() => toggleSort('displayName')}>
+                  <th className="px-4 md:px-6 py-4 cursor-pointer hover:text-white transition-colors whitespace-nowrap" onClick={() => toggleSort('displayName')}>
                   User Info <SortIcon field="displayName" />
                 </th>
-                <th className="px-4 md:px-6 py-4">Role</th>
-                <th className="px-4 md:px-6 py-4 cursor-pointer hover:text-white transition-colors" onClick={() => toggleSort('expiryDate')}>
+                <th className="px-4 md:px-6 py-4 whitespace-nowrap">Role</th>
+                <th className="px-4 md:px-6 py-4 cursor-pointer hover:text-white transition-colors whitespace-nowrap" onClick={() => toggleSort('expiryDate')}>
                   Expiry Date <SortIcon field="expiryDate" />
                 </th>
-                <th className="px-4 md:px-6 py-4">Last Active</th>
+                <th className="px-4 md:px-6 py-4 whitespace-nowrap">Last Active</th>
                 {(profile?.role === 'admin' || profile?.role === 'owner') && (
-                  <th className="px-4 md:px-6 py-4">Managed By</th>
+                  <th className="px-4 md:px-6 py-4 whitespace-nowrap">Managed By</th>
                 )}
-                <th className="px-4 md:px-6 py-4 cursor-pointer hover:text-white transition-colors" onClick={() => toggleSort('createdAt')}>
+                <th className="px-4 md:px-6 py-4 cursor-pointer hover:text-white transition-colors whitespace-nowrap" onClick={() => toggleSort('createdAt')}>
                   Joined <SortIcon field="createdAt" />
                 </th>
-                <th className="px-4 md:px-6 py-4 text-right">Actions</th>
+                <th className="px-4 md:px-6 py-4 text-right whitespace-nowrap">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-zinc-800">

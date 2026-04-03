@@ -115,11 +115,11 @@ export default function IncomeManagement() {
           <table className="w-full text-left text-sm">
             <thead className="bg-zinc-950/50 text-zinc-400 uppercase font-semibold">
               <tr>
-                <th className="px-6 py-4">Date</th>
-                <th className="px-6 py-4">User / Source</th>
-                <th className="px-6 py-4">Description</th>
-                <th className="px-6 py-4">Amount</th>
-                <th className="px-6 py-4 text-right">Actions</th>
+                <th className="px-6 py-4 whitespace-nowrap">Date</th>
+                <th className="px-6 py-4 whitespace-nowrap">User / Source</th>
+                <th className="px-6 py-4 whitespace-nowrap">Description</th>
+                <th className="px-6 py-4 whitespace-nowrap">Amount</th>
+                <th className="px-6 py-4 text-right whitespace-nowrap">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-zinc-800">

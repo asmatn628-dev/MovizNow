@@ -37,7 +37,7 @@ export default function ConfirmModal({
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.95 }}
             transition={{ duration: 0.2 }}
-            className="relative bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-md overflow-hidden shadow-2xl"
+            className="relative bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-2xl w-full max-w-md overflow-hidden shadow-2xl transition-colors duration-300"
           >
             <div className="p-6">
               <div className="flex items-start justify-between mb-4">
@@ -45,17 +45,17 @@ export default function ConfirmModal({
                   <div className="bg-red-500/10 p-2 rounded-full">
                     <AlertTriangle className="w-6 h-6 text-red-500" />
                   </div>
-                  <h2 className="text-xl font-bold text-white">{title}</h2>
+                  <h2 className="text-xl font-bold text-zinc-900 dark:text-white transition-colors duration-300">{title}</h2>
                 </div>
-                <button onClick={onCancel} className="text-zinc-500 hover:text-white transition-colors">
+                <button onClick={onCancel} className="text-zinc-500 hover:text-zinc-900 dark:hover:text-white transition-colors">
                   <X className="w-5 h-5" />
                 </button>
               </div>
-              <p className="text-zinc-300 mb-6">{message}</p>
+              <p className="text-zinc-600 dark:text-zinc-300 mb-6 transition-colors duration-300">{message}</p>
               <div className="flex justify-end gap-3">
                 <button
                   onClick={onCancel}
-                  className="px-4 py-2 rounded-xl font-medium text-zinc-300 hover:text-white hover:bg-zinc-800 transition-colors"
+                  className="px-4 py-2 rounded-xl font-medium text-zinc-600 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
                 >
                   {cancelText}
                 </button>

@@ -5,7 +5,8 @@ import { doc, updateDoc } from 'firebase/firestore';
 import { Content, Role } from '../../types';
 import { useAuth } from '../../contexts/AuthContext';
 import { useContent } from '../../contexts/ContentContext';
-import { Film, Search, Filter, MessageCircle, Clock, Heart, LogOut, User, Users, Lock, LayoutDashboard, X } from 'lucide-react';
+import { useCart } from '../../contexts/CartContext';
+import { Film, Search, Filter, MessageCircle, Clock, Heart, LogOut, User, Users, Lock, LayoutDashboard, X, ShoppingCart, Plus } from 'lucide-react';
 import { clsx } from 'clsx';
 import { format } from 'date-fns';
 import ConfirmModal from '../../components/ConfirmModal';
@@ -19,6 +20,7 @@ import { NotificationMenu } from '../../components/NotificationMenu';
 export default function Home({ onOpenMediaModal }: { onOpenMediaModal: () => void }) {
   const { profile, logout, toggleFavorite, toggleWatchLater } = useAuth();
   const { contentList, genres, languages, qualities, loading, isOffline } = useContent();
+  const { cart } = useCart();
   const navigate = useNavigate();
   
   const [search, setSearch] = useState('');
@@ -301,22 +303,34 @@ export default function Home({ onOpenMediaModal }: { onOpenMediaModal: () => voi
                     <div className="h-8 w-px bg-zinc-800"></div>
                     <div className="flex flex-col items-start">
                       <span className="text-xs text-zinc-400">Expiry Date</span>
-                      <span className="text-xs font-medium text-zinc-300">
-                        {profile.expiryDate ? (() => {
-                          const expiry = new Date(profile.expiryDate);
-                          const expiryEnd = new Date(expiry.getTime() + 24 * 60 * 60 * 1000);
-                          const now = new Date();
-                          const diffTime = expiryEnd.getTime() - now.getTime();
-                          const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-                          const isExpiringSoon = diffDays > 0 && diffDays < 3;
-                          const daysText = diffDays > 0 ? `${diffDays} days left` : 'Expired';
-                          return (
-                            <span className={clsx(isExpiringSoon && "text-red-500 font-bold")}>
-                              {format(expiry, 'MMM dd, yyyy')} ({daysText})
-                            </span>
-                          );
-                        })() : 'No Expiry'}
-                      </span>
+                      <div className="flex items-center gap-1">
+                        <span className="text-xs font-medium text-zinc-300">
+                          {profile.expiryDate ? (() => {
+                            const expiry = new Date(profile.expiryDate);
+                            const expiryEnd = new Date(expiry.getTime() + 24 * 60 * 60 * 1000);
+                            const now = new Date();
+                            const diffTime = expiryEnd.getTime() - now.getTime();
+                            const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+                            const isExpiringSoon = diffDays > 0 && diffDays < 3;
+                            const daysText = diffDays > 0 ? `${diffDays} days left` : 'Expired';
+                            return (
+                              <span className={clsx(isExpiringSoon && "text-red-500 font-bold")}>
+                                {format(expiry, 'MMM dd, yyyy')} ({daysText})
+                              </span>
+                            );
+                          })() : 'No Expiry'}
+                        </span>
+                        {(profile.role === 'user' || profile.role === 'trial') && (
+                          <Link 
+                            to="/top-up" 
+                            state={{ isExtend: true }}
+                            className="bg-emerald-500/20 text-emerald-500 hover:bg-emerald-500/30 p-0.5 rounded-full transition-colors"
+                            title="Extend Membership"
+                          >
+                            <Plus className="w-3 h-3" />
+                          </Link>
+                        )}
+                      </div>
                     </div>
                     <a 
                       href="https://wa.me/923363284466" 
@@ -338,14 +352,24 @@ export default function Home({ onOpenMediaModal }: { onOpenMediaModal: () => voi
             <Link to="/favorites" className="text-zinc-400 hover:text-white transition-colors" title="Favorites">
               <Heart className="w-5 h-5" />
             </Link>
+            {((profile?.role === 'selected_content' && profile?.status !== 'expired') || profile?.status === 'pending') && (
+              <Link to="/cart" className="text-zinc-400 hover:text-white transition-colors relative" title="Cart">
+                <ShoppingCart className="w-5 h-5" />
+                {cart.length > 0 && (
+                  <span className="absolute -top-1.5 -right-1.5 bg-red-500 text-white text-[10px] font-bold w-4 h-4 flex items-center justify-center rounded-full">
+                    {cart.length}
+                  </span>
+                )}
+              </Link>
+            )}
+            <Link to="/requests" className="text-zinc-400 hover:text-white transition-colors" title="Movie Requests">
+              <MessageCircle className="w-5 h-5" />
+            </Link>
             {(profile?.role === 'admin' || profile?.role === 'owner' || profile?.role === 'content_manager' || profile?.role === 'manager') && (
               <button onClick={onOpenMediaModal} className="text-zinc-400 hover:text-white transition-colors" title="Search Media">
                 <Search className="w-5 h-5" />
               </button>
             )}
-            <Link to="/requests" className="text-zinc-400 hover:text-white transition-colors" title="Movie Requests">
-              <MessageCircle className="w-5 h-5" />
-            </Link>
             {profile && <NotificationMenu />}
             {(profile?.role === 'admin' || profile?.role === 'owner') && (
               <Link to="/admin" className="text-zinc-400 hover:text-white transition-colors" title="Admin Panel">
@@ -383,7 +407,7 @@ export default function Home({ onOpenMediaModal }: { onOpenMediaModal: () => voi
                 </button>
               ) : null}
             </div>
-            <div className="flex items-center gap-1.5">
+            <div className="flex flex-wrap justify-end items-center gap-1.5">
               <span className={clsx("text-[10px] font-medium px-2 py-0.5 rounded-full border", getRoleColor(profile.role))}>
                 {profile.role === 'selected_content' ? 'Selected Content' : 
                  profile.role === 'content_manager' ? 'Content Manager' :
@@ -400,22 +424,34 @@ export default function Home({ onOpenMediaModal }: { onOpenMediaModal: () => voi
           </div>
           {profile.role !== 'owner' && (
             <div className="flex justify-between items-center">
-              <span className="text-zinc-400 text-xs">
-                {profile.expiryDate ? (() => {
-                  const expiry = new Date(profile.expiryDate);
-                  const expiryEnd = new Date(expiry.getTime() + 24 * 60 * 60 * 1000);
-                  const now = new Date();
-                  const diffTime = expiryEnd.getTime() - now.getTime();
-                  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-                  const isExpiringSoon = diffDays > 0 && diffDays < 3;
-                  const daysText = diffDays > 0 ? `${diffDays}d left` : 'Expired';
-                  return (
-                    <span className={clsx(isExpiringSoon && "text-red-500 font-bold")}>
-                      Exp: {format(expiry, 'MMM dd, yyyy')} ({daysText})
-                    </span>
-                  );
-                })() : 'No Expiry'}
-              </span>
+              <div className="flex items-center gap-1">
+                <span className="text-zinc-400 text-xs">
+                  {profile.expiryDate ? (() => {
+                    const expiry = new Date(profile.expiryDate);
+                    const expiryEnd = new Date(expiry.getTime() + 24 * 60 * 60 * 1000);
+                    const now = new Date();
+                    const diffTime = expiryEnd.getTime() - now.getTime();
+                    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+                    const isExpiringSoon = diffDays > 0 && diffDays < 3;
+                    const daysText = diffDays > 0 ? `${diffDays}d left` : 'Expired';
+                    return (
+                      <span className={clsx(isExpiringSoon && "text-red-500 font-bold")}>
+                        Exp: {format(expiry, 'MMM dd, yyyy')} ({daysText})
+                      </span>
+                    );
+                  })() : 'No Expiry'}
+                </span>
+                {(profile.role === 'user' || profile.role === 'trial') && (
+                  <Link 
+                    to="/top-up" 
+                    state={{ isExtend: true }}
+                    className="bg-emerald-500/20 text-emerald-500 hover:bg-emerald-500/30 p-0.5 rounded-full transition-colors"
+                    title="Extend Membership"
+                  >
+                    <Plus className="w-3 h-3" />
+                  </Link>
+                )}
+              </div>
               <a 
                 href="https://wa.me/923363284466" 
                 target="_blank" 
@@ -434,27 +470,58 @@ export default function Home({ onOpenMediaModal }: { onOpenMediaModal: () => voi
       <main className="flex-1 max-w-7xl mx-auto w-full px-4 pt-4 pb-8">
         {/* Status Banner */}
         {profile?.status === 'pending' && (
-          <div className="bg-yellow-500/10 border border-yellow-500/20 text-yellow-500 p-4 rounded-2xl mb-8 flex items-center justify-between">
-            <p>Your account is pending admin approval. You can browse, but cannot play content yet.</p>
-            <a href="https://wa.me/923363284466" target="_blank" rel="noreferrer" className="flex items-center gap-2 bg-yellow-500/20 px-4 py-2 rounded-xl font-medium hover:bg-yellow-500/30 transition-colors">
-              <MessageCircle className="w-4 h-4" /> Contact Admin
-            </a>
+          <div className="bg-yellow-500/10 border border-yellow-500/20 text-yellow-500 p-4 sm:p-6 rounded-2xl mb-8 flex flex-row items-center justify-between gap-4 sm:gap-8">
+            <div className="flex-1 min-w-0">
+              <h3 className="font-bold text-lg sm:text-2xl mb-1 sm:mb-2">Account Pending</h3>
+              <p className="text-yellow-500/80 text-sm sm:text-lg font-medium">Your account activation is pending. Please Get Membership or Add any content to cart to activate your account.</p>
+            </div>
+            <div className="flex flex-col gap-2 sm:gap-3 min-w-[140px] sm:min-w-[220px] shrink-0">
+              {(profile?.role === 'trial' || profile?.role === 'user') && (
+                <Link to="/top-up" className="flex items-center justify-center gap-1.5 sm:gap-2 bg-yellow-500 text-black px-3 sm:px-6 py-2 sm:py-3 rounded-lg sm:rounded-xl text-xs sm:text-base font-bold hover:bg-yellow-400 transition-all shadow-lg shadow-yellow-500/20">
+                  Get Membership
+                </Link>
+              )}
+              {(profile?.role === 'selected_content' || profile?.role === 'user') && (
+                <Link to="/cart" className="flex items-center justify-center gap-1.5 sm:gap-2 bg-yellow-500 text-black px-3 sm:px-6 py-2 sm:py-3 rounded-lg sm:rounded-xl text-xs sm:text-base font-bold hover:bg-yellow-400 transition-all shadow-lg shadow-yellow-500/20">
+                  <ShoppingCart className="w-3 h-3 sm:w-5 sm:h-5" /> Cart
+                </Link>
+              )}
+              <a href="https://wa.me/923363284466" target="_blank" rel="noreferrer" className="flex items-center justify-center gap-1.5 sm:gap-2 bg-yellow-500/10 border border-yellow-500/30 px-3 sm:px-6 py-2 sm:py-3 rounded-lg sm:rounded-xl text-xs sm:text-base font-bold hover:bg-yellow-500/20 transition-all">
+                <MessageCircle className="w-3 h-3 sm:w-5 sm:h-5" /> Admin
+              </a>
+            </div>
           </div>
         )}
         {profile?.status === 'expired' && profile?.role === 'trial' && (
-          <div className="bg-red-500/10 border border-red-500/20 text-red-500 p-4 rounded-2xl mb-8 flex items-center justify-between">
-            <p>Your Free Trial is Expired. Contact admin and get your membership to enjoy watching.</p>
-            <a href="https://wa.me/923363284466" target="_blank" rel="noreferrer" className="flex items-center gap-2 bg-red-500/20 px-4 py-2 rounded-xl font-medium hover:bg-red-500/30 transition-colors">
-              <MessageCircle className="w-4 h-4" /> Contact Now
-            </a>
+          <div className="bg-red-500/10 border border-red-500/20 text-red-500 p-4 sm:p-6 rounded-2xl mb-8 flex flex-row items-center justify-between gap-4 sm:gap-8">
+            <div className="flex-1 min-w-0">
+              <h3 className="font-bold text-lg sm:text-2xl mb-1 sm:mb-2">Trial Expired</h3>
+              <p className="text-red-500/80 text-sm sm:text-lg font-medium">Your Free Trial is Expired. Buy membership to enjoy watching.</p>
+            </div>
+            <div className="flex flex-col gap-2 sm:gap-3 min-w-[140px] sm:min-w-[220px] shrink-0">
+              <Link to="/top-up" className="flex items-center justify-center gap-1.5 sm:gap-2 bg-red-500 text-white px-3 sm:px-6 py-2 sm:py-3 rounded-lg sm:rounded-xl text-xs sm:text-base font-bold hover:bg-red-600 transition-all shadow-lg shadow-red-500/20">
+                Buy Now
+              </Link>
+              <a href="https://wa.me/923363284466" target="_blank" rel="noreferrer" className="flex items-center justify-center gap-1.5 sm:gap-2 bg-red-500/10 border border-red-500/30 px-3 sm:px-6 py-2 sm:py-3 rounded-lg sm:rounded-xl text-xs sm:text-base font-bold hover:bg-red-500/20 transition-all">
+                <MessageCircle className="w-3 h-3 sm:w-5 sm:h-5" /> Admin
+              </a>
+            </div>
           </div>
         )}
         {profile?.status === 'expired' && profile?.role !== 'trial' && (
-          <div className="bg-red-500/10 border border-red-500/20 text-red-500 p-4 rounded-2xl mb-8 flex items-center justify-between">
-            <p>Your membership has expired. Please renew to continue watching.</p>
-            <a href="https://wa.me/923363284466" target="_blank" rel="noreferrer" className="flex items-center gap-2 bg-red-500/20 px-4 py-2 rounded-xl font-medium hover:bg-red-500/30 transition-colors">
-              <MessageCircle className="w-4 h-4" /> Renew Now
-            </a>
+          <div className="bg-red-500/10 border border-red-500/20 text-red-500 p-4 sm:p-6 rounded-2xl mb-8 flex flex-row items-center justify-between gap-4 sm:gap-8">
+            <div className="flex-1 min-w-0">
+              <h3 className="font-bold text-lg sm:text-2xl mb-1 sm:mb-2">Membership Expired</h3>
+              <p className="text-red-500/80 text-sm sm:text-lg font-medium">Your membership has expired. Please renew to continue watching.</p>
+            </div>
+            <div className="flex flex-col gap-2 sm:gap-3 min-w-[140px] sm:min-w-[220px] shrink-0">
+              <Link to="/top-up" className="flex items-center justify-center gap-1.5 sm:gap-2 bg-red-500 text-white px-3 sm:px-6 py-2 sm:py-3 rounded-lg sm:rounded-xl text-xs sm:text-base font-bold hover:bg-red-600 transition-all shadow-lg shadow-red-500/20">
+                Renew Now
+              </Link>
+              <a href="https://wa.me/923363284466" target="_blank" rel="noreferrer" className="flex items-center justify-center gap-1.5 sm:gap-2 bg-red-500/10 border border-red-500/30 px-3 sm:px-6 py-2 sm:py-3 rounded-lg sm:rounded-xl text-xs sm:text-base font-bold hover:bg-red-500/20 transition-all">
+                <MessageCircle className="w-3 h-3 sm:w-5 sm:h-5" /> Admin
+              </a>
+            </div>
           </div>
         )}
 

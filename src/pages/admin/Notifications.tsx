@@ -67,32 +67,32 @@ export default function Notifications() {
     <div className="p-4 md:p-8 max-w-7xl mx-auto">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
         <div>
-          <h1 className="text-2xl md:text-3xl font-bold flex items-center gap-3">
+          <h1 className="text-2xl md:text-3xl font-bold flex items-center gap-3 text-zinc-900 dark:text-white transition-colors duration-300">
             <Bell className="w-8 h-8 text-blue-500" />
             Notifications
           </h1>
-          <p className="text-zinc-400 mt-1">
+          <p className="text-zinc-500 dark:text-zinc-400 mt-1 transition-colors duration-300">
             Manage push notifications sent to users
           </p>
         </div>
 
-        <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4 flex items-center gap-4">
+        <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-4 flex items-center gap-4 transition-colors duration-300">
           <div className="w-12 h-12 bg-blue-500/10 rounded-full flex items-center justify-center shrink-0">
             <Calendar className="w-6 h-6 text-blue-500" />
           </div>
           <div>
-            <div className="text-2xl font-bold text-white">
+            <div className="text-2xl font-bold text-zinc-900 dark:text-white transition-colors duration-300">
               {notificationsToday}
             </div>
-            <div className="text-xs text-zinc-400 uppercase tracking-wider font-bold">
+            <div className="text-xs text-zinc-500 dark:text-zinc-400 uppercase tracking-wider font-bold transition-colors duration-300">
               Sent Today
             </div>
           </div>
         </div>
       </div>
 
-      <div className="bg-zinc-900 border border-zinc-800 rounded-2xl overflow-hidden flex flex-col h-[calc(100vh-200px)]">
-        <div className="p-4 border-b border-zinc-800">
+      <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl overflow-hidden flex flex-col h-[calc(100vh-200px)] transition-colors duration-300">
+        <div className="p-4 border-b border-zinc-200 dark:border-zinc-800 transition-colors duration-300">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-zinc-500" />
             <input
@@ -100,14 +100,14 @@ export default function Notifications() {
               placeholder="Search notifications..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full bg-zinc-950 border border-zinc-800 rounded-xl pl-10 pr-4 py-3 focus:outline-none focus:border-blue-500"
+              className="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl pl-10 pr-4 py-3 focus:outline-none focus:border-blue-500 text-zinc-900 dark:text-white transition-colors duration-300"
             />
           </div>
         </div>
 
         <div className="flex-1 overflow-y-auto p-4 space-y-4">
           {filteredNotifications.length === 0 ? (
-            <div className="text-center py-12 text-zinc-500">
+            <div className="text-center py-12 text-zinc-500 dark:text-zinc-400 transition-colors duration-300">
               <Bell className="w-12 h-12 mx-auto mb-4 opacity-20" />
               <p>No notifications found</p>
             </div>
@@ -115,34 +115,34 @@ export default function Notifications() {
             filteredNotifications.map((notification) => (
               <div
                 key={notification.id}
-                className="bg-zinc-950 border border-zinc-800 rounded-xl p-4 flex flex-col sm:flex-row gap-4 items-start sm:items-center"
+                className="bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl p-4 flex flex-col sm:flex-row gap-4 items-start sm:items-center transition-colors duration-300"
               >
                 {notification.posterUrl ? (
                   <img
                     src={notification.posterUrl}
                     alt="Poster"
-                    className="w-16 h-24 object-cover rounded-lg shrink-0 border border-zinc-800"
+                    className="w-16 h-24 object-cover rounded-lg shrink-0 border border-zinc-200 dark:border-zinc-800 transition-colors duration-300"
                     referrerPolicy="no-referrer"
                   />
                 ) : (
-                  <div className="w-16 h-24 bg-zinc-900 rounded-lg shrink-0 flex items-center justify-center border border-zinc-800">
+                  <div className="w-16 h-24 bg-zinc-100 dark:bg-zinc-900 rounded-lg shrink-0 flex items-center justify-center border border-zinc-200 dark:border-zinc-800 transition-colors duration-300">
                     <Bell className="w-6 h-6 text-zinc-600" />
                   </div>
                 )}
 
                 <div className="flex-1 min-w-0">
                   <div className="flex items-start justify-between gap-4 mb-2">
-                    <h3 className="font-bold text-lg text-white leading-tight">
+                    <h3 className="font-bold text-lg text-zinc-900 dark:text-white leading-tight transition-colors duration-300">
                       {notification.title}
                     </h3>
-                    <span className="text-xs text-zinc-500 whitespace-nowrap bg-zinc-900 px-2 py-1 rounded-md">
+                    <span className="text-xs text-zinc-500 whitespace-nowrap bg-zinc-100 dark:bg-zinc-900 px-2 py-1 rounded-md transition-colors duration-300">
                       {format(
                         new Date(notification.createdAt),
                         "MMM dd, yyyy HH:mm",
                       )}
                     </span>
                   </div>
-                  <p className="text-zinc-400 text-sm mb-3">
+                  <p className="text-zinc-600 dark:text-zinc-400 text-sm mb-3 transition-colors duration-300">
                     {notification.body}
                   </p>
                   <div className="flex items-center gap-2">

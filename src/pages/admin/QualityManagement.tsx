@@ -100,7 +100,7 @@ export default function QualityManagement() {
   return (
     <div className="p-4 md:p-8">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
-        <h1 className="text-2xl md:text-3xl font-bold">Quality Management</h1>
+        <h1 className="text-2xl md:text-3xl font-bold text-zinc-900 dark:text-white transition-colors duration-300">Quality Management</h1>
         <div className="relative w-full md:w-64">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-zinc-500" />
           <input
@@ -108,23 +108,23 @@ export default function QualityManagement() {
             placeholder="Search qualities..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full bg-zinc-900 border border-zinc-800 rounded-xl pl-10 pr-4 py-3 focus:outline-none focus:border-emerald-500"
+            className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl pl-10 pr-4 py-3 focus:outline-none focus:border-emerald-500 text-zinc-900 dark:text-white transition-colors duration-300"
           />
         </div>
       </div>
 
-      <div className="bg-zinc-900 rounded-2xl p-6 border border-zinc-800 mb-8 max-w-2xl">
-        <h2 className="text-xl font-semibold mb-4">Add New Quality</h2>
+      <div className="bg-white dark:bg-zinc-900 rounded-2xl p-6 border border-zinc-200 dark:border-zinc-800 mb-8 max-w-2xl transition-colors duration-300">
+        <h2 className="text-xl font-semibold mb-4 text-zinc-900 dark:text-white transition-colors duration-300">Add New Quality</h2>
         <form onSubmit={handleAdd} className="flex flex-col sm:flex-row gap-4">
           <input
             type="text"
             value={newQuality}
             onChange={(e) => setNewQuality(e.target.value)}
             placeholder="e.g., WEB-DL, HDRip, BluRay"
-            className="flex-1 bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-3 focus:outline-none focus:border-emerald-500"
+            className="flex-1 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-3 focus:outline-none focus:border-emerald-500 text-zinc-900 dark:text-white transition-colors duration-300"
           />
-          <div className="flex items-center gap-2 bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2">
-            <label className="text-sm text-zinc-400">Color:</label>
+          <div className="flex items-center gap-2 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3 py-2 transition-colors duration-300">
+            <label className="text-sm text-zinc-500 dark:text-zinc-400 transition-colors duration-300">Color:</label>
             <input
               type="color"
               value={newColor}
@@ -142,7 +142,7 @@ export default function QualityManagement() {
         </form>
       </div>
 
-      {searchTerm && <p className="text-zinc-400 mb-4 text-sm">Drag and drop is disabled while searching.</p>}
+      {searchTerm && <p className="text-zinc-500 dark:text-zinc-400 mb-4 text-sm transition-colors duration-300">Drag and drop is disabled while searching.</p>}
 
       {loading ? (
         <div className="flex justify-center items-center py-20">
@@ -164,7 +164,7 @@ export default function QualityManagement() {
                     <div
                       ref={provided.innerRef}
                       {...provided.draggableProps}
-                      className={`bg-zinc-900 border ${snapshot.isDragging ? 'border-emerald-500 shadow-lg shadow-emerald-500/20 z-10' : 'border-zinc-800'} rounded-xl p-4 flex items-center justify-between transition-colors`}
+                      className={`bg-white dark:bg-zinc-900 border ${snapshot.isDragging ? 'border-emerald-500 shadow-lg shadow-emerald-500/20 z-10' : 'border-zinc-200 dark:border-zinc-800'} rounded-xl p-4 flex items-center justify-between transition-colors duration-300`}
                     >
                       {editingId === quality.id ? (
                         <div className="flex items-center gap-2 w-full">
@@ -172,7 +172,7 @@ export default function QualityManagement() {
                             type="text"
                             value={editName}
                             onChange={(e) => setEditName(e.target.value)}
-                            className="flex-1 bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-1.5 focus:outline-none focus:border-emerald-500 text-sm"
+                            className="flex-1 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg px-3 py-1.5 focus:outline-none focus:border-emerald-500 text-sm text-zinc-900 dark:text-white transition-colors duration-300"
                             autoFocus
                           />
                           <input
@@ -184,14 +184,14 @@ export default function QualityManagement() {
                           <button onClick={handleSaveEdit} className="p-1.5 text-emerald-500 hover:bg-emerald-500/10 rounded-lg transition-colors">
                             <Check className="w-4 h-4" />
                           </button>
-                          <button onClick={() => setEditingId(null)} className="p-1.5 text-zinc-400 hover:text-white hover:bg-zinc-800 rounded-lg transition-colors">
+                          <button onClick={() => setEditingId(null)} className="p-1.5 text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-lg transition-colors">
                             <X className="w-4 h-4" />
                           </button>
                         </div>
                       ) : (
                         <>
                           <div className="flex items-center gap-3">
-                            <div {...provided.dragHandleProps} className={`cursor-grab active:cursor-grabbing p-1 hover:bg-zinc-800 rounded ${searchTerm ? 'opacity-50 pointer-events-none' : ''}`}>
+                            <div {...provided.dragHandleProps} className={`cursor-grab active:cursor-grabbing p-1 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded transition-colors ${searchTerm ? 'opacity-50 pointer-events-none' : ''}`}>
                               <GripVertical className="w-4 h-4 text-zinc-500" />
                             </div>
                             <div className="flex items-center gap-2">
@@ -199,13 +199,13 @@ export default function QualityManagement() {
                                 className="w-3 h-3 rounded-full" 
                                 style={{ backgroundColor: quality.color || '#10b981' }}
                               />
-                              <span className="font-medium">{quality.name}</span>
+                              <span className="font-medium text-zinc-900 dark:text-white transition-colors duration-300">{quality.name}</span>
                             </div>
                           </div>
                           <div className="flex items-center gap-1">
                             <button
                               onClick={() => handleEdit(quality)}
-                              className="p-2 text-zinc-400 hover:text-white hover:bg-zinc-800 rounded-lg transition-colors"
+                              className="p-2 text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-lg transition-colors"
                             >
                               <Edit2 className="w-4 h-4" />
                             </button>

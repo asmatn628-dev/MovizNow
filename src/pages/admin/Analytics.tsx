@@ -130,14 +130,14 @@ export default function Analytics() {
     <div className="space-y-8">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
-          <h1 className="text-3xl font-bold text-white flex items-center gap-3">
+          <h1 className="text-3xl font-bold text-zinc-900 dark:text-white flex items-center gap-3 transition-colors duration-300">
             <BarChart3 className="w-8 h-8 text-emerald-500" />
             Analytics Dashboard
           </h1>
-          <p className="text-zinc-400 mt-1">Track usage, content popularity, and user engagement.</p>
+          <p className="text-zinc-500 dark:text-zinc-400 mt-1 transition-colors duration-300">Track usage, content popularity, and user engagement.</p>
         </div>
         
-        <div className="flex bg-zinc-900 rounded-xl p-1 border border-zinc-800">
+        <div className="flex bg-zinc-100 dark:bg-zinc-900 rounded-xl p-1 border border-zinc-200 dark:border-zinc-800 transition-colors duration-300">
           {(['day', 'week', 'month', 'year'] as const).map((range) => (
             <button
               key={range}
@@ -145,7 +145,7 @@ export default function Analytics() {
               className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors capitalize ${
                 timeRange === range 
                   ? 'bg-emerald-500 text-white' 
-                  : 'text-zinc-400 hover:text-white hover:bg-zinc-800'
+                  : 'text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-200 dark:hover:bg-zinc-800'
               }`}
             >
               {range}
@@ -156,50 +156,50 @@ export default function Analytics() {
 
       {/* Overview Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6">
+        <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-6 transition-colors duration-300">
           <div className="flex items-center gap-4 mb-4">
             <div className="p-3 bg-emerald-500/10 text-emerald-500 rounded-xl">
               <Activity className="w-6 h-6" />
             </div>
             <div>
-              <p className="text-zinc-400 text-sm font-medium">App Sessions</p>
-              <h3 className="text-2xl font-bold text-white">{sessionStarts.length}</h3>
+              <p className="text-zinc-500 dark:text-zinc-400 text-sm font-medium transition-colors duration-300">App Sessions</p>
+              <h3 className="text-2xl font-bold text-zinc-900 dark:text-white transition-colors duration-300">{sessionStarts.length}</h3>
             </div>
           </div>
         </div>
         
-        <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6">
+        <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-6 transition-colors duration-300">
           <div className="flex items-center gap-4 mb-4">
             <div className="p-3 bg-blue-500/10 text-blue-500 rounded-xl">
               <Film className="w-6 h-6" />
             </div>
             <div>
-              <p className="text-zinc-400 text-sm font-medium">Content Views</p>
-              <h3 className="text-2xl font-bold text-white">{contentClicks.length}</h3>
+              <p className="text-zinc-500 dark:text-zinc-400 text-sm font-medium transition-colors duration-300">Content Views</p>
+              <h3 className="text-2xl font-bold text-zinc-900 dark:text-white transition-colors duration-300">{contentClicks.length}</h3>
             </div>
           </div>
         </div>
         
-        <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6">
+        <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-6 transition-colors duration-300">
           <div className="flex items-center gap-4 mb-4">
             <div className="p-3 bg-purple-500/10 text-purple-500 rounded-xl">
               <LinkIcon className="w-6 h-6" />
             </div>
             <div>
-              <p className="text-zinc-400 text-sm font-medium">Link Clicks</p>
-              <h3 className="text-2xl font-bold text-white">{linkClicks.length}</h3>
+              <p className="text-zinc-500 dark:text-zinc-400 text-sm font-medium transition-colors duration-300">Link Clicks</p>
+              <h3 className="text-2xl font-bold text-zinc-900 dark:text-white transition-colors duration-300">{linkClicks.length}</h3>
             </div>
           </div>
         </div>
         
-        <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6">
+        <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-6 transition-colors duration-300">
           <div className="flex items-center gap-4 mb-4">
             <div className="p-3 bg-orange-500/10 text-orange-500 rounded-xl">
               <Clock className="w-6 h-6" />
             </div>
             <div>
-              <p className="text-zinc-400 text-sm font-medium">Avg Time / User</p>
-              <h3 className="text-2xl font-bold text-white">
+              <p className="text-zinc-500 dark:text-zinc-400 text-sm font-medium transition-colors duration-300">Avg Time / User</p>
+              <h3 className="text-2xl font-bold text-zinc-900 dark:text-white transition-colors duration-300">
                 {avgTimePerUser} min
               </h3>
             </div>
@@ -209,42 +209,42 @@ export default function Analytics() {
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
         {/* Top Content */}
-        <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6">
-          <h2 className="text-xl font-bold text-white mb-6 flex items-center gap-2">
+        <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-6 transition-colors duration-300">
+          <h2 className="text-xl font-bold text-zinc-900 dark:text-white mb-6 flex items-center gap-2 transition-colors duration-300">
             <Film className="w-5 h-5 text-emerald-500" />
             Top Movies & Series
           </h2>
           <div className="space-y-4">
             {topContent.length > 0 ? topContent.map((item, index) => (
-              <div key={item.id} className="flex items-center justify-between p-4 bg-zinc-950 rounded-xl border border-zinc-800">
+              <div key={item.id} className="flex items-center justify-between p-4 bg-zinc-50 dark:bg-zinc-950 rounded-xl border border-zinc-200 dark:border-zinc-800 transition-colors duration-300">
                 <div className="flex items-center gap-4">
-                  <span className="text-xl font-bold text-zinc-600 w-6">{index + 1}</span>
-                  <span className="font-medium text-white">{item.title}</span>
+                  <span className="text-xl font-bold text-zinc-400 dark:text-zinc-600 w-6 transition-colors duration-300">{index + 1}</span>
+                  <span className="font-medium text-zinc-900 dark:text-white transition-colors duration-300">{item.title}</span>
                 </div>
                 <span className="bg-emerald-500/10 text-emerald-500 px-3 py-1 rounded-full text-sm font-medium">
                   {item.count} views
                 </span>
               </div>
             )) : (
-              <p className="text-zinc-500 text-center py-4">No content views in this period.</p>
+              <p className="text-zinc-500 dark:text-zinc-400 text-center py-4 transition-colors duration-300">No content views in this period.</p>
             )}
           </div>
         </div>
 
         {/* Top Links */}
-        <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6">
-          <h2 className="text-xl font-bold text-white mb-6 flex items-center gap-2">
+        <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-6 transition-colors duration-300">
+          <h2 className="text-xl font-bold text-zinc-900 dark:text-white mb-6 flex items-center gap-2 transition-colors duration-300">
             <LinkIcon className="w-5 h-5 text-emerald-500" />
             Top Links Clicked
           </h2>
           <div className="space-y-4">
             {topLinks.length > 0 ? topLinks.map((item, index) => (
-              <div key={item.id} className="flex items-center justify-between p-4 bg-zinc-950 rounded-xl border border-zinc-800">
+              <div key={item.id} className="flex items-center justify-between p-4 bg-zinc-50 dark:bg-zinc-950 rounded-xl border border-zinc-200 dark:border-zinc-800 transition-colors duration-300">
                 <div className="flex items-center gap-4">
-                  <span className="text-xl font-bold text-zinc-600 w-6">{index + 1}</span>
+                  <span className="text-xl font-bold text-zinc-400 dark:text-zinc-600 w-6 transition-colors duration-300">{index + 1}</span>
                   <div>
-                    <p className="font-medium text-white">{item.contentTitle}</p>
-                    <p className="text-sm text-zinc-400">{item.linkName}</p>
+                    <p className="font-medium text-zinc-900 dark:text-white transition-colors duration-300">{item.contentTitle}</p>
+                    <p className="text-sm text-zinc-500 dark:text-zinc-400 transition-colors duration-300">{item.linkName}</p>
                   </div>
                 </div>
                 <span className="bg-emerald-500/10 text-emerald-500 px-3 py-1 rounded-full text-sm font-medium">
@@ -252,33 +252,33 @@ export default function Analytics() {
                 </span>
               </div>
             )) : (
-              <p className="text-zinc-500 text-center py-4">No link clicks in this period.</p>
+              <p className="text-zinc-500 dark:text-zinc-400 text-center py-4 transition-colors duration-300">No link clicks in this period.</p>
             )}
           </div>
         </div>
 
         {/* Top Users by Sessions */}
-        <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6">
-          <h2 className="text-xl font-bold text-white mb-6 flex items-center gap-2">
+        <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-6 transition-colors duration-300">
+          <h2 className="text-xl font-bold text-zinc-900 dark:text-white mb-6 flex items-center gap-2 transition-colors duration-300">
             <Users className="w-5 h-5 text-emerald-500" />
             Most Active Users (Sessions)
           </h2>
           <div className="space-y-4">
             {topUsersBySessions.filter(u => u.periodSessions > 0).length > 0 ? topUsersBySessions.filter(u => u.periodSessions > 0).map((user, index) => (
-              <div key={user.uid} className="flex items-center justify-between p-4 bg-zinc-950 rounded-xl border border-zinc-800">
+              <div key={user.uid} className="flex items-center justify-between p-4 bg-zinc-50 dark:bg-zinc-950 rounded-xl border border-zinc-200 dark:border-zinc-800 transition-colors duration-300">
                 <div className="flex items-center gap-4">
-                  <span className="text-xl font-bold text-zinc-600 w-6">{index + 1}</span>
+                  <span className="text-xl font-bold text-zinc-400 dark:text-zinc-600 w-6 transition-colors duration-300">{index + 1}</span>
                   <div className="flex items-center gap-3">
                     {user.photoURL && user.photoURL.trim() !== "" ? (
                       <img src={user.photoURL} alt={user.displayName} className="w-8 h-8 rounded-full" referrerPolicy="no-referrer" />
                     ) : (
-                      <div className="w-8 h-8 rounded-full bg-zinc-800 flex items-center justify-center text-zinc-400 font-bold">
+                      <div className="w-8 h-8 rounded-full bg-zinc-200 dark:bg-zinc-800 flex items-center justify-center text-zinc-500 dark:text-zinc-400 font-bold transition-colors duration-300">
                         {user.email[0].toUpperCase()}
                       </div>
                     )}
                     <div>
-                      <p className="font-medium text-white">{user.displayName || 'Anonymous'}</p>
-                      <p className="text-xs text-zinc-500">{user.email}</p>
+                      <p className="font-medium text-zinc-900 dark:text-white transition-colors duration-300">{user.displayName || 'Anonymous'}</p>
+                      <p className="text-xs text-zinc-500 dark:text-zinc-400 transition-colors duration-300">{user.email}</p>
                     </div>
                   </div>
                 </div>
@@ -287,33 +287,33 @@ export default function Analytics() {
                 </span>
               </div>
             )) : (
-              <p className="text-zinc-500 text-center py-4">No user session data available.</p>
+              <p className="text-zinc-500 dark:text-zinc-400 text-center py-4 transition-colors duration-300">No user session data available.</p>
             )}
           </div>
         </div>
 
         {/* Top Users by Time */}
-        <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6">
-          <h2 className="text-xl font-bold text-white mb-6 flex items-center gap-2">
+        <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-6 transition-colors duration-300">
+          <h2 className="text-xl font-bold text-zinc-900 dark:text-white mb-6 flex items-center gap-2 transition-colors duration-300">
             <Clock className="w-5 h-5 text-emerald-500" />
             Most Active Users (Time Spent)
           </h2>
           <div className="space-y-4">
             {topUsersByTime.filter(u => u.periodTimeSpent > 0).length > 0 ? topUsersByTime.filter(u => u.periodTimeSpent > 0).map((user, index) => (
-              <div key={user.uid} className="flex items-center justify-between p-4 bg-zinc-950 rounded-xl border border-zinc-800">
+              <div key={user.uid} className="flex items-center justify-between p-4 bg-zinc-50 dark:bg-zinc-950 rounded-xl border border-zinc-200 dark:border-zinc-800 transition-colors duration-300">
                 <div className="flex items-center gap-4">
-                  <span className="text-xl font-bold text-zinc-600 w-6">{index + 1}</span>
+                  <span className="text-xl font-bold text-zinc-400 dark:text-zinc-600 w-6 transition-colors duration-300">{index + 1}</span>
                   <div className="flex items-center gap-3">
                     {user.photoURL && user.photoURL.trim() !== "" ? (
                       <img src={user.photoURL} alt={user.displayName} className="w-8 h-8 rounded-full" referrerPolicy="no-referrer" />
                     ) : (
-                      <div className="w-8 h-8 rounded-full bg-zinc-800 flex items-center justify-center text-zinc-400 font-bold">
+                      <div className="w-8 h-8 rounded-full bg-zinc-200 dark:bg-zinc-800 flex items-center justify-center text-zinc-500 dark:text-zinc-400 font-bold transition-colors duration-300">
                         {user.email[0].toUpperCase()}
                       </div>
                     )}
                     <div>
-                      <p className="font-medium text-white">{user.displayName || 'Anonymous'}</p>
-                      <p className="text-xs text-zinc-500">{user.email}</p>
+                      <p className="font-medium text-zinc-900 dark:text-white transition-colors duration-300">{user.displayName || 'Anonymous'}</p>
+                      <p className="text-xs text-zinc-500 dark:text-zinc-400 transition-colors duration-300">{user.email}</p>
                     </div>
                   </div>
                 </div>
@@ -322,7 +322,7 @@ export default function Analytics() {
                 </span>
               </div>
             )) : (
-              <p className="text-zinc-500 text-center py-4">No user time data available.</p>
+              <p className="text-zinc-500 dark:text-zinc-400 text-center py-4 transition-colors duration-300">No user time data available.</p>
             )}
           </div>
         </div>

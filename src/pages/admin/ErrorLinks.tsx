@@ -1004,12 +1004,12 @@ export default function ErrorLinks() {
                 <table className="w-full text-left text-sm">
                   <thead className="bg-zinc-950 text-zinc-400">
                     <tr>
-                      <th className="px-6 py-4 font-medium">Date</th>
-                      <th className="px-6 py-4 font-medium">Content</th>
-                      <th className="px-6 py-4 font-medium">Location</th>
-                      <th className="px-6 py-4 font-medium">Link Name</th>
-                      <th className="px-6 py-4 font-medium">Error Type</th>
-                      <th className="px-6 py-4 font-medium text-right">Actions</th>
+                      <th className="px-6 py-4 font-medium whitespace-nowrap">Date</th>
+                      <th className="px-6 py-4 font-medium whitespace-nowrap">Content</th>
+                      <th className="px-6 py-4 font-medium whitespace-nowrap">Location</th>
+                      <th className="px-6 py-4 font-medium whitespace-nowrap">Link Name</th>
+                      <th className="px-6 py-4 font-medium whitespace-nowrap">Error Type</th>
+                      <th className="px-6 py-4 font-medium text-right whitespace-nowrap">Actions</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-zinc-800">

@@ -130,12 +130,34 @@
         "status": { "type": "string", "enum": ["pending", "completed", "rejected"] },
         "createdAt": { "type": "string", "format": "date-time" },
         "requestedBy": { "type": "array", "items": { "type": "string" }, "description": "List of user IDs who requested this." },
-        "requestCount": { "type": "number", "description": "Number of users who requested this." }
+        "requestCount": { "type": "number", "description": "Number of users who requested this." },
+        "linkedContentId": { "type": "string", "description": "The ID of the content that fulfills this request." },
+        "adminComment": { "type": "string", "description": "A comment from the administrator regarding this request." }
       },
       "required": ["id", "title", "userId", "status", "createdAt", "requestedBy", "requestCount"]
+    },
+    "Order": {
+      "title": "Order",
+      "description": "A user order for membership or content.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "type": { "type": "string", "enum": ["membership", "content"] },
+        "items": { "type": "array", "items": { "type": "object" } },
+        "totalAmount": { "type": "number" },
+        "status": { "type": "string", "enum": ["pending", "approved", "declined"] },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "orderId": { "type": "string" }
+      },
+      "required": ["id", "userId", "type", "totalAmount", "status", "createdAt", "orderId"]
     }
   },
   "firestore": {
+    "/orders/{orderId}": {
+      "schema": { "$ref": "#/entities/Order" },
+      "description": "Stores user orders."
+    },
     "/movie_requests/{requestId}": {
       "schema": { "$ref": "#/entities/MovieRequest" },
       "description": "Stores movie requests."

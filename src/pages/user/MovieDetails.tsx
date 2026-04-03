@@ -6,7 +6,8 @@ import { doc, getDoc, updateDoc, arrayUnion, arrayRemove, deleteDoc, addDoc, col
 import { Content, QualityLinks, Season } from '../../types';
 import { useAuth } from '../../contexts/AuthContext';
 import { useContent } from '../../contexts/ContentContext';
-import { Film, ArrowLeft, Play, Clock, Heart, MessageCircle, AlertCircle, Download, Share2, Chrome, Copy, Youtube, X, Edit2, Trash2, Settings, Lock, ChevronDown, ChevronUp, Loader2, Search, AlertTriangle, Globe } from 'lucide-react';
+import { useCart } from '../../contexts/CartContext';
+import { Film, ArrowLeft, Play, Clock, Heart, MessageCircle, AlertCircle, Download, Share2, Chrome, Copy, Youtube, X, Edit2, Trash2, Settings, Lock, ChevronDown, ChevronUp, Loader2, Search, AlertTriangle, Globe, ShoppingCart } from 'lucide-react';
 import { logEvent } from '../../services/analytics';
 import AlertModal from '../../components/AlertModal';
 import ConfirmModal from '../../components/ConfirmModal';
@@ -21,6 +22,7 @@ export default function MovieDetails() {
   const { id } = useParams<{ id: string }>();
   const { profile, loading: profileLoading, toggleFavorite: authToggleFavorite, toggleWatchLater: authToggleWatchLater } = useAuth();
   const { contentList, genres, languages, qualities, loading: contentLoading, isOffline } = useContent();
+  const { cart, addToCart } = useCart();
   const content = useMemo(() => {
     console.log('DEBUG: id=', id, 'contentList length=', contentList.length);
     if (contentList.length > 0) {
@@ -554,7 +556,11 @@ export default function MovieDetails() {
     }
     if (!canPlay) {
       if (isPending) {
-        setAlertConfig({ isOpen: true, title: 'Account Pending', message: 'Your account is pending admin approval. Please contact admin to activate your account.' });
+        setAlertConfig({ 
+          isOpen: true, 
+          title: 'Account Pending', 
+          message: 'Your account activation is pending. Please Get Membership or Add any content to cart to activate your account.' 
+        });
       } else if (isExpired) {
         if (profile?.role === 'trial') {
           setAlertConfig({ isOpen: true, title: 'Trial Expired', message: 'Your free Trial has expired. Please get Membership to continue watching.' });
@@ -1086,16 +1092,54 @@ export default function MovieDetails() {
         ) : !canPlay && (
           <div className="bg-red-500/10 border border-red-500/20 text-red-500 p-6 rounded-2xl mb-12 flex items-start gap-4">
             <AlertCircle className="w-6 h-6 shrink-0 mt-0.5" />
-            <div>
+            <div className="flex-1">
               <h3 className="font-bold text-lg mb-1">Access Restricted</h3>
               <p className="text-red-400 mb-4">
-                {isPending ? 'Your account is pending admin approval.' : 
+                {isPending ? 'Your account activation is pending. Please Get Membership or Add any content to cart to activate your account.' : 
                  isExpired ? (profile?.role === 'trial' ? 'Your free Trial has expired. Please get Membership to continue watching.' : 'Your membership has expired.') : 
                  'You do not have permission to access links for this content.'}
               </p>
-              <a href="https://wa.me/923363284466" target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 bg-red-500/20 px-4 py-2 rounded-xl font-medium hover:bg-red-500/30 transition-colors">
-                <MessageCircle className="w-4 h-4" /> Contact Admin (03363284466)
-              </a>
+              <div className="flex flex-wrap gap-3">
+                <a href="https://wa.me/923363284466" target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 bg-red-500/20 px-4 py-2 rounded-xl font-medium hover:bg-red-500/30 transition-colors">
+                  <MessageCircle className="w-4 h-4" /> Contact Admin (03363284466)
+                </a>
+                {((profile?.role === 'selected_content' && !isExpired) || isPending) && mergedContent?.type === 'movie' && (
+                  cart.some(item => item.contentId === mergedContent.id) ? (
+                    <Link
+                      to="/cart"
+                      className="inline-flex items-center gap-2 bg-emerald-500 text-white px-4 py-2 rounded-xl font-medium hover:bg-emerald-600 transition-colors"
+                    >
+                      <ShoppingCart className="w-4 h-4 fill-current" />
+                      View Cart
+                    </Link>
+                  ) : (
+                    <button
+                      onClick={() => {
+                        addToCart({
+                          contentId: mergedContent.id,
+                          title: mergedContent.title,
+                          type: 'movie',
+                          price: 50
+                        });
+                      }}
+                      className="inline-flex items-center gap-2 bg-emerald-500/20 text-emerald-500 px-4 py-2 rounded-xl font-medium hover:bg-emerald-500/30 transition-colors"
+                    >
+                      <ShoppingCart className="w-4 h-4" />
+                      Add to Cart (Rs 50)
+                    </button>
+                  )
+                )}
+                {(profile?.role === 'selected_content' || profile?.role === 'user' || isPending) && !isExpired && mergedContent?.type === 'series' && (
+                  <p className="text-sm text-zinc-400 w-full mt-2 italic">
+                    Scroll down to add specific seasons to your cart.
+                  </p>
+                )}
+                {(isExpired || isPending || profile?.role === 'trial' || profile?.role === 'user') && (
+                  <Link to="/top-up" className="inline-flex items-center gap-2 bg-emerald-500 text-black px-6 py-2 rounded-xl font-bold hover:bg-emerald-400 transition-all shadow-lg shadow-emerald-500/20">
+                    {isExpired ? (profile?.role === 'trial' ? 'Buy Membership' : 'Renew Now') : 'Get Membership'}
+                  </Link>
+                )}
+              </div>
             </div>
           </div>
         )}
@@ -1293,18 +1337,55 @@ export default function MovieDetails() {
                         
                         return (
                         <div key={season.id} className={`bg-zinc-900 border border-zinc-800 rounded-2xl overflow-hidden ${(!isAccessible && profile) ? 'opacity-75' : ''}`}>
-                          <div className="bg-zinc-950/50 p-6 border-b border-zinc-800 flex justify-between items-center">
+                          <div className="bg-zinc-950/50 p-6 border-b border-zinc-800 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                             <h3 className="text-xl font-bold">Season {season.seasonNumber}</h3>
-                            {(!isAccessible && profile) && (
-                              <span className="bg-red-500/10 text-red-500 px-3 py-1 rounded-full text-sm font-bold flex items-center gap-2">
-                                <Lock className="w-4 h-4" /> Restricted
-                              </span>
-                            )}
-                            {!profile && (
-                              <span className="bg-emerald-500/10 text-emerald-500 px-3 py-1 rounded-full text-sm font-bold flex items-center gap-2">
-                                <Lock className="w-4 h-4" /> Sign in to watch
-                              </span>
-                            )}
+                            <div className="flex flex-wrap items-center gap-3">
+                              {(!isAccessible && profile) && (
+                                <>
+                                  <span className="bg-red-500/10 text-red-500 px-3 py-1 rounded-full text-sm font-bold flex items-center gap-2">
+                                    <Lock className="w-4 h-4" /> Restricted
+                                  </span>
+                                  {((profile?.role === 'selected_content' && profile?.status !== 'expired') || profile?.status === 'pending') && (
+                                    cart.some(item => item.contentId === mergedContent.id && item.seasonId === season.id) ? (
+                                      <Link
+                                        to="/cart"
+                                        className="bg-emerald-500 text-white px-3 py-1 rounded-full text-sm font-bold flex items-center gap-2 hover:bg-emerald-600 transition-colors"
+                                      >
+                                        <ShoppingCart className="w-4 h-4 fill-current" />
+                                        View Cart
+                                      </Link>
+                                    ) : (
+                                      <button
+                                        onClick={() => {
+                                          addToCart({
+                                            contentId: mergedContent.id,
+                                            title: `${mergedContent.title} - Season ${season.seasonNumber}`,
+                                            type: 'season',
+                                            seasonId: season.id,
+                                            seasonNumber: season.seasonNumber,
+                                            price: 100
+                                          });
+                                        }}
+                                        className="bg-emerald-500/20 text-emerald-500 px-3 py-1 rounded-full text-sm font-bold flex items-center gap-2 hover:bg-emerald-500/30 transition-colors"
+                                      >
+                                        <ShoppingCart className="w-4 h-4" />
+                                        Add to Cart (Rs 100)
+                                      </button>
+                                    )
+                                  )}
+                                  {(profile?.role === 'trial' || profile?.role === 'user') && (
+                                    <Link to="/top-up" className="bg-emerald-500/20 text-emerald-500 px-3 py-1 rounded-full text-sm font-bold flex items-center gap-2 hover:bg-emerald-500/30 transition-colors">
+                                      Top Up Membership
+                                    </Link>
+                                  )}
+                                </>
+                              )}
+                              {!profile && (
+                                <span className="bg-emerald-500/10 text-emerald-500 px-3 py-1 rounded-full text-sm font-bold flex items-center gap-2">
+                                  <Lock className="w-4 h-4" /> Sign in to watch
+                                </span>
+                              )}
+                            </div>
                           </div>
                           
                           <div className="p-6 space-y-8">
@@ -1618,7 +1699,25 @@ export default function MovieDetails() {
         onClose={() => setAlertConfig(prev => ({ ...prev, isOpen: false }))}
         title={alertConfig.title}
         message={alertConfig.message}
-      />
+      >
+        {isPending && (
+          <div className="flex flex-col gap-3">
+            {(profile?.role === 'trial' || profile?.role === 'user') && (
+              <Link to="/top-up" className="flex items-center justify-center gap-2 bg-emerald-500 text-black px-6 py-3 rounded-xl font-bold hover:bg-emerald-400 transition-all shadow-lg shadow-emerald-500/20">
+                Get Membership
+              </Link>
+            )}
+            {(profile?.role === 'selected_content' || profile?.role === 'user') && !isExpired && (
+              <Link to="/cart" className="flex items-center justify-center gap-2 bg-emerald-500 text-black px-6 py-3 rounded-xl font-bold hover:bg-emerald-400 transition-all shadow-lg shadow-emerald-500/20">
+                <ShoppingCart className="w-5 h-5" /> Cart
+              </Link>
+            )}
+            <a href="https://wa.me/923363284466" target="_blank" rel="noreferrer" className="flex items-center justify-center gap-2 bg-zinc-800 text-white px-6 py-3 rounded-xl font-bold hover:bg-zinc-700 transition-all">
+              <MessageCircle className="w-5 h-5" /> Admin
+            </a>
+          </div>
+        )}
+      </AlertModal>
 
       {isMediaModalOpen && mergedContent && (
         <MediaModal

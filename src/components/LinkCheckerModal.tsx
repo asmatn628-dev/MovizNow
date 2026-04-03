@@ -436,48 +436,50 @@ export const LinkCheckerModal: React.FC<Props> = ({
       {isOpen ? (
         <motion.div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
           <motion.div initial={{ opacity: 0, y: 20, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 10, scale: 0.98 }} transition={{ duration: 0.18 }} className="w-full max-w-5xl max-h-[95vh] overflow-y-auto custom-scrollbar">
-            <div className="rounded-3xl border border-zinc-800 bg-zinc-950 text-zinc-100 shadow-2xl overflow-hidden">
+            <div className="rounded-3xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100 shadow-2xl overflow-hidden transition-colors duration-300">
               <div className="p-5 md:p-6 space-y-5">
                 <div className="flex items-start justify-between gap-4">
                   <div className="flex items-center gap-3">
-                    <div className="rounded-2xl bg-zinc-900 border border-zinc-800 p-2.5"><LinkIcon className="h-5 w-5 text-cyan-400" /></div>
+                    <div className="rounded-2xl bg-zinc-100 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-2.5 transition-colors duration-300">
+                      <LinkIcon className="h-5 w-5 text-cyan-500 dark:text-cyan-400" />
+                    </div>
                     <div>
-                      <h2 className="text-xl font-semibold leading-none text-white">{title}</h2>
-                      <p className="text-sm text-zinc-400 mt-1">Check Pixeldrain, direct file links, protected download gateways, and movie post mismatches.</p>
+                      <h2 className="text-xl font-semibold leading-none text-zinc-900 dark:text-white">{title}</h2>
+                      <p className="text-sm text-zinc-500 dark:text-zinc-400 mt-1">Check Pixeldrain, direct file links, protected download gateways, and movie post mismatches.</p>
                     </div>
                   </div>
-                  <button onClick={onClose} className="rounded-full px-3 py-1.5 text-sm text-zinc-400 hover:bg-zinc-900 hover:text-white transition">Close</button>
+                  <button onClick={onClose} className="rounded-full px-3 py-1.5 text-sm text-zinc-500 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-900 hover:text-zinc-900 dark:hover:text-white transition">Close</button>
                 </div>
 
-                <div className="rounded-2xl border border-zinc-800 bg-zinc-900/60 p-4 space-y-3">
-                  <label className="text-sm font-medium text-zinc-200">Paste one or multiple links / full movie post</label>
-                  <textarea value={input} onChange={(e) => setInput(e.target.value)} placeholder="Paste links or a full movie post here..." rows={6} className="w-full rounded-2xl border border-zinc-800 bg-zinc-950 px-4 py-3 text-sm text-white placeholder:text-zinc-500 outline-none focus:ring-2 focus:ring-cyan-500" />
+                <div className="rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50/60 dark:bg-zinc-900/60 p-4 space-y-3 transition-colors duration-300">
+                  <label className="text-sm font-medium text-zinc-700 dark:text-zinc-200">Paste one or multiple links / full movie post</label>
+                  <textarea value={input} onChange={(e) => setInput(e.target.value)} placeholder="Paste links or a full movie post here..." rows={6} className="w-full rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 px-4 py-3 text-sm text-zinc-900 dark:text-white placeholder:text-zinc-500 outline-none focus:ring-2 focus:ring-cyan-500 transition-colors duration-300" />
 
                   <div className="flex flex-wrap items-center gap-3">
-                    <label className="inline-flex items-center gap-2 text-sm text-zinc-300">
-                      <input type="checkbox" checked={autoExtract} onChange={(e) => setAutoExtract(e.target.checked)} className="h-4 w-4 rounded border-zinc-700 bg-zinc-950" />
+                    <label className="inline-flex items-center gap-2 text-sm text-zinc-600 dark:text-zinc-300">
+                      <input type="checkbox" checked={autoExtract} onChange={(e) => setAutoExtract(e.target.checked)} className="h-4 w-4 rounded border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950" />
                       Auto extract links from full post/message
                     </label>
                   </div>
 
                   <div className="flex flex-wrap gap-2">
-                    <button onClick={() => pasteFromClipboard(false)} className="inline-flex items-center justify-center rounded-2xl border border-zinc-700 bg-zinc-950 px-8 py-2 text-sm font-medium text-zinc-100 hover:bg-zinc-900 gap-2 transition-colors w-32"><ClipboardPaste className="h-4 w-4" />Paste</button>
+                    <button onClick={() => pasteFromClipboard(false)} className="inline-flex items-center justify-center rounded-2xl border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-950 px-8 py-2 text-sm font-medium text-zinc-700 dark:text-zinc-100 hover:bg-zinc-100 dark:hover:bg-zinc-900 gap-2 transition-colors w-32"><ClipboardPaste className="h-4 w-4" />Paste</button>
                   </div>
 
-                  <div className="flex flex-wrap items-center justify-between gap-3 text-sm text-zinc-400">
-                    <span>Detected type: <strong className="text-zinc-200">{firstType}</strong> • <strong className="text-zinc-200">{links.length}</strong> link(s) found</span>
-                    <span className="flex items-center gap-2 text-emerald-400"><ShieldCheck className="h-4 w-4" />Checks only when manually used</span>
+                  <div className="flex flex-wrap items-center justify-between gap-3 text-sm text-zinc-500 dark:text-zinc-400">
+                    <span>Detected type: <strong className="text-zinc-900 dark:text-zinc-200">{firstType}</strong> • <strong className="text-zinc-900 dark:text-zinc-200">{links.length}</strong> link(s) found</span>
+                    <span className="flex items-center gap-2 text-emerald-600 dark:text-emerald-400"><ShieldCheck className="h-4 w-4" />Checks only when manually used</span>
                   </div>
                 </div>
 
                 <div className="flex flex-wrap gap-2">
-                  <button onClick={() => handleCheck()} disabled={loading} className="inline-flex items-center justify-center rounded-2xl gap-2 bg-cyan-500 px-4 py-2 text-sm font-bold text-black hover:bg-cyan-400 disabled:opacity-50 disabled:cursor-not-allowed transition-colors">{loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}{loading ? "Checking..." : `Check ${links.length || ""} Link${links.length > 1 ? "s" : ""}`}</button>
-                  <button onClick={retryFailed} className="inline-flex items-center justify-center rounded-2xl border border-zinc-700 bg-transparent px-4 py-2 text-sm font-medium text-zinc-100 hover:bg-zinc-900 gap-2 disabled:opacity-50 transition-colors" disabled={loading || !results.some((r) => !r.ok)}><RefreshCw className="h-4 w-4" /> Retry Failed</button>
-                  <button onClick={copyResults} className="inline-flex items-center justify-center rounded-2xl border border-zinc-700 bg-transparent px-4 py-2 text-sm font-medium text-zinc-100 hover:bg-zinc-900 gap-2 disabled:opacity-50 transition-colors" disabled={!results.length}><Copy className="h-4 w-4" /> Copy Results</button>
-                  <button onClick={reset} className="inline-flex items-center justify-center rounded-2xl border border-zinc-700 bg-transparent px-4 py-2 text-sm font-medium text-zinc-100 hover:bg-zinc-900 gap-2 transition-colors"><Trash2 className="h-4 w-4" /> Reset</button>
+                  <button onClick={() => handleCheck()} disabled={loading} className="inline-flex items-center justify-center rounded-2xl gap-2 bg-cyan-500 px-4 py-2 text-sm font-bold text-white dark:text-black hover:bg-cyan-600 dark:hover:bg-cyan-400 disabled:opacity-50 disabled:cursor-not-allowed transition-colors">{loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}{loading ? "Checking..." : `Check ${links.length || ""} Link${links.length > 1 ? "s" : ""}`}</button>
+                  <button onClick={retryFailed} className="inline-flex items-center justify-center rounded-2xl border border-zinc-200 dark:border-zinc-700 bg-transparent px-4 py-2 text-sm font-medium text-zinc-700 dark:text-zinc-100 hover:bg-zinc-100 dark:hover:bg-zinc-900 gap-2 disabled:opacity-50 transition-colors" disabled={loading || !results.some((r) => !r.ok)}><RefreshCw className="h-4 w-4" /> Retry Failed</button>
+                  <button onClick={copyResults} className="inline-flex items-center justify-center rounded-2xl border border-zinc-200 dark:border-zinc-700 bg-transparent px-4 py-2 text-sm font-medium text-zinc-700 dark:text-zinc-100 hover:bg-zinc-100 dark:hover:bg-zinc-900 gap-2 disabled:opacity-50 transition-colors" disabled={!results.length}><Copy className="h-4 w-4" /> Copy Results</button>
+                  <button onClick={reset} className="inline-flex items-center justify-center rounded-2xl border border-zinc-200 dark:border-zinc-700 bg-transparent px-4 py-2 text-sm font-medium text-zinc-700 dark:text-zinc-100 hover:bg-zinc-100 dark:hover:bg-zinc-900 gap-2 transition-colors"><Trash2 className="h-4 w-4" /> Reset</button>
                   
                   {!!results.length && (
-                    <button onClick={toggleSelectAll} className="inline-flex items-center justify-center rounded-2xl border border-zinc-700 bg-transparent px-4 py-2 text-sm font-medium text-zinc-100 hover:bg-zinc-900 gap-2 transition-colors">
+                    <button onClick={toggleSelectAll} className="inline-flex items-center justify-center rounded-2xl border border-zinc-200 dark:border-zinc-700 bg-transparent px-4 py-2 text-sm font-medium text-zinc-700 dark:text-zinc-100 hover:bg-zinc-100 dark:hover:bg-zinc-900 gap-2 transition-colors">
                       {selectedUrls.size === results.length ? "Deselect All" : "Select All"}
                     </button>
                   )}
@@ -490,27 +492,27 @@ export const LinkCheckerModal: React.FC<Props> = ({
                   )}
                 </div>
 
-                {error ? <div className="rounded-2xl border border-red-900/70 bg-red-950/40 p-4 text-red-300 text-sm flex items-start gap-2"><AlertTriangle className="h-4 w-4 mt-0.5" /><span>{error}</span></div> : null}
+                {error ? <div className="rounded-2xl border border-red-200 dark:border-red-900/70 bg-red-50 dark:bg-red-950/40 p-4 text-red-600 dark:text-red-300 text-sm flex items-start gap-2 transition-colors duration-300"><AlertTriangle className="h-4 w-4 mt-0.5" /><span>{error}</span></div> : null}
 
                 {!!results.length && (
                   <div className="grid grid-cols-2 md:grid-cols-9 gap-3">
                     {[
-                      ["Working", summary.working, "text-emerald-400"],
-                      ["Broken", summary.broken, "text-red-400"],
-                      ["Size Mismatch", summary.sizeMismatch, "text-red-400"],
-                      ["Protected", summary.protectedCount, "text-yellow-400"],
-                      ["Redirect", summary.redirect, "text-cyan-400"],
-                      ["Unavailable", summary.unavailable, "text-orange-400"],
-                      ["Unknown", summary.unknown, "text-zinc-300"],
-                      ["Mismatches", summary.mismatches, "text-pink-400"],
-                      ["Missing Filename", summary.missingFilename, "text-pink-400"],
-                      ["Missing Quality", summary.missingQuality, "text-pink-400"],
-                      ["Missing Language", summary.missingLanguage, "text-pink-400"],
-                      ["Small File", summary.smallFile, "text-orange-400"]
+                      ["Working", summary.working, "text-emerald-600 dark:text-emerald-400"],
+                      ["Broken", summary.broken, "text-red-600 dark:text-red-400"],
+                      ["Size Mismatch", summary.sizeMismatch, "text-red-600 dark:text-red-400"],
+                      ["Protected", summary.protectedCount, "text-yellow-600 dark:text-yellow-400"],
+                      ["Redirect", summary.redirect, "text-cyan-600 dark:text-cyan-400"],
+                      ["Unavailable", summary.unavailable, "text-orange-600 dark:text-orange-400"],
+                      ["Unknown", summary.unknown, "text-zinc-500 dark:text-zinc-300"],
+                      ["Mismatches", summary.mismatches, "text-pink-600 dark:text-pink-400"],
+                      ["Missing Filename", summary.missingFilename, "text-pink-600 dark:text-pink-400"],
+                      ["Missing Quality", summary.missingQuality, "text-pink-600 dark:text-pink-400"],
+                      ["Missing Language", summary.missingLanguage, "text-pink-600 dark:text-pink-400"],
+                      ["Small File", summary.smallFile, "text-orange-600 dark:text-orange-400"]
                     ].map(([label, count, color]) => (
-                      <div key={String(label)} className="rounded-2xl border border-zinc-800 bg-zinc-900/60 p-4">
+                      <div key={String(label)} className="rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50/60 dark:bg-zinc-900/60 p-4 transition-colors duration-300">
                         <div className={`text-sm ${color}`}>{label}</div>
-                        <div className="text-2xl font-semibold text-white mt-1">{count}</div>
+                        <div className="text-2xl font-semibold text-zinc-900 dark:text-white mt-1">{count}</div>
                       </div>
                     ))}
                   </div>
@@ -527,47 +529,47 @@ export const LinkCheckerModal: React.FC<Props> = ({
                     if (result.audioLabel && result.audioLabel.includes("Dual") && result.codecLabel !== "HEVC") finalName += " Dual";
 
                     return (
-                      <div key={`${result.url}-${result.qualityLabel || "na"}`} className="rounded-2xl border border-zinc-800 bg-zinc-900/50 overflow-hidden">
+                      <div key={`${result.url}-${result.qualityLabel || "na"}`} className="rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-900/50 overflow-hidden transition-colors duration-300">
                         <div className="p-4 space-y-3">
                           <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
                             <div className="min-w-0 flex-1 flex items-start gap-3">
                               <div className="mt-1">
-                                <input type="checkbox" checked={selectedUrls.has(result.url)} onChange={() => toggleSelect(result.url)} className="h-5 w-5 rounded border-zinc-700 bg-zinc-950" />
+                                <input type="checkbox" checked={selectedUrls.has(result.url)} onChange={() => toggleSelect(result.url)} className="h-5 w-5 rounded border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950" />
                               </div>
                               <div className="min-w-0 flex-1">
                                 <div className="flex items-center gap-2 flex-wrap">
-                                  {result.ok ? <CheckCircle2 className="h-5 w-5 text-emerald-400" /> : <XCircle className="h-5 w-5 text-red-400" />}
+                                  {result.ok ? <CheckCircle2 className="h-5 w-5 text-emerald-500 dark:text-emerald-400" /> : <XCircle className="h-5 w-5 text-red-500 dark:text-red-400" />}
                                   <div className={`inline-flex rounded-full border px-3 py-1 text-xs font-medium ${badgeMap[statusLabel]}`}>{statusLabel}</div>
                                   {result.ok && (
-                                    <div className="inline-flex rounded-full border border-cyan-800 bg-cyan-500/10 px-3 py-1 text-xs font-bold text-cyan-400">
+                                    <div className="inline-flex rounded-full border border-cyan-200 dark:border-cyan-800 bg-cyan-500/10 px-3 py-1 text-xs font-bold text-cyan-600 dark:text-cyan-400">
                                       Name: {finalName}
                                     </div>
                                   )}
-                                  {result.isDirectDownload ? <div className="inline-flex rounded-full border border-blue-800 bg-blue-500/10 px-3 py-1 text-xs font-medium text-blue-400"><FileDown className="h-3.5 w-3.5 mr-1" /> Direct Download</div> : null}
-                                  {(result.mismatchWarnings?.length || 0) > 0 ? <div className="inline-flex rounded-full border border-pink-800 bg-pink-500/10 px-3 py-1 text-xs font-medium text-pink-400"><Siren className="h-3.5 w-3.5 mr-1" /> Mismatch</div> : null}
+                                  {result.isDirectDownload ? <div className="inline-flex rounded-full border border-blue-200 dark:border-blue-800 bg-blue-500/10 px-3 py-1 text-xs font-medium text-blue-600 dark:text-blue-400"><FileDown className="h-3.5 w-3.5 mr-1" /> Direct Download</div> : null}
+                                  {(result.mismatchWarnings?.length || 0) > 0 ? <div className="inline-flex rounded-full border border-pink-200 dark:border-pink-800 bg-pink-500/10 px-3 py-1 text-xs font-medium text-pink-600 dark:text-pink-400"><Siren className="h-3.5 w-3.5 mr-1" /> Mismatch</div> : null}
                                 </div>
                                 <div className="mt-2 flex flex-wrap gap-2">
-                                  {result.qualityLabel ? <span className="rounded-full border border-fuchsia-800 bg-fuchsia-500/10 px-2.5 py-1 text-[11px] font-medium text-fuchsia-300">{result.qualityLabel}</span> : null}
-                                  {result.printQualityLabel ? <span className="rounded-full border border-rose-800 bg-rose-500/10 px-2.5 py-1 text-[11px] font-medium text-rose-300">{result.printQualityLabel}</span> : null}
-                                  {result.codecLabel ? <span className="rounded-full border border-indigo-800 bg-indigo-500/10 px-2.5 py-1 text-[11px] font-medium text-indigo-300">{result.codecLabel}</span> : null}
-                                  {result.audioLabel ? <span className="rounded-full border border-emerald-800 bg-emerald-500/10 px-2.5 py-1 text-[11px] font-medium text-emerald-300">{result.audioLabel}</span> : null}
-                                  {result.subtitleLabel ? <span className="rounded-full border border-amber-800 bg-amber-500/10 px-2.5 py-1 text-[11px] font-medium text-amber-300">{result.subtitleLabel}</span> : null}
-                                  {result.season ? <span className="rounded-full border border-blue-800 bg-blue-500/10 px-2.5 py-1 text-[11px] font-bold text-blue-300">Season {result.season}</span> : null}
-                                  {result.episode ? <span className="rounded-full border border-indigo-800 bg-indigo-500/10 px-2.5 py-1 text-[11px] font-bold text-indigo-300">Episode {result.episode}</span> : null}
-                                  {result.isFullSeasonMKV ? <span className="rounded-full border border-purple-800 bg-purple-500/10 px-2.5 py-1 text-[11px] font-bold text-purple-300">Full Season MKV</span> : null}
-                                  {result.isFullSeasonZIP ? <span className="rounded-full border border-purple-800 bg-purple-500/10 px-2.5 py-1 text-[11px] font-bold text-purple-300">Full Season ZIP</span> : null}
+                                  {result.qualityLabel ? <span className="rounded-full border border-fuchsia-200 dark:border-fuchsia-800 bg-fuchsia-500/10 px-2.5 py-1 text-[11px] font-medium text-fuchsia-600 dark:text-fuchsia-300">{result.qualityLabel}</span> : null}
+                                  {result.printQualityLabel ? <span className="rounded-full border border-rose-200 dark:border-rose-800 bg-rose-500/10 px-2.5 py-1 text-[11px] font-medium text-rose-600 dark:text-rose-300">{result.printQualityLabel}</span> : null}
+                                  {result.codecLabel ? <span className="rounded-full border border-indigo-200 dark:border-indigo-800 bg-indigo-500/10 px-2.5 py-1 text-[11px] font-medium text-indigo-600 dark:text-indigo-300">{result.codecLabel}</span> : null}
+                                  {result.audioLabel ? <span className="rounded-full border border-emerald-200 dark:border-emerald-800 bg-emerald-500/10 px-2.5 py-1 text-[11px] font-medium text-emerald-600 dark:text-emerald-300">{result.audioLabel}</span> : null}
+                                  {result.subtitleLabel ? <span className="rounded-full border border-amber-200 dark:border-amber-800 bg-amber-500/10 px-2.5 py-1 text-[11px] font-medium text-amber-600 dark:text-amber-300">{result.subtitleLabel}</span> : null}
+                                  {result.season ? <span className="rounded-full border border-blue-200 dark:border-blue-800 bg-blue-500/10 px-2.5 py-1 text-[11px] font-bold text-blue-600 dark:text-blue-300">Season {result.season}</span> : null}
+                                  {result.episode ? <span className="rounded-full border border-indigo-200 dark:border-indigo-800 bg-indigo-500/10 px-2.5 py-1 text-[11px] font-bold text-indigo-600 dark:text-indigo-300">Episode {result.episode}</span> : null}
+                                  {result.isFullSeasonMKV ? <span className="rounded-full border border-purple-200 dark:border-purple-800 bg-purple-500/10 px-2.5 py-1 text-[11px] font-bold text-purple-600 dark:text-purple-300">Full Season MKV</span> : null}
+                                  {result.isFullSeasonZIP ? <span className="rounded-full border border-purple-200 dark:border-purple-800 bg-purple-500/10 px-2.5 py-1 text-[11px] font-bold text-purple-600 dark:text-purple-300">Full Season ZIP</span> : null}
                                 </div>
-                                <div className="mt-2 break-all text-sm text-zinc-200">{result.url}</div>
+                                <div className="mt-2 break-all text-sm text-zinc-700 dark:text-zinc-200">{result.url}</div>
                                 {result.finalUrl && result.finalUrl !== result.url && (
-                                  <div className="mt-1 break-all text-xs text-zinc-400">Redirects to: {result.finalUrl}</div>
+                                  <div className="mt-1 break-all text-xs text-zinc-500 dark:text-zinc-400">Redirects to: {result.finalUrl}</div>
                                 )}
-                                <p className="text-sm text-zinc-400 mt-1">{result.message || (result.ok ? "The link is reachable." : "The link could not be verified.")}</p>
+                                <p className="text-sm text-zinc-500 dark:text-zinc-400 mt-1">{result.message || (result.ok ? "The link is reachable." : "The link could not be verified.")}</p>
                               </div>
                             </div>
-                            <button onClick={() => toggleExpand(result.url)} className="inline-flex items-center justify-center rounded-2xl border border-zinc-700 bg-transparent px-4 py-2 text-sm font-medium text-zinc-100 hover:bg-zinc-900 gap-2 self-start transition-colors">Details {openRow ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}</button>
+                            <button onClick={() => toggleExpand(result.url)} className="inline-flex items-center justify-center rounded-2xl border border-zinc-200 dark:border-zinc-700 bg-transparent px-4 py-2 text-sm font-medium text-zinc-700 dark:text-zinc-100 hover:bg-zinc-100 dark:hover:bg-zinc-900 gap-2 self-start transition-colors">Details {openRow ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}</button>
                           </div>
                           {openRow ? (
-                            <div className="grid gap-2 text-xs text-zinc-400 sm:grid-cols-2 rounded-2xl border border-zinc-800 bg-zinc-950/70 p-4">
+                            <div className="grid gap-2 text-xs text-zinc-500 dark:text-zinc-400 sm:grid-cols-2 rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950/70 p-4 transition-colors duration-300">
                               {typeof result.status !== "undefined" ? <div>Status: {result.status}</div> : null}
                               {result.host ? <div>Host: {result.host}</div> : null}
                               {result.contentType ? <div>Content-Type: {result.contentType}</div> : null}
@@ -584,9 +586,9 @@ export const LinkCheckerModal: React.FC<Props> = ({
                               {result.isFullSeasonMKV ? <div>Full Season MKV: Yes</div> : null}
                               {result.isFullSeasonZIP ? <div>Full Season ZIP: Yes</div> : null}
                               {typeof result.confidenceScore === "number" ? <div>Confidence: {result.confidenceScore}%</div> : null}
-                              {result.finalUrl ? <div className="sm:col-span-2 break-all text-zinc-300">Final URL: {result.finalUrl}</div> : null}
+                              {result.finalUrl ? <div className="sm:col-span-2 break-all text-zinc-600 dark:text-zinc-300">Final URL: {result.finalUrl}</div> : null}
                               {(result.mismatchWarnings?.length || 0) > 0 ? (
-                                <div className="sm:col-span-2 rounded-xl border border-pink-900/70 bg-pink-950/30 p-3 text-pink-300">
+                                <div className="sm:col-span-2 rounded-xl border border-pink-200 dark:border-pink-900/70 bg-pink-50 dark:bg-pink-950/30 p-3 text-pink-600 dark:text-pink-300 transition-colors duration-300">
                                   <div className="font-semibold mb-2">Mismatch Warnings</div>
                                   <ul className="list-disc pl-5 space-y-1">{result.mismatchWarnings?.map((w, i) => <li key={i}>{w}</li>)}</ul>
                                 </div>
