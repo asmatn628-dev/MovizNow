@@ -32,6 +32,17 @@ const ContentCard = React.memo(({
   const [isTrailerSelectionOpen, setIsTrailerSelectionOpen] = React.useState(false);
   const [selectedTrailerUrl, setSelectedTrailerUrl] = React.useState<string | null>(null);
 
+  const isAssigned = (profile?.role === 'temporary' || profile?.role === 'selected_content') && profile.assignedContent?.some((id: string) => id === content.id || id.startsWith(`${content.id}:`));
+  const isLocked = profile?.status !== 'active' || ((profile?.role === 'temporary' || profile?.role === 'selected_content') && !isAssigned);
+  const isPending = profile?.status === 'pending';
+  
+  const qualityObj = qualities.find(q => q.id === content.qualityId);
+  const contentLangs = languages.filter(l => content.languageIds?.includes(l.id)).map(l => l.name).join(', ');
+  const contentGenres = genres.filter(g => content.genreIds?.includes(g.id)).map(g => g.name).join(', ');
+
+  const isFavorite = profile?.favorites?.includes(content.id);
+  const isWatchLater = profile?.watchLater?.includes(content.id);
+
   const isInCart = cart.some(item => item.contentId === content.id);
 
   const seasons = React.useMemo(() => {
@@ -45,36 +56,6 @@ const ContentCard = React.memo(({
     return [];
   }, [content.seasons, content.type]);
 
-  const allTrailers = React.useMemo(() => {
-    const list: any[] = [];
-    if (content.trailerUrl) {
-      list.push({ id: 'main', url: content.trailerUrl, title: 'Main Trailer' });
-    }
-    if (content.trailers) {
-      try {
-        const additional = JSON.parse(content.trailers);
-        list.push(...additional);
-      } catch (e) {}
-    }
-    seasons.forEach((s: any) => {
-      if (s.trailerUrl && !list.some(t => t.url === s.trailerUrl)) {
-        list.push({ id: `season-${s.seasonNumber}`, url: s.trailerUrl, title: `Season ${s.seasonNumber} Trailer`, seasonNumber: s.seasonNumber });
-      }
-    });
-    return list;
-  }, [content, seasons]);
-
-  const isAssigned = (profile?.role === 'temporary' || profile?.role === 'selected_content') && profile.assignedContent?.some((id: string) => id === content.id || id.startsWith(`${content.id}:`));
-  const isLocked = profile?.status !== 'active' || ((profile?.role === 'temporary' || profile?.role === 'selected_content') && !isAssigned);
-  const isPending = profile?.status === 'pending';
-  
-  const qualityObj = qualities.find(q => q.id === content.qualityId);
-  const contentLangs = languages.filter(l => content.languageIds?.includes(l.id)).map(l => l.name).join(', ');
-  const contentGenres = genres.filter(g => content.genreIds?.includes(g.id)).map(g => g.name).join(', ');
-
-  const isFavorite = profile?.favorites?.includes(content.id);
-  const isWatchLater = profile?.watchLater?.includes(content.id);
-
   const matchingSeason = React.useMemo(() => {
     if (!selectedYear || content.type !== 'series') return null;
     return seasons.find((s: any) => s.year?.toString() === selectedYear);
@@ -84,15 +65,12 @@ const ContentCard = React.memo(({
     e.preventDefault();
     e.stopPropagation();
     
-    if (allTrailers.length > 1) {
+    const seasonTrailers = seasons.filter((s: any) => s.trailerUrl);
+    
+    if (seasonTrailers.length > 0) {
       setIsTrailerSelectionOpen(true);
-    } else if (allTrailers.length === 1) {
-      const embedUrl = getYouTubeEmbedUrl(allTrailers[0].url);
-      if (embedUrl) {
-        setSelectedTrailerUrl(embedUrl);
-      } else {
-        window.open(allTrailers[0].url, '_blank');
-      }
+    } else if (content.trailerUrl) {
+      window.open(content.trailerUrl, '_blank');
     }
   };
 
@@ -149,10 +127,8 @@ const ContentCard = React.memo(({
         </div>
 
         <div className={clsx(
-          "absolute top-2 right-2 px-2 py-1 rounded text-[10px] font-bold uppercase tracking-wider z-10",
-          "bg-white text-black",
-          content.type === 'movie' ? 'dark:bg-blue-500/90' : 'dark:bg-purple-500/90',
-          "dark:text-white"
+          "absolute top-2 right-2 px-2 py-1 rounded text-[10px] font-bold uppercase tracking-wider text-white z-10",
+          content.type === 'movie' ? 'bg-blue-500/90' : 'bg-purple-500/90'
         )}>
           {content.type}
         </div>
@@ -185,7 +161,7 @@ const ContentCard = React.memo(({
 
       {/* Action Buttons */}
       <div className="absolute bottom-[88px] right-2 flex flex-col gap-2 z-30 opacity-0 group-hover:opacity-100 transition-opacity">
-        {(allTrailers.length > 0) && (
+        {(content.trailerUrl || seasons.some((s: any) => s.trailerUrl)) && (
           <button
             onClick={handleWatchTrailer}
             className="p-2 rounded-full backdrop-blur-md transition-all hover:scale-110 shadow-lg bg-red-600 text-white"
@@ -299,25 +275,38 @@ const ContentCard = React.memo(({
             </button>
             <h3 className="text-xl font-bold mb-4">Select Trailer</h3>
             <div className="flex flex-col gap-3">
-              {allTrailers.map((trailer) => (
+              {content.trailerUrl && (
                 <button
-                  key={trailer.id}
                   onClick={() => {
-                    const embedUrl = getYouTubeEmbedUrl(trailer.url);
+                    const embedUrl = getYouTubeEmbedUrl(content.trailerUrl);
                     if (embedUrl) {
                       setSelectedTrailerUrl(embedUrl);
                     } else {
-                      window.open(trailer.url, '_blank');
+                      window.open(content.trailerUrl, '_blank');
                     }
                     setIsTrailerSelectionOpen(false);
                   }}
-                  className={`w-full font-bold py-3 px-4 rounded-xl transition-colors flex items-center justify-between border ${
-                    trailer.id === 'main' 
-                      ? 'bg-zinc-200 dark:bg-zinc-800 hover:bg-zinc-300 dark:hover:bg-zinc-700 text-zinc-900 dark:text-white border-transparent' 
-                      : 'bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-500 border-emerald-500/20'
-                  }`}
+                  className="w-full bg-zinc-200 dark:bg-zinc-800 hover:bg-zinc-300 dark:hover:bg-zinc-700 text-zinc-900 dark:text-white font-bold py-3 px-4 rounded-xl transition-colors flex items-center justify-between"
                 >
-                  <span>{trailer.title}</span>
+                  <span>Main Trailer</span>
+                  <Play className="w-4 h-4" />
+                </button>
+              )}
+              {seasons.filter((s: any) => s.trailerUrl).map((season: any) => (
+                <button
+                  key={season.id}
+                  onClick={() => {
+                    const embedUrl = getYouTubeEmbedUrl(season.trailerUrl);
+                    if (embedUrl) {
+                      setSelectedTrailerUrl(embedUrl);
+                    } else {
+                      window.open(season.trailerUrl, '_blank');
+                    }
+                    setIsTrailerSelectionOpen(false);
+                  }}
+                  className="w-full bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-500 font-bold py-3 px-4 rounded-xl transition-colors flex items-center justify-between border border-emerald-500/20"
+                >
+                  <span>Season {season.seasonNumber} Trailer</span>
                   <Play className="w-4 h-4" />
                 </button>
               ))}
@@ -336,6 +325,12 @@ const ContentCard = React.memo(({
             className="relative w-full max-w-5xl aspect-video bg-black rounded-2xl overflow-hidden shadow-2xl"
             onClick={e => e.stopPropagation()}
           >
+            <button
+              onClick={() => setSelectedTrailerUrl(null)}
+              className="absolute top-4 right-4 text-white/70 hover:text-white transition-colors bg-black/50 p-2 rounded-full z-10"
+            >
+              <X className="w-6 h-6" />
+            </button>
             <iframe
               src={`${selectedTrailerUrl}?autoplay=1`}
               title="Trailer"

@@ -671,7 +671,7 @@ export default function Home({ onOpenMediaModal }: { onOpenMediaModal: () => voi
                       </div>
                     )}
                     <div className="flex-1 min-w-0">
-                      <div className="text-sm font-medium text-zinc-900 dark:text-zinc-200 truncate">{suggestion.title}</div>
+                      <div className="text-sm font-medium text-zinc-200 truncate">{suggestion.title}</div>
                       <div className="text-xs text-zinc-500 capitalize mt-0.5">
                         {suggestion.type} • {suggestion.year}
                       </div>

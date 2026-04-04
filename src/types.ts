@@ -111,13 +111,6 @@ export interface Income {
   date: string; // ISO string
 }
 
-export interface Trailer {
-  id: string;
-  url: string;
-  title: string;
-  seasonNumber?: number;
-}
-
 export interface Content {
   id: string;
   type: 'movie' | 'series';
@@ -125,7 +118,6 @@ export interface Content {
   description: string;
   posterUrl: string;
   trailerUrl: string;
-  trailers?: string; // JSON stringified Trailer[]
   genreIds: string[];
   languageIds: string[];
   qualityId?: string; // Added qualityId

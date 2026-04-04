@@ -3,7 +3,7 @@ import { useParams, Link, useNavigate, useLocation } from 'react-router-dom';
 import { Helmet } from 'react-helmet-async';
 import { db } from '../../firebase';
 import { doc, getDoc, updateDoc, arrayUnion, arrayRemove, deleteDoc, addDoc, collection, serverTimestamp, query, where, getDocs } from 'firebase/firestore';
-import { Content, QualityLinks, Season, Trailer } from '../../types';
+import { Content, QualityLinks, Season } from '../../types';
 import { useAuth } from '../../contexts/AuthContext';
 import { useContent } from '../../contexts/ContentContext';
 import { useCart } from '../../contexts/CartContext';
@@ -44,6 +44,7 @@ export default function MovieDetails() {
   useEffect(() => {
     console.log('DEBUG: contentList changed, length=', contentList.length);
   }, [contentList]);
+  const [deleteId, setDeleteId] = useState<string | null>(null);
   const [isWatchLaterLoading, setIsWatchLaterLoading] = useState(false);
   const [isFavoriteLoading, setIsFavoriteLoading] = useState(false);
   const [isShareLoading, setIsShareLoading] = useState(false);
@@ -137,25 +138,6 @@ export default function MovieDetails() {
       return [] as Season[];
     }
   }, [mergedContent]);
-
-  const [deleteId, setDeleteId] = useState<string | null>(null);
-
-  const allTrailers = useMemo(() => {
-    const list: Trailer[] = [];
-    if (mergedContent?.trailers) {
-      try {
-        const additional = JSON.parse(mergedContent.trailers) as Trailer[];
-        list.push(...additional);
-      } catch (e) {}
-    }
-    // Also include season trailers if not already in the list
-    seasons.forEach(s => {
-      if (s.trailerUrl && !list.some(t => t.url === s.trailerUrl)) {
-        list.push({ id: `season-${s.seasonNumber}`, url: s.trailerUrl, title: `Season ${s.seasonNumber} Trailer`, seasonNumber: s.seasonNumber });
-      }
-    });
-    return list;
-  }, [mergedContent, seasons]);
 
   const title = mergedContent ? `${formatContentTitle(mergedContent)} (${mergedContent.year}) - MovizNow` : 'MovizNow';
   const description = mergedContent?.description || 'Watch the latest movies and series on MovizNow.';
@@ -1016,16 +998,17 @@ export default function MovieDetails() {
                 {(mergedContent.trailerUrl || (mergedContent.type === 'series' && seasons.some(s => s.trailerUrl))) && (
                   <button 
                     onClick={() => {
-                      if (allTrailers.length > 1) {
+                      const seasonTrailers = seasons.filter(s => s.trailerUrl);
+                      if (mergedContent.type === 'series' && seasonTrailers.length > 0) {
                         setIsTrailerSelectionOpen(true);
-                      } else if (allTrailers.length === 1) {
-                        setActiveTrailerUrl(allTrailers[0].url);
+                      } else {
+                        setActiveTrailerUrl(mergedContent.trailerUrl || null);
                         setIsTrailerPopupOpen(true);
                       }
                     }}
-                    className={`${getYouTubeEmbedUrl(allTrailers[0]?.url || '') ? 'bg-red-600 hover:bg-red-700' : 'bg-emerald-500 hover:bg-emerald-600'} text-white px-8 py-4 rounded-xl font-bold flex items-center gap-2 transition-all active:scale-95 border border-white/20 shadow-lg`}
+                    className={`${getYouTubeEmbedUrl(mergedContent.trailerUrl || seasons.find(s => s.trailerUrl)?.trailerUrl || '') ? 'bg-red-600 hover:bg-red-700' : 'bg-emerald-500 hover:bg-emerald-600'} text-white px-8 py-4 rounded-xl font-bold flex items-center gap-2 transition-all active:scale-95 border border-white/20 shadow-lg`}
                   >
-                    {getYouTubeEmbedUrl(allTrailers[0]?.url || '') ? <Youtube className="w-5 h-5" /> : <Play className="w-5 h-5" />}
+                    {getYouTubeEmbedUrl(mergedContent.trailerUrl || seasons.find(s => s.trailerUrl)?.trailerUrl || '') ? <Youtube className="w-5 h-5" /> : <Play className="w-5 h-5" />}
                     Watch Trailer
                   </button>
                 )}
@@ -1695,21 +1678,30 @@ export default function MovieDetails() {
             </button>
             <h3 className="text-xl font-bold mb-4 text-zinc-900 dark:text-white">Select Trailer</h3>
             <div className="flex flex-col gap-3">
-              {allTrailers.map((trailer) => (
+              {mergedContent.trailerUrl && (
                 <button
-                  key={trailer.id}
                   onClick={() => {
-                    setActiveTrailerUrl(trailer.url);
+                    setActiveTrailerUrl(mergedContent.trailerUrl || null);
                     setIsTrailerPopupOpen(true);
                     setIsTrailerSelectionOpen(false);
                   }}
-                  className={`w-full font-bold py-3 px-4 rounded-xl transition-colors flex items-center justify-between border ${
-                    trailer.id === 'main' 
-                      ? 'bg-zinc-200 dark:bg-zinc-800 hover:bg-zinc-300 dark:hover:bg-zinc-700 text-zinc-900 dark:text-white border-transparent' 
-                      : 'bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-500 border-emerald-500/20'
-                  }`}
+                  className="w-full bg-zinc-200 dark:bg-zinc-800 hover:bg-zinc-300 dark:hover:bg-zinc-700 text-zinc-900 dark:text-white font-bold py-3 px-4 rounded-xl transition-colors flex items-center justify-between"
                 >
-                  <span>{trailer.title || (trailer.seasonNumber ? `Season ${trailer.seasonNumber}` : 'Trailer')}</span>
+                  <span>Main Trailer</span>
+                  <Play className="w-4 h-4" />
+                </button>
+              )}
+              {seasons.filter(s => s.trailerUrl).map((season) => (
+                <button
+                  key={season.id}
+                  onClick={() => {
+                    setActiveTrailerUrl(season.trailerUrl || null);
+                    setIsTrailerPopupOpen(true);
+                    setIsTrailerSelectionOpen(false);
+                  }}
+                  className="w-full bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-500 font-bold py-3 px-4 rounded-xl transition-colors flex items-center justify-between border border-emerald-500/20"
+                >
+                  <span>Season {season.seasonNumber} Trailer</span>
                   <Play className="w-4 h-4" />
                 </button>
               ))}
@@ -1740,6 +1732,15 @@ export default function MovieDetails() {
               className="relative w-full max-w-5xl aspect-video bg-black rounded-2xl overflow-hidden shadow-[0_0_50px_rgba(0,0,0,0.5)] ring-1 ring-white/10" 
               onClick={e => e.stopPropagation()}
             >
+              <button
+                onClick={() => {
+                  setIsTrailerPopupOpen(false);
+                  setActiveTrailerUrl(null);
+                }}
+                className="absolute top-4 right-4 text-zinc-900 dark:text-white/70 hover:text-zinc-900 dark:text-white transition-colors bg-black/50 hover:bg-black/80 p-2 rounded-full z-10 backdrop-blur-sm"
+              >
+                <X className="w-6 h-6" />
+              </button>
               {getYouTubeEmbedUrl(activeTrailerUrl || mergedContent.trailerUrl || '') ? (
                 <iframe
                   src={`${getYouTubeEmbedUrl(activeTrailerUrl || mergedContent.trailerUrl || '')}?autoplay=1`}

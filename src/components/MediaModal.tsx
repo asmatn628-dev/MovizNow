@@ -97,8 +97,6 @@ export const MediaModal: React.FC<MediaModalProps> = ({ isOpen, onClose, initial
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [fetchedData, setFetchedData] = useState<any>(null);
-  const [tmdbId, setTmdbId] = useState<string | null>(null);
-  const [type, setType] = useState<string | null>(null);
   const [searchResults, setSearchResults] = useState<any[] | null>(null);
   const [filterType, setFilterType] = useState<'all' | 'movie' | 'tv'>('all');
   const [selectedFields, setSelectedFields] = useState<Record<string, boolean>>(() => {
@@ -276,8 +274,6 @@ export const MediaModal: React.FC<MediaModalProps> = ({ isOpen, onClose, initial
   const fetchFullDetails = async (tmdbId: string, type: string) => {
     setLoading(true);
     setSearchResults(null);
-    setTmdbId(tmdbId);
-    setType(type);
     try {
       const details = await fetchTMDBDetails(tmdbId, type);
       let imdbRatingData = null;
@@ -311,6 +307,21 @@ export const MediaModal: React.FC<MediaModalProps> = ({ isOpen, onClose, initial
 
       setFetchedData(parsedData);
 
+      // Fetch YouTube title if trailerUrl exists
+      if (parsedData.trailerUrl) {
+        try {
+          const res = await fetch(`https://www.youtube.com/oembed?url=${parsedData.trailerUrl}&format=json`);
+          if (res.ok) {
+            const ytData = await res.json();
+            if (ytData.title) {
+              setFetchedData(prev => prev ? { ...prev, trailerTitle: ytData.title } : null);
+            }
+          }
+        } catch (e) {
+          console.error("Error fetching YouTube title in modal:", e);
+        }
+      }
+      
       // Select all fields by default if not already set
       const allFields: Record<string, boolean> = {};
       Object.keys(parsedData).forEach(k => {
@@ -344,6 +355,10 @@ export const MediaModal: React.FC<MediaModalProps> = ({ isOpen, onClose, initial
     Object.keys(selectedFields).forEach(key => {
       if (selectedFields[key]) {
         dataToApply[key] = fetchedData[key];
+        // If trailerUrl is selected, also include trailerTitle
+        if (key === 'trailerUrl' && fetchedData.trailerTitle) {
+          dataToApply.trailerTitle = fetchedData.trailerTitle;
+        }
       }
     });
 
@@ -404,29 +419,13 @@ export const MediaModal: React.FC<MediaModalProps> = ({ isOpen, onClose, initial
               </button>
 
               {fetchedData && onApply && (
-                <div className="flex gap-2">
-                  {type === 'tv' && (
-                    <button 
-                      onClick={async () => {
-                        if (!tmdbId) return;
-                        setLoading(true);
-                        const seasonsData = await fetchSeriesSeasons(tmdbId);
-                        setFetchedData((prev: any) => ({ ...prev, seasons: seasonsData }));
-                        setLoading(false);
-                      }}
-                      className="bg-emerald-600 text-white px-4 py-2 rounded-lg font-bold hover:bg-emerald-700 flex items-center gap-2 transition-all active:scale-95 border border-white/20 shadow-lg"
-                    >
-                      Master Fetch
-                    </button>
-                  )}
-                  <button 
-                    onClick={handleApply}
-                    className="bg-cyan-600 text-white px-4 py-2 rounded-lg font-bold hover:bg-cyan-700 flex items-center gap-2 transition-all active:scale-95 border border-white/20 shadow-lg"
-                  >
-                    <Save className="w-4 h-4" />
-                    Apply
-                  </button>
-                </div>
+                <button 
+                  onClick={handleApply}
+                  className="bg-cyan-600 text-white px-4 py-2 rounded-lg font-bold hover:bg-cyan-700 flex items-center gap-2 transition-all active:scale-95 border border-white/20 shadow-lg"
+                >
+                  <Save className="w-4 h-4" />
+                  Apply
+                </button>
               )}
             </div>
           </div>
