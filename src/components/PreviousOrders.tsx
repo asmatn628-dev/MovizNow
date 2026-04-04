@@ -7,8 +7,12 @@ import { motion, AnimatePresence } from 'framer-motion';
 
 export default function PreviousOrders() {
   const { profile } = useAuth();
-  const [orders, setOrders] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+  const CACHE_KEY = `user_orders_cache_${profile?.uid}`;
+  const [orders, setOrders] = useState<any[]>(() => {
+    const cached = localStorage.getItem(CACHE_KEY);
+    return cached ? JSON.parse(cached) : [];
+  });
+  const [loading, setLoading] = useState(orders.length === 0);
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
   useEffect(() => {
@@ -25,6 +29,7 @@ export default function PreviousOrders() {
           id: doc.id,
           ...doc.data()
         }));
+        localStorage.setItem(CACHE_KEY, JSON.stringify(fetchedOrders));
         setOrders(fetchedOrders);
       } catch (error) {
         console.error('Error fetching orders:', error);
@@ -33,7 +38,7 @@ export default function PreviousOrders() {
       }
     };
     fetchOrders();
-  }, [profile?.uid]);
+  }, [profile?.uid, CACHE_KEY]);
 
   if (loading) {
     return <div className="text-zinc-500 text-sm animate-pulse">Loading previous orders...</div>;
@@ -51,13 +56,13 @@ export default function PreviousOrders() {
       </h3>
       <div className="space-y-3">
         {orders.map((order) => (
-          <div key={order.id} className="bg-zinc-900 rounded-xl overflow-hidden border border-zinc-800">
+          <div key={order.id} className="bg-zinc-50 dark:bg-zinc-900 rounded-xl overflow-hidden border border-zinc-200 dark:border-zinc-800">
             <button
               onClick={() => setExpandedId(expandedId === order.id ? null : order.id)}
-              className="w-full px-4 py-3 flex items-center justify-between hover:bg-zinc-800/50 transition-colors"
+              className="w-full px-4 py-3 flex items-center justify-between hover:bg-zinc-200 dark:hover:bg-zinc-800/50 transition-colors"
             >
               <div className="flex items-center gap-3">
-                <span className="font-mono text-sm text-zinc-300">#{order.id}</span>
+                <span className="font-mono text-sm text-zinc-600 dark:text-zinc-300">#{order.id}</span>
                 <span className="text-sm font-medium">Rs {order.amount}</span>
               </div>
               <div className="flex items-center gap-3">
@@ -73,9 +78,9 @@ export default function PreviousOrders() {
                   initial={{ height: 0, opacity: 0 }}
                   animate={{ height: 'auto', opacity: 1 }}
                   exit={{ height: 0, opacity: 0 }}
-                  className="px-4 pb-4 border-t border-zinc-800/50"
+                  className="px-4 pb-4 border-t border-zinc-200 dark:border-zinc-800/50"
                 >
-                  <div className="pt-3 space-y-2 text-sm text-zinc-400">
+                  <div className="pt-3 space-y-2 text-sm text-zinc-500 dark:text-zinc-400">
                     <p><span className="text-zinc-500">Type:</span> {order.type === 'membership' ? 'Membership Top Up' : 'Content Purchase'}</p>
                     {order.type === 'membership' && <p><span className="text-zinc-500">Duration:</span> {order.months} Month(s)</p>}
                     {order.type === 'content' && order.items && (

@@ -17,6 +17,8 @@ import ContentCard from '../../components/ContentCard';
 
 import { NotificationMenu } from '../../components/NotificationMenu';
 
+import { ThemeToggle } from '../../components/ThemeToggle';
+
 export default function Home({ onOpenMediaModal }: { onOpenMediaModal: () => void }) {
   const { profile, logout, toggleFavorite, toggleWatchLater } = useAuth();
   const { contentList, genres, languages, qualities, loading, isOffline } = useContent();
@@ -150,7 +152,18 @@ export default function Home({ onOpenMediaModal }: { onOpenMediaModal: () => voi
   }, []);
 
   const uniqueYears = useMemo(() => {
-    const years = new Set(contentList.map(c => Number(c.year)).filter(y => y > 0 && !isNaN(y)));
+    const years = new Set<number>();
+    contentList.forEach(c => {
+      if (c.year && !isNaN(Number(c.year))) years.add(Number(c.year));
+      if (c.type === 'series' && c.seasons) {
+        try {
+          const seasons = JSON.parse(c.seasons);
+          seasons.forEach((s: any) => {
+            if (s.year && !isNaN(Number(s.year))) years.add(Number(s.year));
+          });
+        } catch (e) {}
+      }
+    });
     return Array.from(years).sort((a, b) => b - a);
   }, [contentList]);
 
@@ -170,23 +183,23 @@ export default function Home({ onOpenMediaModal }: { onOpenMediaModal: () => voi
 
   const getRoleColor = (role: string) => {
     switch(role) {
-      case 'admin': return 'bg-purple-500/20 text-purple-400 border-purple-500/30';
-      case 'manager': return 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30';
-      case 'content_manager': return 'bg-blue-500/20 text-blue-400 border-blue-500/30';
-      case 'selected_content': return 'bg-amber-500/20 text-amber-400 border-amber-500/30';
-      case 'temporary': return 'bg-orange-500/20 text-orange-400 border-orange-500/30';
-      case 'trial': return 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30';
-      default: return 'bg-zinc-500/20 text-zinc-400 border-zinc-500/30';
+      case 'admin': return 'bg-purple-500/10 text-purple-700 dark:text-purple-400 border-purple-500/30';
+      case 'manager': return 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/30';
+      case 'content_manager': return 'bg-blue-500/10 text-blue-700 dark:text-blue-400 border-blue-500/30';
+      case 'selected_content': return 'bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-500/30';
+      case 'temporary': return 'bg-orange-500/10 text-orange-700 dark:text-orange-400 border-orange-500/30';
+      case 'trial': return 'bg-yellow-500/10 text-yellow-700 dark:text-yellow-400 border-yellow-500/30';
+      default: return 'bg-zinc-500/10 text-zinc-700 dark:text-zinc-400 border-zinc-500/30';
     }
   };
 
   const getStatusColor = (status: string) => {
     switch(status) {
-      case 'active': return 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30';
-      case 'expired': return 'bg-red-500/20 text-red-400 border-red-500/30';
-      case 'suspended': return 'bg-red-500/20 text-red-400 border-red-500/30';
-      case 'pending': return 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30';
-      default: return 'bg-zinc-500/20 text-zinc-400 border-zinc-500/30';
+      case 'active': return 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/30';
+      case 'expired': return 'bg-red-500/10 text-red-700 dark:text-red-400 border-red-500/30';
+      case 'suspended': return 'bg-red-500/10 text-red-700 dark:text-red-400 border-red-500/30';
+      case 'pending': return 'bg-yellow-500/10 text-yellow-700 dark:text-yellow-400 border-yellow-500/30';
+      default: return 'bg-zinc-500/10 text-zinc-700 dark:text-zinc-400 border-zinc-500/30';
     }
   };
 
@@ -220,7 +233,16 @@ export default function Home({ onOpenMediaModal }: { onOpenMediaModal: () => voi
       result = result.filter(c => c.qualityId === selectedQuality);
     }
     if (selectedYear) {
-      result = result.filter(c => c.year.toString() === selectedYear);
+      result = result.filter(c => {
+        if (c.year?.toString() === selectedYear) return true;
+        if (c.type === 'series' && c.seasons) {
+          try {
+            const seasons = JSON.parse(c.seasons);
+            return seasons.some((s: any) => s.year?.toString() === selectedYear);
+          } catch (e) {}
+        }
+        return false;
+      });
     }
 
     result.sort((a, b) => {
@@ -260,23 +282,23 @@ export default function Home({ onOpenMediaModal }: { onOpenMediaModal: () => voi
   }, [search, sort, selectedType, selectedGenre, selectedLanguage, selectedQuality, selectedYear]);
 
   return (
-    <div className="min-h-screen bg-zinc-950 text-white flex flex-col">
+    <div className="min-h-screen bg-white dark:bg-zinc-950 text-zinc-900 dark:text-white flex flex-col transition-colors duration-300">
       {/* Header */}
-      <header className="sticky top-0 z-40 bg-zinc-950 border-b border-zinc-800">
+      <header className="sticky top-0 z-40 bg-white dark:bg-zinc-950 border-b border-zinc-200 dark:border-zinc-800 transition-colors duration-300">
         <div className="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between">
           <Link to="/" className="text-2xl font-bold text-emerald-500 flex items-center gap-3">
             <LazyLoadImage src="/logo.svg?v=2" alt="MovizNow Logo" className="w-8 h-8" />
             <span className="tracking-tight">MovizNow</span>
           </Link>
 
-          <div className={clsx("flex items-center", profile?.role === 'manager' ? "gap-0.5" : "gap-1.5")}>
+          <div className="flex items-center gap-0">
             {profile && (
-              <div className="hidden md:flex items-center gap-2 mr-2">
+              <div className="hidden md:flex items-center gap-3 mr-2">
                 <div className="flex flex-col items-end">
-                  <div className="flex items-center gap-1">
-                    <span className="text-sm font-bold text-white">{profile.displayName || 'User'} {profile.role === 'owner' ? '(Owner)' : ''}</span>
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-bold text-zinc-900 dark:text-white">{profile.displayName || 'User'} {profile.role === 'owner' ? '(Owner)' : ''}</span>
                     {profile.role !== 'owner' && (
-                      <div className="flex items-center gap-1">
+                      <div className="flex items-center gap-2">
                         <span className={clsx("text-[10px] font-medium px-2 py-0.5 rounded-full border", getRoleColor(profile.role))}>
                           {profile.role === 'selected_content' ? 'Selected Content' : 
                            profile.role === 'content_manager' ? 'Content Manager' :
@@ -291,20 +313,20 @@ export default function Home({ onOpenMediaModal }: { onOpenMediaModal: () => voi
                     )}
                   </div>
                   {profile.phone ? (
-                    <span className="text-xs font-medium text-zinc-400">{profile.phone}</span>
+                    <span className="text-xs font-medium text-zinc-500 dark:text-zinc-400">{profile.phone}</span>
                   ) : profile.role !== 'owner' ? (
-                    <button onClick={() => setShowWhatsappPrompt(true)} className="text-[10px] font-medium text-emerald-500 hover:underline mt-0.5">
+                    <button onClick={() => setShowWhatsappPrompt(true)} className="text-[10px] font-medium text-emerald-500 hover:underline mt-0.5 transition-all active:scale-95">
                       + Add WhatsApp
                     </button>
                   ) : null}
                 </div>
                 {profile.role !== 'owner' && (
                   <>
-                    <div className="h-8 w-px bg-zinc-800"></div>
+                    <div className="h-8 w-px bg-zinc-100 dark:bg-zinc-800"></div>
                     <div className="flex flex-col items-start">
-                      <span className="text-xs text-zinc-400">Expiry Date</span>
-                      <div className="flex items-center gap-1">
-                        <span className="text-xs font-medium text-zinc-300">
+                      <span className="text-xs text-zinc-500 dark:text-zinc-400">Expiry Date</span>
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-medium text-zinc-600 dark:text-zinc-300">
                           {profile.expiryDate ? (() => {
                             const expiry = new Date(profile.expiryDate);
                             const expiryEnd = new Date(expiry.getTime() + 24 * 60 * 60 * 1000);
@@ -324,7 +346,7 @@ export default function Home({ onOpenMediaModal }: { onOpenMediaModal: () => voi
                           <Link 
                             to="/top-up" 
                             state={{ isExtend: true }}
-                            className="bg-emerald-500/20 text-emerald-500 hover:bg-emerald-500/30 p-0.5 rounded-full transition-colors"
+                            className="bg-emerald-500/20 text-emerald-500 hover:bg-emerald-500/30 p-0.5 rounded-full transition-all active:scale-95"
                             title="Extend Membership"
                           >
                             <Plus className="w-3 h-3" />
@@ -336,7 +358,7 @@ export default function Home({ onOpenMediaModal }: { onOpenMediaModal: () => voi
                       href="https://wa.me/923363284466" 
                       target="_blank" 
                       rel="noreferrer" 
-                      className="flex items-center gap-1 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-500 px-2 py-1 rounded-lg text-sm font-medium transition-colors ml-1"
+                      className="flex items-center gap-2 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-500 px-3 py-1.5 rounded-lg text-sm font-medium transition-all active:scale-95 ml-2"
                     >
                       <MessageCircle className="w-4 h-4" />
                       Support
@@ -346,47 +368,45 @@ export default function Home({ onOpenMediaModal }: { onOpenMediaModal: () => voi
               </div>
             )}
             
-            <Link to="/watch-later" className="text-zinc-400 hover:text-white transition-colors" title="Watch Later">
+            <Link to="/watch-later" className="text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:text-white transition-all active:scale-95 p-1 rounded-full hover:bg-zinc-100 dark:hover:bg-zinc-800" title="Watch Later">
               <Clock className="w-5 h-5" />
             </Link>
-            <Link to="/favorites" className="text-zinc-400 hover:text-white transition-colors" title="Favorites">
+            <Link to="/favorites" className="text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:text-white transition-all active:scale-95 p-1 rounded-full hover:bg-zinc-100 dark:hover:bg-zinc-800" title="Favorites">
               <Heart className="w-5 h-5" />
             </Link>
             {((profile?.role === 'selected_content' && profile?.status !== 'expired') || profile?.status === 'pending') && (
-              <Link to="/cart" className="text-zinc-400 hover:text-white transition-colors relative" title="Cart">
+              <Link to="/cart" className="text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:text-white transition-all active:scale-95 p-1 rounded-full hover:bg-zinc-100 dark:hover:bg-zinc-800 relative" title="Cart">
                 <ShoppingCart className="w-5 h-5" />
                 {cart.length > 0 && (
-                  <span className="absolute -top-1.5 -right-1.5 bg-red-500 text-white text-[10px] font-bold w-4 h-4 flex items-center justify-center rounded-full">
+                  <span className="absolute top-0 right-0 bg-red-500 text-white text-[10px] font-bold w-4 h-4 flex items-center justify-center rounded-full border-2 border-white dark:border-zinc-950">
                     {cart.length}
                   </span>
                 )}
               </Link>
             )}
-            <Link to="/requests" className="text-zinc-400 hover:text-white transition-colors" title="Movie Requests">
-              <MessageCircle className="w-5 h-5" />
-            </Link>
-            {(profile?.role === 'admin' || profile?.role === 'owner' || profile?.role === 'content_manager' || profile?.role === 'manager') && (
-              <button onClick={onOpenMediaModal} className="text-zinc-400 hover:text-white transition-colors" title="Search Media">
-                <Search className="w-5 h-5" />
-              </button>
+            {profile?.role !== 'manager' && profile?.role !== 'content_manager' && (
+              <Link to="/requests" className="text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:text-white transition-all active:scale-95 p-1 rounded-full hover:bg-zinc-100 dark:hover:bg-zinc-800" title="Movie Requests">
+                <MessageCircle className="w-5 h-5" />
+              </Link>
             )}
+            <ThemeToggle />
             {profile && <NotificationMenu />}
             {(profile?.role === 'admin' || profile?.role === 'owner') && (
-              <Link to="/admin" className="text-zinc-400 hover:text-white transition-colors" title="Admin Panel">
+              <Link to="/admin" className="text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:text-white transition-all active:scale-95 p-1 rounded-full hover:bg-zinc-100 dark:hover:bg-zinc-800" title="Admin Panel">
                 <LayoutDashboard className="w-5 h-5" />
               </Link>
             )}
             {(profile?.role === 'manager' || profile?.role === 'content_manager') && (
-              <Link to="/admin/content" className="text-zinc-400 hover:text-white transition-colors" title={profile?.role === 'manager' ? 'Content Management' : 'Content Manager'}>
+              <Link to="/admin/content" className="text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:text-white transition-all active:scale-95 p-1 rounded-full hover:bg-zinc-100 dark:hover:bg-zinc-800" title={profile?.role === 'manager' ? 'Content Management' : 'Content Manager'}>
                 <Film className="w-5 h-5" />
               </Link>
             )}
             {(profile?.role === 'user_manager' || profile?.role === 'manager') && (
-              <Link to="/admin/users" className="text-zinc-400 hover:text-white transition-colors" title={profile?.role === 'manager' ? 'User Management' : 'User Manager'}>
+              <Link to="/admin/users" className="text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:text-white transition-all active:scale-95 p-1 rounded-full hover:bg-zinc-100 dark:hover:bg-zinc-800" title={profile?.role === 'manager' ? 'User Management' : 'User Manager'}>
                 <Users className="w-5 h-5" />
               </Link>
             )}
-            <button onClick={() => setIsLogoutModalOpen(true)} className="text-zinc-400 hover:text-white transition-colors" title="Sign Out">
+            <button onClick={() => setIsLogoutModalOpen(true)} className="text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:text-white transition-all active:scale-95 p-1 rounded-full hover:bg-zinc-100 dark:hover:bg-zinc-800" title="Sign Out">
               <LogOut className="w-5 h-5" />
             </button>
           </div>
@@ -395,14 +415,14 @@ export default function Home({ onOpenMediaModal }: { onOpenMediaModal: () => voi
 
       {/* Mobile User Info Banner */}
       {profile && (
-        <div className="md:hidden bg-zinc-900 border-b border-zinc-800 px-4 py-3 flex flex-col gap-2 text-sm">
+        <div className="md:hidden bg-zinc-50 dark:bg-zinc-900 border-b border-zinc-200 dark:border-zinc-800 px-4 py-3 flex flex-col gap-2 text-sm">
           <div className="flex justify-between items-center">
             <div className="flex flex-col">
-              <span className="font-bold text-white">{profile.displayName || 'User'}</span>
+              <span className="font-bold text-zinc-900 dark:text-white">{profile.displayName || 'User'}</span>
               {profile.phone ? (
-                <span className="text-xs font-medium text-zinc-400">{profile.phone}</span>
+                <span className="text-xs font-medium text-zinc-500 dark:text-zinc-400">{profile.phone}</span>
               ) : profile.role !== 'owner' ? (
-                <button onClick={() => setShowWhatsappPrompt(true)} className="text-[10px] font-medium text-emerald-500 hover:underline text-left mt-0.5">
+                <button onClick={() => setShowWhatsappPrompt(true)} className="text-[10px] font-medium text-emerald-500 hover:underline text-left mt-0.5 transition-all active:scale-95">
                   + Add WhatsApp
                 </button>
               ) : null}
@@ -424,8 +444,8 @@ export default function Home({ onOpenMediaModal }: { onOpenMediaModal: () => voi
           </div>
           {profile.role !== 'owner' && (
             <div className="flex justify-between items-center">
-              <div className="flex items-center gap-1">
-                <span className="text-zinc-400 text-xs">
+              <div className="flex items-center gap-2">
+                <span className="text-zinc-500 dark:text-zinc-400 text-xs">
                   {profile.expiryDate ? (() => {
                     const expiry = new Date(profile.expiryDate);
                     const expiryEnd = new Date(expiry.getTime() + 24 * 60 * 60 * 1000);
@@ -445,7 +465,7 @@ export default function Home({ onOpenMediaModal }: { onOpenMediaModal: () => voi
                   <Link 
                     to="/top-up" 
                     state={{ isExtend: true }}
-                    className="bg-emerald-500/20 text-emerald-500 hover:bg-emerald-500/30 p-0.5 rounded-full transition-colors"
+                    className="bg-emerald-500/20 text-emerald-500 hover:bg-emerald-500/30 p-0.5 rounded-full transition-all active:scale-95"
                     title="Extend Membership"
                   >
                     <Plus className="w-3 h-3" />
@@ -456,7 +476,7 @@ export default function Home({ onOpenMediaModal }: { onOpenMediaModal: () => voi
                 href="https://wa.me/923363284466" 
                 target="_blank" 
                 rel="noreferrer" 
-                className="flex items-center gap-1.5 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-500 px-2 py-1 rounded text-xs font-medium transition-colors"
+                className="flex items-center gap-2 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-500 px-2 py-1 rounded text-xs font-medium transition-all active:scale-95"
               >
                 <MessageCircle className="w-3 h-3" />
                 Support
@@ -470,23 +490,23 @@ export default function Home({ onOpenMediaModal }: { onOpenMediaModal: () => voi
       <main className="flex-1 max-w-7xl mx-auto w-full px-4 pt-4 pb-8">
         {/* Status Banner */}
         {profile?.status === 'pending' && (
-          <div className="bg-yellow-500/10 border border-yellow-500/20 text-yellow-500 p-4 sm:p-6 rounded-2xl mb-8 flex flex-row items-center justify-between gap-4 sm:gap-8">
+          <div className="bg-yellow-500/10 border border-yellow-500 text-yellow-600 dark:text-yellow-500 p-4 sm:p-6 rounded-2xl mb-8 flex flex-row items-center justify-between gap-4 sm:gap-8">
             <div className="flex-1 min-w-0">
-              <h3 className="font-bold text-lg sm:text-2xl mb-1 sm:mb-2">Account Pending</h3>
-              <p className="text-yellow-500/80 text-sm sm:text-lg font-medium">Your account activation is pending. Please Get Membership or Add any content to cart to activate your account.</p>
+              <h3 className="font-bold text-lg sm:text-2xl mb-1 sm:mb-2 text-yellow-600 dark:text-yellow-500">Account Pending</h3>
+              <p className="text-yellow-700 dark:text-yellow-500/80 text-sm sm:text-lg font-medium">Your account activation is pending. Please Get Membership or Add any content to cart to activate your account.</p>
             </div>
             <div className="flex flex-col gap-2 sm:gap-3 min-w-[140px] sm:min-w-[220px] shrink-0">
               {(profile?.role === 'trial' || profile?.role === 'user') && (
-                <Link to="/top-up" className="flex items-center justify-center gap-1.5 sm:gap-2 bg-yellow-500 text-black px-3 sm:px-6 py-2 sm:py-3 rounded-lg sm:rounded-xl text-xs sm:text-base font-bold hover:bg-yellow-400 transition-all shadow-lg shadow-yellow-500/20">
+                <Link to="/top-up" className="flex items-center justify-center gap-1.5 sm:gap-2 bg-yellow-500 text-white dark:text-black px-3 sm:px-6 py-2 sm:py-3 rounded-lg sm:rounded-xl text-xs sm:text-base font-bold hover:bg-yellow-400 transition-all active:scale-95 shadow-lg shadow-yellow-500/20 border border-white/20">
                   Get Membership
                 </Link>
               )}
               {(profile?.role === 'selected_content' || profile?.role === 'user') && (
-                <Link to="/cart" className="flex items-center justify-center gap-1.5 sm:gap-2 bg-yellow-500 text-black px-3 sm:px-6 py-2 sm:py-3 rounded-lg sm:rounded-xl text-xs sm:text-base font-bold hover:bg-yellow-400 transition-all shadow-lg shadow-yellow-500/20">
+                <Link to="/cart" className="flex items-center justify-center gap-1.5 sm:gap-2 bg-yellow-500 text-white dark:text-black px-3 sm:px-6 py-2 sm:py-3 rounded-lg sm:rounded-xl text-xs sm:text-base font-bold hover:bg-yellow-400 transition-all active:scale-95 shadow-lg shadow-yellow-500/20 border border-white/20">
                   <ShoppingCart className="w-3 h-3 sm:w-5 sm:h-5" /> Cart
                 </Link>
               )}
-              <a href="https://wa.me/923363284466" target="_blank" rel="noreferrer" className="flex items-center justify-center gap-1.5 sm:gap-2 bg-yellow-500/10 border border-yellow-500/30 px-3 sm:px-6 py-2 sm:py-3 rounded-lg sm:rounded-xl text-xs sm:text-base font-bold hover:bg-yellow-500/20 transition-all">
+              <a href="https://wa.me/923363284466" target="_blank" rel="noreferrer" className="flex items-center justify-center gap-1.5 sm:gap-2 bg-yellow-500/10 border border-yellow-500 text-yellow-600 dark:text-yellow-500 px-3 sm:px-6 py-2 sm:py-3 rounded-lg sm:rounded-xl text-xs sm:text-base font-bold hover:bg-yellow-500/20 transition-all active:scale-95">
                 <MessageCircle className="w-3 h-3 sm:w-5 sm:h-5" /> Admin
               </a>
             </div>
@@ -499,10 +519,10 @@ export default function Home({ onOpenMediaModal }: { onOpenMediaModal: () => voi
               <p className="text-red-500/80 text-sm sm:text-lg font-medium">Your Free Trial is Expired. Buy membership to enjoy watching.</p>
             </div>
             <div className="flex flex-col gap-2 sm:gap-3 min-w-[140px] sm:min-w-[220px] shrink-0">
-              <Link to="/top-up" className="flex items-center justify-center gap-1.5 sm:gap-2 bg-red-500 text-white px-3 sm:px-6 py-2 sm:py-3 rounded-lg sm:rounded-xl text-xs sm:text-base font-bold hover:bg-red-600 transition-all shadow-lg shadow-red-500/20">
+              <Link to="/top-up" className="flex items-center justify-center gap-1.5 sm:gap-2 bg-red-500 text-white px-3 sm:px-6 py-2 sm:py-3 rounded-lg sm:rounded-xl text-xs sm:text-base font-bold hover:bg-red-600 transition-all active:scale-95 shadow-lg shadow-red-500/20 border border-white/20">
                 Buy Now
               </Link>
-              <a href="https://wa.me/923363284466" target="_blank" rel="noreferrer" className="flex items-center justify-center gap-1.5 sm:gap-2 bg-red-500/10 border border-red-500/30 px-3 sm:px-6 py-2 sm:py-3 rounded-lg sm:rounded-xl text-xs sm:text-base font-bold hover:bg-red-500/20 transition-all">
+              <a href="https://wa.me/923363284466" target="_blank" rel="noreferrer" className="flex items-center justify-center gap-1.5 sm:gap-2 bg-red-500/10 border border-red-500/30 px-3 sm:px-6 py-2 sm:py-3 rounded-lg sm:rounded-xl text-xs sm:text-base font-bold hover:bg-red-500/20 transition-all active:scale-95">
                 <MessageCircle className="w-3 h-3 sm:w-5 sm:h-5" /> Admin
               </a>
             </div>
@@ -515,10 +535,10 @@ export default function Home({ onOpenMediaModal }: { onOpenMediaModal: () => voi
               <p className="text-red-500/80 text-sm sm:text-lg font-medium">Your membership has expired. Please renew to continue watching.</p>
             </div>
             <div className="flex flex-col gap-2 sm:gap-3 min-w-[140px] sm:min-w-[220px] shrink-0">
-              <Link to="/top-up" className="flex items-center justify-center gap-1.5 sm:gap-2 bg-red-500 text-white px-3 sm:px-6 py-2 sm:py-3 rounded-lg sm:rounded-xl text-xs sm:text-base font-bold hover:bg-red-600 transition-all shadow-lg shadow-red-500/20">
+              <Link to="/top-up" className="flex items-center justify-center gap-1.5 sm:gap-2 bg-red-500 text-white px-3 sm:px-6 py-2 sm:py-3 rounded-lg sm:rounded-xl text-xs sm:text-base font-bold hover:bg-red-600 transition-all active:scale-95 shadow-lg shadow-red-500/20 border border-white/20">
                 Renew Now
               </Link>
-              <a href="https://wa.me/923363284466" target="_blank" rel="noreferrer" className="flex items-center justify-center gap-1.5 sm:gap-2 bg-red-500/10 border border-red-500/30 px-3 sm:px-6 py-2 sm:py-3 rounded-lg sm:rounded-xl text-xs sm:text-base font-bold hover:bg-red-500/20 transition-all">
+              <a href="https://wa.me/923363284466" target="_blank" rel="noreferrer" className="flex items-center justify-center gap-1.5 sm:gap-2 bg-red-500/10 border border-red-500/30 px-3 sm:px-6 py-2 sm:py-3 rounded-lg sm:rounded-xl text-xs sm:text-base font-bold hover:bg-red-500/20 transition-all active:scale-95">
                 <MessageCircle className="w-3 h-3 sm:w-5 sm:h-5" /> Admin
               </a>
             </div>
@@ -543,12 +563,15 @@ export default function Home({ onOpenMediaModal }: { onOpenMediaModal: () => voi
                   const qualityObj = qualities.find(q => q.id === content.qualityId);
                   const contentLangs = languages.filter(l => content.languageIds?.includes(l.id)).map(l => l.name).join(', ');
                   const contentGenres = genres.filter(g => content.genreIds?.includes(g.id)).map(g => g.name).join(', ');
+                  const isAssigned = (profile?.role === 'temporary' || profile?.role === 'selected_content') && profile.assignedContent?.some((id: string) => id === content.id || id.startsWith(`${content.id}:`));
+                  const isLocked = profile?.status !== 'active' || ((profile?.role === 'temporary' || profile?.role === 'selected_content') && !isAssigned);
+                  const isPending = profile?.status === 'pending';
                   
                   return (
                     <Link
                       key={content.id}
                       to={`/movie/${content.id}`}
-                      className="flex-none w-[80px] sm:w-[100px] snap-start group/card relative rounded-xl overflow-hidden bg-zinc-900 border border-zinc-800 hover:border-zinc-700 transition-all duration-300"
+                      className="flex-none w-[80px] sm:w-[100px] snap-start group/card relative rounded-xl overflow-hidden bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 hover:border-emerald-500/50 transition-all duration-300 shadow-md"
                     >
                       <div className="aspect-[2/3] relative">
                         <LazyLoadImage
@@ -562,10 +585,10 @@ export default function Home({ onOpenMediaModal }: { onOpenMediaModal: () => voi
                         
                         <div className="absolute top-1 left-1 flex flex-col gap-0.5 z-10">
                           <span className={clsx(
-                            "px-1 py-0.5 rounded text-[6px] font-bold uppercase tracking-wider backdrop-blur-md border",
+                            "px-1 py-0.5 rounded text-[6px] font-bold uppercase tracking-wider backdrop-blur-md border text-white",
                             content.type === 'movie' 
-                              ? "bg-blue-500/20 text-blue-400 border-blue-500/30"
-                              : "bg-purple-500/20 text-purple-400 border-purple-500/30"
+                              ? "bg-blue-500/80 border-blue-500/30"
+                              : "bg-purple-500/80 border-purple-500/30"
                           )}>
                             {content.type}
                           </span>
@@ -578,18 +601,26 @@ export default function Home({ onOpenMediaModal }: { onOpenMediaModal: () => voi
                             </span>
                           )}
                         </div>
+
+                        {isLocked && (
+                          <div className={clsx(
+                            "absolute top-1 right-1 px-1 py-0.5 rounded text-[6px] font-bold uppercase tracking-wider flex items-center gap-0.5 shadow-lg z-20",
+                            isPending ? "bg-yellow-500 text-white dark:text-black" : "bg-red-500 text-white"
+                          )}>
+                            <Lock className="w-1.5 h-1.5" />
+                            {isPending ? 'PND' : 'RES'}
+                          </div>
+                        )}
                       </div>
                       
                       <div className="p-1">
-                        <h3 className="text-[8px] font-bold text-white line-clamp-1 mb-0.5 group-hover/card:text-indigo-400 transition-colors">
+                        <h3 className="text-[8px] font-bold text-zinc-900 dark:text-white line-clamp-1 mb-0.5 group-hover/card:text-emerald-500 transition-colors">
                           {content.title}
                         </h3>
-                        <div className="flex flex-col gap-0.5 text-[8px] text-zinc-400">
+                        <div className="flex flex-col gap-0.5 text-[8px] text-zinc-500 dark:text-zinc-400">
                           <div className="flex items-center justify-between">
                             <span>{content.year}</span>
                           </div>
-                          {contentLangs && <div className="line-clamp-1 text-zinc-500 italic">{contentLangs}</div>}
-                          {contentGenres && <div className="line-clamp-1 text-zinc-600">{contentGenres}</div>}
                         </div>
                       </div>
                     </Link>
@@ -614,18 +645,18 @@ export default function Home({ onOpenMediaModal }: { onOpenMediaModal: () => voi
                 setShowSuggestions(true);
               }}
               onFocus={() => setShowSuggestions(true)}
-              className="w-full bg-zinc-900 border border-zinc-800 rounded-xl pl-12 pr-4 py-3 focus:outline-none focus:border-emerald-500"
+              className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl pl-12 pr-4 py-3 focus:outline-none focus:border-emerald-500 text-zinc-900 dark:text-white placeholder-zinc-500 dark:placeholder-zinc-400 transition-colors duration-300"
             />
             {showSuggestions && searchSuggestions.length > 0 && (
               <div 
                 ref={suggestionsRef}
-                className="absolute z-50 w-full mt-2 bg-zinc-900 border border-zinc-700 rounded-xl shadow-2xl max-h-60 overflow-y-auto"
+                className="absolute z-50 w-full mt-2 bg-zinc-50 dark:bg-zinc-900 border border-zinc-300 dark:border-zinc-700 rounded-xl shadow-2xl max-h-60 overflow-y-auto"
               >
-                <div className="p-2 text-xs font-medium text-zinc-400 border-b border-zinc-800">Suggestions</div>
+                <div className="p-2 text-xs font-medium text-zinc-500 dark:text-zinc-400 border-b border-zinc-200 dark:border-zinc-800">Suggestions</div>
                 {searchSuggestions.map(suggestion => (
                   <div 
                     key={suggestion.id} 
-                    className="px-4 py-3 hover:bg-zinc-800 cursor-pointer flex items-center gap-3 transition-colors"
+                    className="px-4 py-3 hover:bg-zinc-200 dark:hover:bg-zinc-800 cursor-pointer flex items-center gap-3 transition-colors"
                     onClick={() => {
                       setSearch(suggestion.title);
                       setShowSuggestions(false);
@@ -635,12 +666,12 @@ export default function Home({ onOpenMediaModal }: { onOpenMediaModal: () => voi
                     {suggestion.posterUrl ? (
                       <img src={suggestion.posterUrl} alt={suggestion.title} className="w-8 h-12 object-cover rounded" />
                     ) : (
-                      <div className="w-8 h-12 bg-zinc-800 rounded flex items-center justify-center">
+                      <div className="w-8 h-12 bg-zinc-100 dark:bg-zinc-800 rounded flex items-center justify-center">
                         <Film className="w-4 h-4 text-zinc-600" />
                       </div>
                     )}
                     <div className="flex-1 min-w-0">
-                      <div className="text-sm font-medium text-zinc-200 truncate">{suggestion.title}</div>
+                      <div className="text-sm font-medium text-zinc-900 dark:text-zinc-200 truncate">{suggestion.title}</div>
                       <div className="text-xs text-zinc-500 capitalize mt-0.5">
                         {suggestion.type} • {suggestion.year}
                       </div>
@@ -652,13 +683,13 @@ export default function Home({ onOpenMediaModal }: { onOpenMediaModal: () => voi
           </div>
           
           <div className="flex gap-3 overflow-x-auto pb-2 md:pb-0 flex-nowrap">
-            <button onClick={clearFilters} className="bg-zinc-800 hover:bg-zinc-700 text-white rounded-lg px-2 py-1 text-xs flex items-center gap-1">
+            <button onClick={clearFilters} className="bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-300 dark:hover:bg-zinc-700 text-zinc-900 dark:text-white rounded-lg px-2 py-1 text-xs flex items-center gap-1">
               <X className="w-3 h-3" />
             </button>
             <select
               value={sort}
               onChange={(e) => setSort(e.target.value as any)}
-              className="bg-zinc-950 border border-zinc-800 rounded-lg px-2 py-1 text-xs focus:border-emerald-500"
+              className="bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg px-2 py-1 text-xs focus:border-emerald-500"
             >
               <option value="default">Default Order</option>
               <option value="newest">Recently Added</option>
@@ -669,7 +700,7 @@ export default function Home({ onOpenMediaModal }: { onOpenMediaModal: () => voi
             <select
               value={selectedType}
               onChange={(e) => setSelectedType(e.target.value)}
-              className="bg-zinc-950 border border-zinc-800 rounded-lg px-2 py-1 text-xs focus:border-emerald-500"
+              className="bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg px-2 py-1 text-xs focus:border-emerald-500"
             >
               <option value="">Types</option>
               <option value="movie">Movies</option>
@@ -679,7 +710,7 @@ export default function Home({ onOpenMediaModal }: { onOpenMediaModal: () => voi
             <select
               value={selectedGenre}
               onChange={(e) => setSelectedGenre(e.target.value)}
-              className="bg-zinc-950 border border-zinc-800 rounded-lg px-2 py-1 text-xs focus:border-emerald-500"
+              className="bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg px-2 py-1 text-xs focus:border-emerald-500"
             >
               <option value="">Genres</option>
               {genres.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
@@ -688,7 +719,7 @@ export default function Home({ onOpenMediaModal }: { onOpenMediaModal: () => voi
             <select
               value={selectedLanguage}
               onChange={(e) => setSelectedLanguage(e.target.value)}
-              className="bg-zinc-950 border border-zinc-800 rounded-lg px-2 py-1 text-xs focus:border-emerald-500"
+              className="bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg px-2 py-1 text-xs focus:border-emerald-500"
             >
               <option value="">Languages</option>
               {languages.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
@@ -697,7 +728,7 @@ export default function Home({ onOpenMediaModal }: { onOpenMediaModal: () => voi
             <select
               value={selectedQuality}
               onChange={(e) => setSelectedQuality(e.target.value)}
-              className="bg-zinc-950 border border-zinc-800 rounded-lg px-2 py-1 text-xs focus:border-emerald-500"
+              className="bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg px-2 py-1 text-xs focus:border-emerald-500"
             >
               <option value="">Qualities</option>
               {qualities.map(q => <option key={q.id} value={q.id}>{q.name}</option>)}
@@ -706,7 +737,7 @@ export default function Home({ onOpenMediaModal }: { onOpenMediaModal: () => voi
             <select
               value={selectedYear}
               onChange={(e) => setSelectedYear(e.target.value)}
-              className="bg-zinc-950 border border-zinc-800 rounded-lg px-2 py-1 text-xs focus:border-emerald-500"
+              className="bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg px-2 py-1 text-xs focus:border-emerald-500"
             >
               <option value="">Years</option>
               {uniqueYears.map(y => <option key={y} value={y}>{y}</option>)}
@@ -737,6 +768,7 @@ export default function Home({ onOpenMediaModal }: { onOpenMediaModal: () => voi
                   genres={genres}
                   onToggleFavorite={toggleFavorite}
                   onToggleWatchLater={toggleWatchLater}
+                  selectedYear={selectedYear}
                 />
               ))}
             </div>
@@ -751,7 +783,7 @@ export default function Home({ onOpenMediaModal }: { onOpenMediaModal: () => voi
                       window.scrollTo({ top: 0, behavior: 'smooth' });
                     }}
                     disabled={currentPage === 1}
-                    className="px-4 py-2 rounded-xl bg-zinc-900 border border-zinc-800 text-sm font-medium hover:bg-zinc-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                    className="px-4 py-2 rounded-xl bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 text-sm font-medium hover:bg-zinc-200 dark:hover:bg-zinc-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                   >
                     Previous
                   </button>
@@ -775,7 +807,7 @@ export default function Home({ onOpenMediaModal }: { onOpenMediaModal: () => voi
                               "w-10 h-10 rounded-xl text-sm font-medium transition-colors",
                               currentPage === page 
                                 ? "bg-emerald-500 text-white" 
-                                : "bg-zinc-900 border border-zinc-800 text-zinc-400 hover:bg-zinc-800"
+                                : "bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 text-zinc-500 dark:text-zinc-400 hover:bg-zinc-200 dark:hover:bg-zinc-800"
                             )}
                           >
                             {page}
@@ -797,7 +829,7 @@ export default function Home({ onOpenMediaModal }: { onOpenMediaModal: () => voi
                       window.scrollTo({ top: 0, behavior: 'smooth' });
                     }}
                     disabled={currentPage === totalPages}
-                    className="px-4 py-2 rounded-xl bg-zinc-900 border border-zinc-800 text-sm font-medium hover:bg-zinc-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                    className="px-4 py-2 rounded-xl bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 text-sm font-medium hover:bg-zinc-200 dark:hover:bg-zinc-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                   >
                     Next
                   </button>
@@ -812,7 +844,7 @@ export default function Home({ onOpenMediaModal }: { onOpenMediaModal: () => voi
       </main>
 
       {/* Footer */}
-      <footer className="border-t border-zinc-800 py-8 text-center text-zinc-500">
+      <footer className="border-t border-zinc-200 dark:border-zinc-800 py-8 text-center text-zinc-500">
         <p>Need help or want to renew membership?</p>
         <a href="https://wa.me/923363284466" target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 text-emerald-500 hover:text-emerald-400 mt-2 font-medium">
           <MessageCircle className="w-4 h-4" /> WhatsApp: 03363284466
@@ -830,14 +862,14 @@ export default function Home({ onOpenMediaModal }: { onOpenMediaModal: () => voi
 
       {showWhatsappPrompt && (
         <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
-          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 max-w-md w-full relative">
+          <div className="bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-6 max-w-md w-full relative">
             <div className="flex justify-center mb-4">
               <div className="w-16 h-16 bg-emerald-500/20 rounded-full flex items-center justify-center">
                 <MessageCircle className="w-8 h-8 text-emerald-500" />
               </div>
             </div>
             <h3 className="text-xl font-bold mb-2 text-center">Add WhatsApp Number</h3>
-            <p className="text-zinc-400 mb-6 text-center text-sm">
+            <p className="text-zinc-500 dark:text-zinc-400 mb-6 text-center text-sm">
               Please provide your WhatsApp number so we can contact you regarding your membership and updates.
             </p>
             <div className="space-y-4">
@@ -846,13 +878,13 @@ export default function Home({ onOpenMediaModal }: { onOpenMediaModal: () => voi
                 placeholder="e.g. +923001234567"
                 value={whatsappNumber}
                 onChange={(e) => setWhatsappNumber(e.target.value)}
-                className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-3 focus:outline-none focus:border-emerald-500"
+                className="w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-3 focus:outline-none focus:border-emerald-500 text-zinc-900 dark:text-white placeholder-zinc-500 dark:placeholder-zinc-400 transition-colors duration-300"
               />
               <div className="flex flex-col gap-2">
                 <div className="flex gap-3">
                   <button
                     onClick={handleDismissWhatsapp}
-                    className="flex-1 bg-zinc-800 hover:bg-zinc-700 text-white font-bold py-3 px-4 rounded-xl transition-colors"
+                    className="flex-1 bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-300 dark:hover:bg-zinc-700 text-zinc-900 dark:text-white font-bold py-3 px-4 rounded-xl transition-colors"
                   >
                     Cancel
                   </button>
@@ -866,7 +898,7 @@ export default function Home({ onOpenMediaModal }: { onOpenMediaModal: () => voi
                 </div>
                 <button
                   onClick={handleNeverShowAgain}
-                  className="text-[10px] text-zinc-500 hover:text-zinc-400 transition-colors"
+                  className="text-[10px] text-zinc-500 hover:text-zinc-500 dark:text-zinc-400 transition-colors"
                 >
                   Don't show again
                 </button>

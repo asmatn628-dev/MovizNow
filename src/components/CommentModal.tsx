@@ -46,7 +46,7 @@ export default function CommentModal({ isOpen, onClose, onSave, initialComment }
               <button onClick={onClose} className="px-4 py-2 text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white text-sm transition-colors">Cancel</button>
               <button 
                 onClick={() => { onSave(comment); onClose(); }}
-                className="px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm font-bold hover:bg-emerald-700 transition-colors shadow-lg shadow-emerald-500/20"
+                className="px-4 py-2 bg-emerald-600 text-zinc-900 dark:text-white rounded-lg text-sm font-bold hover:bg-emerald-700 transition-colors shadow-lg shadow-emerald-500/20"
               >
                 Save Comment
               </button>

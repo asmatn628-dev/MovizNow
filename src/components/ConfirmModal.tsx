@@ -29,7 +29,7 @@ export default function ConfirmModal({
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="absolute inset-0 bg-black/80 backdrop-blur-sm"
+            className="absolute inset-0 bg-black/80 backdrop-blur-md"
             onClick={onCancel}
           />
           <motion.div 
@@ -47,7 +47,7 @@ export default function ConfirmModal({
                   </div>
                   <h2 className="text-xl font-bold text-zinc-900 dark:text-white transition-colors duration-300">{title}</h2>
                 </div>
-                <button onClick={onCancel} className="text-zinc-500 hover:text-zinc-900 dark:hover:text-white transition-colors">
+                <button onClick={onCancel} className="text-zinc-500 hover:text-zinc-900 dark:hover:text-white transition-all active:scale-95">
                   <X className="w-5 h-5" />
                 </button>
               </div>
@@ -55,7 +55,7 @@ export default function ConfirmModal({
               <div className="flex justify-end gap-3">
                 <button
                   onClick={onCancel}
-                  className="px-4 py-2 rounded-xl font-medium text-zinc-600 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
+                  className="px-4 py-2 rounded-xl font-medium text-zinc-600 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-all active:scale-95 border border-transparent hover:border-zinc-200 dark:hover:border-zinc-700"
                 >
                   {cancelText}
                 </button>
@@ -64,7 +64,7 @@ export default function ConfirmModal({
                     onConfirm();
                     onCancel();
                   }}
-                  className="px-4 py-2 rounded-xl font-medium bg-red-500 hover:bg-red-600 text-white transition-colors"
+                  className="px-4 py-2 rounded-xl font-medium bg-red-500 hover:bg-red-600 text-white transition-all active:scale-95 border border-white/20 shadow-lg"
                 >
                   {confirmText}
                 </button>

@@ -152,7 +152,7 @@ service cloud.firestore {
     }
 
     match /reported_links/{reportId} {
-      allow read: if isAdminOrEditor();
+      allow read: if isAdminOrEditor() || (isAuthenticated() && resource.data.userId == request.auth.uid);
       allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid && isValidReport(request.resource.data);
       allow update, delete: if isAdminOrEditor();
     }

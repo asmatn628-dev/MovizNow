@@ -7,11 +7,14 @@ import { format } from 'date-fns';
 import { clsx } from 'clsx';
 import { motion, AnimatePresence } from 'framer-motion';
 
-let cachedOrders: Order[] | null = null;
+const CACHE_KEY = 'admin_orders_cache';
 
 export default function OrdersManagement() {
-  const [orders, setOrders] = useState<Order[]>(cachedOrders || []);
-  const [loading, setLoading] = useState(!cachedOrders);
+  const [orders, setOrders] = useState<Order[]>(() => {
+    const cached = localStorage.getItem(CACHE_KEY);
+    return cached ? JSON.parse(cached) : [];
+  });
+  const [loading, setLoading] = useState(orders.length === 0);
   const [filter, setFilter] = useState<string>('all');
   const [search, setSearch] = useState('');
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
@@ -19,14 +22,38 @@ export default function OrdersManagement() {
 
   useEffect(() => {
     const q = query(collection(db, 'orders'), orderBy('createdAt', 'desc'));
-    const unsubscribe = onSnapshot(q, (snapshot) => {
+    const unsubscribe = onSnapshot(q, async (snapshot) => {
       const ordersData = snapshot.docs.map(doc => ({
         id: doc.id,
         ...doc.data()
       })) as Order[];
-      cachedOrders = ordersData;
+      
+      localStorage.setItem(CACHE_KEY, JSON.stringify(ordersData));
       setOrders(ordersData);
       setLoading(false);
+
+      // Auto-delete pending orders older than 7 days
+      const now = new Date();
+      const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+      
+      const oldPendingOrders = ordersData.filter(order => {
+        if (order.status !== 'pending') return false;
+        const createdAt = (order.createdAt as any)?.seconds 
+          ? new Date((order.createdAt as any).seconds * 1000) 
+          : new Date(order.createdAt);
+        return createdAt < sevenDaysAgo;
+      });
+
+      if (oldPendingOrders.length > 0) {
+        console.log(`Auto-deleting ${oldPendingOrders.length} old pending orders`);
+        for (const order of oldPendingOrders) {
+          try {
+            await deleteDoc(doc(db, 'orders', order.id));
+          } catch (err) {
+            console.error(`Failed to auto-delete order ${order.id}:`, err);
+          }
+        }
+      }
     });
 
     return () => unsubscribe();
@@ -147,7 +174,7 @@ export default function OrdersManagement() {
       className="space-y-6"
     >
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-        <h1 className="text-2xl font-bold text-white">Orders Management</h1>
+        <h1 className="text-2xl font-bold text-zinc-900 dark:text-white">Orders Management</h1>
         
         <div className="flex flex-col sm:flex-row gap-4 w-full sm:w-auto">
           <div className="relative">
@@ -157,7 +184,7 @@ export default function OrdersManagement() {
               placeholder="Search orders..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="w-full sm:w-64 bg-zinc-900 border border-zinc-800 rounded-xl pl-9 pr-4 py-2 text-sm focus:outline-none focus:border-emerald-500 text-white"
+              className="w-full sm:w-64 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl pl-9 pr-4 py-2 text-sm focus:outline-none focus:border-emerald-500 text-zinc-900 dark:text-white"
             />
           </div>
           
@@ -166,7 +193,7 @@ export default function OrdersManagement() {
             <select
               value={filter}
               onChange={(e) => setFilter(e.target.value)}
-              className="bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-2 text-sm focus:outline-none focus:border-emerald-500 text-white"
+              className="bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-2 text-sm focus:outline-none focus:border-emerald-500 text-zinc-900 dark:text-white"
             >
               <option value="all">All Roles</option>
               <option value="user">User</option>
@@ -177,10 +204,10 @@ export default function OrdersManagement() {
         </div>
       </div>
 
-      <div className="bg-zinc-900 border border-zinc-800 rounded-2xl overflow-hidden">
+      <div className="bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-sm text-zinc-400">
-            <thead className="bg-zinc-950/50 text-xs uppercase font-semibold text-zinc-300">
+          <table className="w-full text-left text-sm text-zinc-500 dark:text-zinc-400">
+            <thead className="bg-white/50 dark:bg-zinc-950/50 text-xs uppercase font-semibold text-zinc-600 dark:text-zinc-300">
               <tr>
                 <th className="px-6 py-4 whitespace-nowrap">Order ID & Date</th>
                 <th className="px-6 py-4 whitespace-nowrap">User</th>
@@ -201,16 +228,16 @@ export default function OrdersManagement() {
                   <tr 
                     key={order.id} 
                     onClick={() => setSelectedOrder(order)}
-                    className="hover:bg-zinc-800/50 transition-colors cursor-pointer"
+                    className="hover:bg-zinc-200 dark:hover:bg-zinc-800/50 transition-colors cursor-pointer"
                   >
                     <td className="px-6 py-4">
-                      <div className="font-mono text-xs text-zinc-300 mb-1">{order.id}</div>
+                      <div className="font-mono text-xs text-zinc-600 dark:text-zinc-300 mb-1">{order.id}</div>
                       <div className="text-xs text-zinc-500">
                         {order.createdAt ? format(new Date((order.createdAt as any).seconds ? (order.createdAt as any).seconds * 1000 : order.createdAt), 'MMM dd, yyyy HH:mm') : 'N/A'}
                       </div>
                     </td>
                     <td className="px-6 py-4">
-                      <div className="font-medium text-white">{order.userName}</div>
+                      <div className="font-medium text-zinc-900 dark:text-white">{order.userName}</div>
                       <div className="text-xs text-zinc-500">{order.userEmail}</div>
                       <div className="text-[10px] uppercase tracking-wider mt-1 text-emerald-500">{order.userRole}</div>
                     </td>
@@ -234,7 +261,7 @@ export default function OrdersManagement() {
                     </td>
                     <td className="px-6 py-4">
                       <div className="flex flex-col">
-                        <span className="text-zinc-300 text-xs font-medium">
+                        <span className="text-zinc-600 dark:text-zinc-300 text-xs font-medium">
                           {order.type === 'membership' ? `${order.months} Month(s)` : `${order.items?.length || 0} Items`}
                         </span>
                         <span className="text-emerald-500 font-bold text-sm">
@@ -290,20 +317,20 @@ export default function OrdersManagement() {
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.95 }}
-              className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 w-full max-w-lg shadow-2xl overflow-y-auto max-h-[90vh]"
+              className="bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-6 w-full max-w-lg shadow-2xl overflow-y-auto max-h-[90vh]"
             >
               <div className="flex justify-between items-center mb-6">
                 <h2 className="text-xl font-bold">Order Details</h2>
                 <button
                   onClick={() => setSelectedOrder(null)}
-                  className="p-2 hover:bg-zinc-800 rounded-full transition-colors"
+                  className="p-2 hover:bg-zinc-200 dark:hover:bg-zinc-800 rounded-full transition-colors"
                 >
                   <X className="w-5 h-5" />
                 </button>
               </div>
 
               <div className="space-y-4">
-                <div className="grid grid-cols-2 gap-4 bg-zinc-950/50 p-4 rounded-xl border border-zinc-800/50">
+                <div className="grid grid-cols-2 gap-4 bg-white/50 dark:bg-zinc-950/50 p-4 rounded-xl border border-zinc-200 dark:border-zinc-800/50">
                   <div>
                     <p className="text-xs text-zinc-500 mb-1">Order ID</p>
                     <p className="font-mono text-sm">{selectedOrder.id}</p>
@@ -331,8 +358,8 @@ export default function OrdersManagement() {
                   </div>
                 </div>
 
-                <div className="bg-zinc-950/50 p-4 rounded-xl border border-zinc-800/50">
-                  <h3 className="text-sm font-semibold mb-3 text-zinc-300">User Information</h3>
+                <div className="bg-white/50 dark:bg-zinc-950/50 p-4 rounded-xl border border-zinc-200 dark:border-zinc-800/50">
+                  <h3 className="text-sm font-semibold mb-3 text-zinc-600 dark:text-zinc-300">User Information</h3>
                   <div className="space-y-2 text-sm">
                     <p><span className="text-zinc-500 inline-block w-20">Name:</span> {selectedOrder.userName}</p>
                     <p><span className="text-zinc-500 inline-block w-20">Email:</span> {selectedOrder.userEmail}</p>
@@ -341,8 +368,8 @@ export default function OrdersManagement() {
                   </div>
                 </div>
 
-                <div className="bg-zinc-950/50 p-4 rounded-xl border border-zinc-800/50">
-                  <h3 className="text-sm font-semibold mb-3 text-zinc-300">Order Contents</h3>
+                <div className="bg-white/50 dark:bg-zinc-950/50 p-4 rounded-xl border border-zinc-200 dark:border-zinc-800/50">
+                  <h3 className="text-sm font-semibold mb-3 text-zinc-600 dark:text-zinc-300">Order Contents</h3>
                   <p className="text-sm mb-2"><span className="text-zinc-500">Type:</span> <span className="capitalize">{selectedOrder.type}</span></p>
                   
                   {selectedOrder.type === 'membership' ? (
@@ -352,7 +379,7 @@ export default function OrdersManagement() {
                       <p className="text-xs text-zinc-500 mb-2">Items ({selectedOrder.items?.length || 0}):</p>
                       <ul className="space-y-2">
                         {selectedOrder.items?.map((item, idx) => (
-                          <li key={idx} className="text-sm bg-zinc-900 p-2 rounded-lg border border-zinc-800">
+                          <li key={idx} className="text-sm bg-zinc-50 dark:bg-zinc-900 p-2 rounded-lg border border-zinc-200 dark:border-zinc-800">
                             <div className="font-medium">{item.title}</div>
                             <div className="text-xs text-zinc-500 flex justify-between mt-1">
                               <span className="capitalize">{item.type}</span>
@@ -367,7 +394,7 @@ export default function OrdersManagement() {
               </div>
 
               {selectedOrder.status === 'pending' ? (
-                <div className="flex gap-3 mt-6 pt-6 border-t border-zinc-800">
+                <div className="flex gap-3 mt-6 pt-6 border-t border-zinc-200 dark:border-zinc-800">
                   <button
                     onClick={() => {
                       handleDecline(selectedOrder.id);
@@ -390,7 +417,7 @@ export default function OrdersManagement() {
                   </button>
                 </div>
               ) : (
-                <div className="mt-6 pt-6 border-t border-zinc-800">
+                <div className="mt-6 pt-6 border-t border-zinc-200 dark:border-zinc-800">
                   <button
                     onClick={() => {
                       handleDelete(selectedOrder.id);

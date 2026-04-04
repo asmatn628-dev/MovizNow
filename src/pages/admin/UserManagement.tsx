@@ -660,6 +660,7 @@ export default function UserManagement() {
       const updateData: any = {
         role: newUserForm.role,
         managedBy: profile?.uid,
+        isUserManager: newUserForm.role === 'user_manager' || newUserForm.role === 'manager'
       };
       if (newUserForm.expiryDate) {
         updateData.expiryDate = new Date(newUserForm.expiryDate).toISOString();
@@ -723,7 +724,7 @@ export default function UserManagement() {
                 searchParams.delete('managedBy');
                 navigate(`${location.pathname}?${searchParams.toString()}`);
               }}
-              className="px-3 py-1 bg-zinc-800 hover:bg-zinc-700 text-sm rounded-lg transition-colors"
+              className="px-3 py-1 bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-300 dark:hover:bg-zinc-700 text-sm rounded-lg transition-colors"
             >
               Clear Manager Filter
             </button>
@@ -748,14 +749,14 @@ export default function UserManagement() {
             placeholder="Search users by name, email, or phone..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full bg-zinc-900 border border-zinc-800 rounded-xl pl-10 pr-4 py-3 focus:outline-none focus:border-emerald-500"
+            className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl pl-10 pr-4 py-3 focus:outline-none focus:border-emerald-500"
           />
         </div>
         
         <div className="flex gap-4 overflow-x-auto pb-2 md:pb-0">
           {selectedUsers.length > 0 && (
-            <div className="flex items-center gap-2 bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-2">
-              <span className="text-sm text-zinc-400">{selectedUsers.length} selected</span>
+            <div className="flex items-center gap-2 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-2">
+              <span className="text-sm text-zinc-500 dark:text-zinc-400">{selectedUsers.length} selected</span>
               <select
                 onChange={(e) => {
                   if (e.target.value) {
@@ -778,7 +779,7 @@ export default function UserManagement() {
           <select
             value={filterRole}
             onChange={(e) => setFilterRole(e.target.value as any)}
-            className="bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 focus:outline-none focus:border-emerald-500 min-w-[140px]"
+            className="bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-3 focus:outline-none focus:border-emerald-500 min-w-[140px]"
           >
                 <option value="all">All Roles</option>
             <option value="user">User</option>
@@ -799,7 +800,7 @@ export default function UserManagement() {
           <select
             value={filterStatus}
             onChange={(e) => setFilterStatus(e.target.value as any)}
-            className="bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 focus:outline-none focus:border-emerald-500 min-w-[140px]"
+            className="bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-3 focus:outline-none focus:border-emerald-500 min-w-[140px]"
           >
             <option value="all">All Statuses</option>
             <option value="active">Active</option>
@@ -814,31 +815,31 @@ export default function UserManagement() {
           <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-emerald-500"></div>
         </div>
       ) : (
-        <div className="bg-zinc-900 border border-zinc-800 rounded-2xl overflow-hidden">
+        <div className="bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full text-left text-sm">
-              <thead className="bg-zinc-950/50 text-zinc-400 uppercase font-semibold">
+              <thead className="bg-white/50 dark:bg-zinc-950/50 text-zinc-500 dark:text-zinc-400 uppercase font-semibold">
                 <tr>
                   <th className="px-4 py-4 w-12 whitespace-nowrap">
                     <input 
                       type="checkbox" 
                       checked={selectedUsers.length === filteredAndSortedUsers.length && filteredAndSortedUsers.length > 0}
                       onChange={handleSelectAll}
-                      className="w-4 h-4 rounded border-zinc-700 bg-zinc-900 text-emerald-500 focus:ring-emerald-500 focus:ring-offset-zinc-950"
+                      className="w-4 h-4 rounded border-zinc-300 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-900 text-emerald-500 focus:ring-emerald-500 focus:ring-offset-zinc-950"
                     />
                   </th>
-                  <th className="px-4 md:px-6 py-4 cursor-pointer hover:text-white transition-colors whitespace-nowrap" onClick={() => toggleSort('displayName')}>
+                  <th className="px-4 md:px-6 py-4 cursor-pointer hover:text-zinc-900 dark:text-white transition-colors whitespace-nowrap" onClick={() => toggleSort('displayName')}>
                   User Info <SortIcon field="displayName" />
                 </th>
                 <th className="px-4 md:px-6 py-4 whitespace-nowrap">Role</th>
-                <th className="px-4 md:px-6 py-4 cursor-pointer hover:text-white transition-colors whitespace-nowrap" onClick={() => toggleSort('expiryDate')}>
+                <th className="px-4 md:px-6 py-4 cursor-pointer hover:text-zinc-900 dark:text-white transition-colors whitespace-nowrap" onClick={() => toggleSort('expiryDate')}>
                   Expiry Date <SortIcon field="expiryDate" />
                 </th>
                 <th className="px-4 md:px-6 py-4 whitespace-nowrap">Last Active</th>
                 {(profile?.role === 'admin' || profile?.role === 'owner') && (
                   <th className="px-4 md:px-6 py-4 whitespace-nowrap">Managed By</th>
                 )}
-                <th className="px-4 md:px-6 py-4 cursor-pointer hover:text-white transition-colors whitespace-nowrap" onClick={() => toggleSort('createdAt')}>
+                <th className="px-4 md:px-6 py-4 cursor-pointer hover:text-zinc-900 dark:text-white transition-colors whitespace-nowrap" onClick={() => toggleSort('createdAt')}>
                   Joined <SortIcon field="createdAt" />
                 </th>
                 <th className="px-4 md:px-6 py-4 text-right whitespace-nowrap">Actions</th>
@@ -846,7 +847,7 @@ export default function UserManagement() {
             </thead>
             <tbody className="divide-y divide-zinc-800">
               {filteredAndSortedUsers.map((user) => (
-                <tr key={user.uid} onClick={(e) => handleRowClick(user, e)} className="hover:bg-zinc-800/50 transition-colors cursor-pointer">
+                <tr key={user.uid} onClick={(e) => handleRowClick(user, e)} className="hover:bg-zinc-200 dark:hover:bg-zinc-800/50 transition-colors cursor-pointer">
                   <td className="px-4 py-4" onClick={(e) => e.stopPropagation()}>
                     {user.role !== 'owner' && (
                       <input 
@@ -856,7 +857,7 @@ export default function UserManagement() {
                           e.stopPropagation();
                           handleSelectUser(user.uid, e as any);
                         }}
-                        className="w-4 h-4 rounded border-zinc-700 bg-zinc-900 text-emerald-500 focus:ring-emerald-500 focus:ring-offset-zinc-950"
+                        className="w-4 h-4 rounded border-zinc-300 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-900 text-emerald-500 focus:ring-emerald-500 focus:ring-offset-zinc-950"
                       />
                     )}
                   </td>
@@ -865,15 +866,15 @@ export default function UserManagement() {
                       {user.photoURL && user.photoURL.trim() !== "" ? (
                         <img src={user.photoURL} alt={user.displayName || 'User'} className="w-10 h-10 rounded-full object-cover" referrerPolicy="no-referrer" />
                       ) : (
-                        <div className="w-10 h-10 rounded-full bg-zinc-800 flex items-center justify-center text-zinc-400 font-bold shrink-0">
+                        <div className="w-10 h-10 rounded-full bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center text-zinc-500 dark:text-zinc-400 font-bold shrink-0">
                           {(user.displayName || user.email || '?').charAt(0).toUpperCase()}
                         </div>
                       )}
                       <div>
-                        <div className="font-medium text-white flex items-center gap-2">
+                        <div className="font-medium text-zinc-900 dark:text-white flex items-center gap-2">
                           {user.displayName || 'No Name'}
                         </div>
-                        <div className="text-zinc-400 text-xs mt-0.5">{user.email}</div>
+                        <div className="text-zinc-500 dark:text-zinc-400 text-xs mt-0.5">{user.email}</div>
                         <div className="text-zinc-500 text-xs mt-0.5 flex items-center gap-1">
                           <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"></path></svg>
                           {user.phone || 'No phone'}
@@ -911,23 +912,23 @@ export default function UserManagement() {
                     </div>
                   </td>
                   <td className="px-4 md:px-6 py-4">
-                    <span className="text-zinc-300">
+                    <span className="text-zinc-600 dark:text-zinc-300">
                       {user.role === 'owner' ? 'Lifetime' : user.expiryDate ? format(new Date(user.expiryDate), 'MMM dd, yyyy') : '-'}
                     </span>
                   </td>
                   <td className="px-4 md:px-6 py-4">
-                    <span className="text-zinc-400 text-xs">
+                    <span className="text-zinc-500 dark:text-zinc-400 text-xs">
                       {user.lastActive ? formatDistanceToNow(new Date(user.lastActive), { addSuffix: true }) : 'Never'}
                     </span>
                   </td>
                   {(profile?.role === 'admin' || profile?.role === 'owner') && (
                     <td className="px-4 md:px-6 py-4">
-                      <span className="text-zinc-400 text-sm">
+                      <span className="text-zinc-500 dark:text-zinc-400 text-sm">
                         {user.managedBy ? managers[user.managedBy] || 'Unknown Manager' : '-'}
                       </span>
                     </td>
                   )}
-                  <td className="px-4 md:px-6 py-4 whitespace-nowrap text-zinc-400">
+                  <td className="px-4 md:px-6 py-4 whitespace-nowrap text-zinc-500 dark:text-zinc-400">
                     {format(new Date(user.createdAt), 'MMM dd, yyyy')}
                   </td>
                   <td className="px-4 md:px-6 py-4 text-right">
@@ -949,7 +950,7 @@ export default function UserManagement() {
                               e.stopPropagation();
                               handleEdit(user);
                             }} 
-                            className="p-2 text-zinc-400 hover:text-white hover:bg-zinc-800 rounded-lg transition-colors"
+                            className="p-2 text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:text-white hover:bg-zinc-200 dark:hover:bg-zinc-800 rounded-lg transition-colors"
                           >
                             <Edit2 className="w-5 h-5" />
                           </button>
@@ -983,10 +984,10 @@ export default function UserManagement() {
 
       {selectedUser && (
         <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4">
-          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-md overflow-hidden flex flex-col max-h-[90vh]">
-            <div className="p-4 md:p-6 border-b border-zinc-800 flex justify-between items-center shrink-0">
+          <div className="bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl w-full max-w-md overflow-hidden flex flex-col max-h-[90vh]">
+            <div className="p-4 md:p-6 border-b border-zinc-200 dark:border-zinc-800 flex justify-between items-center shrink-0">
               <h2 className="text-xl font-bold">{isEditingOverlay ? 'Edit User' : 'User Details'}</h2>
-              <button onClick={() => { setSelectedUser(null); setIsEditingOverlay(false); }} className="text-zinc-400 hover:text-white transition-colors">
+              <button onClick={() => { setSelectedUser(null); setIsEditingOverlay(false); }} className="text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:text-white transition-colors">
                 <X className="w-6 h-6" />
               </button>
             </div>
@@ -995,30 +996,30 @@ export default function UserManagement() {
               {isEditingOverlay ? (
                 <div className="p-4 md:p-6 space-y-4">
                   <div>
-                    <label className="block text-sm font-medium text-zinc-400 mb-1">Name</label>
+                    <label className="block text-sm font-medium text-zinc-500 dark:text-zinc-400 mb-1">Name</label>
                     <input
                       type="text"
                       value={editForm.displayName || ''}
                       onChange={(e) => setEditForm({ ...editForm, displayName: e.target.value })}
-                      className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-2 focus:outline-none focus:border-emerald-500"
+                      className="w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-2 focus:outline-none focus:border-emerald-500"
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-zinc-400 mb-1">Email</label>
+                    <label className="block text-sm font-medium text-zinc-500 dark:text-zinc-400 mb-1">Email</label>
                     <input
                       type="email"
                       value={editForm.email || ''}
                       onChange={(e) => setEditForm({ ...editForm, email: e.target.value })}
-                      className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-2 focus:outline-none focus:border-emerald-500"
+                      className="w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-2 focus:outline-none focus:border-emerald-500"
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-zinc-400 mb-1">Phone</label>
+                    <label className="block text-sm font-medium text-zinc-500 dark:text-zinc-400 mb-1">Phone</label>
                     <input
                       type="text"
                       value={editForm.phone || ''}
                       onChange={(e) => setEditForm({ ...editForm, phone: e.target.value })}
-                      className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-2 focus:outline-none focus:border-emerald-500"
+                      className="w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-2 focus:outline-none focus:border-emerald-500"
                     />
                   </div>
                   <div className="flex items-center gap-2">
@@ -1027,7 +1028,7 @@ export default function UserManagement() {
                       <select
                         value={editForm.role}
                         onChange={(e) => setEditForm({ ...editForm, role: e.target.value as Role })}
-                        className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-emerald-500"
+                        className="w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-emerald-500"
                       >
                         <option value="user">User</option>
                         <option value="trial">Trial</option>
@@ -1048,7 +1049,7 @@ export default function UserManagement() {
                       <select
                         value={editForm.status}
                         onChange={(e) => setEditForm({ ...editForm, status: e.target.value as Status })}
-                        className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-emerald-500"
+                        className="w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-emerald-500"
                       >
                         <option value="active">Active</option>
                         <option value="pending">Pending</option>
@@ -1064,7 +1065,7 @@ export default function UserManagement() {
                         type="date"
                         value={editForm.expiryDate || ''}
                         onChange={(e) => setEditForm({ ...editForm, expiryDate: e.target.value })}
-                        className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-emerald-500"
+                        className="w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-emerald-500"
                       />
                     </div>
                   </div>
@@ -1075,19 +1076,19 @@ export default function UserManagement() {
                     {selectedUser.photoURL && selectedUser.photoURL.trim() !== "" ? (
                       <img src={selectedUser.photoURL} alt={selectedUser.displayName || 'User'} className="w-16 h-16 rounded-full object-cover" referrerPolicy="no-referrer" />
                     ) : (
-                      <div className="w-16 h-16 bg-zinc-800 rounded-full flex items-center justify-center text-2xl font-bold text-emerald-500 shrink-0">
+                      <div className="w-16 h-16 bg-zinc-100 dark:bg-zinc-800 rounded-full flex items-center justify-center text-2xl font-bold text-emerald-500 shrink-0">
                         {selectedUser.displayName ? selectedUser.displayName.charAt(0).toUpperCase() : '?'}
                       </div>
                     )}
                     <div>
-                      <h3 className="text-lg font-bold text-white">{selectedUser.displayName || 'No Name'}</h3>
-                      <p className="text-zinc-400 text-sm">{selectedUser.email}</p>
-                      <p className="text-zinc-400 text-sm">{selectedUser.phone || 'No Phone'}</p>
+                      <h3 className="text-lg font-bold text-zinc-900 dark:text-white">{selectedUser.displayName || 'No Name'}</h3>
+                      <p className="text-zinc-500 dark:text-zinc-400 text-sm">{selectedUser.email}</p>
+                      <p className="text-zinc-500 dark:text-zinc-400 text-sm">{selectedUser.phone || 'No Phone'}</p>
                     </div>
                   </div>
 
                   <div className="grid grid-cols-1 gap-3">
-                    <div className="bg-zinc-950 p-3 rounded-xl border border-zinc-800 flex justify-between items-center">
+                    <div className="bg-white dark:bg-zinc-950 p-3 rounded-xl border border-zinc-200 dark:border-zinc-800 flex justify-between items-center">
                       <div>
                         <div className="text-zinc-500 text-[10px] uppercase font-bold mb-0.5">Role</div>
                         <div className="font-bold text-emerald-400 text-sm">
@@ -1100,23 +1101,23 @@ export default function UserManagement() {
                       </div>
                       <div className="text-right">
                         <div className="text-zinc-500 text-[10px] uppercase font-bold mb-0.5">Status</div>
-                        <div className="capitalize font-bold text-white text-sm">{selectedUser.status}</div>
+                        <div className="capitalize font-bold text-zinc-900 dark:text-white text-sm">{selectedUser.status}</div>
                       </div>
                     </div>
                     
-                    <div className="bg-zinc-950 p-3 rounded-xl border border-zinc-800 flex justify-between items-center">
+                    <div className="bg-white dark:bg-zinc-950 p-3 rounded-xl border border-zinc-200 dark:border-zinc-800 flex justify-between items-center">
                       <div>
                         <div className="text-zinc-500 text-[10px] uppercase font-bold mb-0.5">Joined</div>
-                        <div className="font-bold text-white text-sm">{format(new Date(selectedUser.createdAt), 'MMM dd, yyyy')}</div>
+                        <div className="font-bold text-zinc-900 dark:text-white text-sm">{format(new Date(selectedUser.createdAt), 'MMM dd, yyyy')}</div>
                       </div>
                       <div className="text-right">
                         <div className="text-zinc-500 text-[10px] uppercase font-bold mb-0.5">Expiry Date</div>
-                        <div className="font-bold text-white text-sm">{selectedUser.role === 'owner' ? 'Lifetime' : selectedUser.expiryDate ? format(new Date(selectedUser.expiryDate), 'MMM dd, yyyy') : 'N/A'}</div>
+                        <div className="font-bold text-zinc-900 dark:text-white text-sm">{selectedUser.role === 'owner' ? 'Lifetime' : selectedUser.expiryDate ? format(new Date(selectedUser.expiryDate), 'MMM dd, yyyy') : 'N/A'}</div>
                       </div>
                     </div>
 
                     {selectedUser.permissions && selectedUser.permissions.length > 0 && (
-                      <div className="bg-zinc-950 p-3 rounded-xl border border-zinc-800">
+                      <div className="bg-white dark:bg-zinc-950 p-3 rounded-xl border border-zinc-200 dark:border-zinc-800">
                         <div className="text-zinc-500 text-[10px] uppercase font-bold mb-1">Management Access</div>
                         <div className="flex flex-wrap gap-1.5">
                           {selectedUser.permissions.map(perm => (
@@ -1130,7 +1131,7 @@ export default function UserManagement() {
                   </div>
 
                   {(selectedUser.role === 'selected_content' || selectedUser.role === 'temporary') && (
-                    <div className="border-t border-zinc-800 pt-6">
+                    <div className="border-t border-zinc-200 dark:border-zinc-800 pt-6">
                       <div className="flex items-center justify-between mb-4">
                         <h4 className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Assigned Content</h4>
                         <button 
@@ -1146,8 +1147,8 @@ export default function UserManagement() {
                         {selectedUser.assignedContent?.map(id => {
                           const content = allContent.find(c => c.id === id);
                           return (
-                            <div key={id} className="flex items-center gap-2 bg-zinc-800 px-2 py-1 rounded-lg border border-zinc-700">
-                              <span className="text-[10px] text-zinc-300">{content?.title || id}</span>
+                            <div key={id} className="flex items-center gap-2 bg-zinc-100 dark:bg-zinc-800 px-2 py-1 rounded-lg border border-zinc-300 dark:border-zinc-700">
+                              <span className="text-[10px] text-zinc-600 dark:text-zinc-300">{content?.title || id}</span>
                               <button 
                                 onClick={async () => {
                                   const nextAssigned = (selectedUser.assignedContent || []).filter(cid => cid !== id);
@@ -1175,14 +1176,14 @@ export default function UserManagement() {
 
                   {profile?.role !== 'user_manager' && (
                     <>
-                      <div className="border-t border-zinc-800 pt-6">
+                      <div className="border-t border-zinc-200 dark:border-zinc-800 pt-6">
                         <h4 className="text-xs font-bold text-zinc-500 uppercase tracking-wider mb-4">Movie Requests</h4>
                         <div className="space-y-2">
                           {userRequests.length === 0 ? (
                             <p className="text-xs text-zinc-500 italic">No requests submitted yet.</p>
                           ) : (
                             userRequests.map(req => (
-                              <div key={req.id} className="bg-zinc-950 p-3 rounded-xl border border-zinc-800 flex items-center justify-between">
+                              <div key={req.id} className="bg-white dark:bg-zinc-950 p-3 rounded-xl border border-zinc-200 dark:border-zinc-800 flex items-center justify-between">
                                 <div className="flex items-center gap-3">
                                   <div className={clsx(
                                     "w-8 h-8 rounded-lg flex items-center justify-center shrink-0",
@@ -1238,7 +1239,7 @@ export default function UserManagement() {
                         </div>
                       </div>
 
-                      <div className="border-t border-zinc-800 pt-6">
+                      <div className="border-t border-zinc-200 dark:border-zinc-800 pt-6">
                         <div className="flex items-center justify-between mb-4">
                           <h4 className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Activity Overview</h4>
                           {isAnalyticsLoading && (
@@ -1249,29 +1250,29 @@ export default function UserManagement() {
                           )}
                         </div>
                         <div className="space-y-2">
-                          <div className="flex items-center justify-between bg-zinc-950 p-3 rounded-xl border border-zinc-800">
-                            <div className="flex items-center gap-3 text-zinc-300">
+                          <div className="flex items-center justify-between bg-white dark:bg-zinc-950 p-3 rounded-xl border border-zinc-200 dark:border-zinc-800">
+                            <div className="flex items-center gap-3 text-zinc-600 dark:text-zinc-300">
                               <Calendar className="w-4 h-4 text-emerald-500" />
                               <span className="text-xs font-medium">Last Active</span>
                             </div>
-                            <span className="font-bold text-white text-xs">
+                            <span className="font-bold text-zinc-900 dark:text-white text-xs">
                               {selectedUser.lastActive ? format(new Date(selectedUser.lastActive), 'MMM dd, HH:mm') : 'Never'}
                             </span>
                           </div>
-                          <div className="flex items-center justify-between bg-zinc-950 p-3 rounded-xl border border-zinc-800">
-                            <div className="flex items-center gap-3 text-zinc-300">
+                          <div className="flex items-center justify-between bg-white dark:bg-zinc-950 p-3 rounded-xl border border-zinc-200 dark:border-zinc-800">
+                            <div className="flex items-center gap-3 text-zinc-600 dark:text-zinc-300">
                               <Clock className="w-4 h-4 text-emerald-500" />
                               <span className="text-xs font-medium">Time in App</span>
                             </div>
-                            <span className="font-bold text-white text-xs">{selectedUser.timeSpent || 0} mins</span>
+                            <span className="font-bold text-zinc-900 dark:text-white text-xs">{selectedUser.timeSpent || 0} mins</span>
                           </div>
-                          <div className="bg-zinc-950 p-3 rounded-xl border border-zinc-800">
+                          <div className="bg-white dark:bg-zinc-950 p-3 rounded-xl border border-zinc-200 dark:border-zinc-800">
                             <div className="flex items-center justify-between mb-1">
-                              <div className="flex items-center gap-3 text-zinc-300">
+                              <div className="flex items-center gap-3 text-zinc-600 dark:text-zinc-300">
                                 <Film className="w-4 h-4 text-emerald-500" />
                                 <span className="text-xs font-medium">Movies Clicked</span>
                               </div>
-                              <span className="font-bold text-white text-xs">{userAnalytics.moviesClicked}</span>
+                              <span className="font-bold text-zinc-900 dark:text-white text-xs">{userAnalytics.moviesClicked}</span>
                             </div>
                             {userAnalytics.viewedMovies.length > 0 && (
                               <div className="text-[10px] text-zinc-500 mt-1 pl-7 line-clamp-2">
@@ -1279,13 +1280,13 @@ export default function UserManagement() {
                               </div>
                             )}
                           </div>
-                          <div className="bg-zinc-950 p-3 rounded-xl border border-zinc-800">
+                          <div className="bg-white dark:bg-zinc-950 p-3 rounded-xl border border-zinc-200 dark:border-zinc-800">
                             <div className="flex items-center justify-between mb-1">
-                              <div className="flex items-center gap-3 text-zinc-300">
+                              <div className="flex items-center gap-3 text-zinc-600 dark:text-zinc-300">
                                 <MousePointerClick className="w-4 h-4 text-emerald-500" />
                                 <span className="text-xs font-medium">Links Clicked</span>
                               </div>
-                              <span className="font-bold text-white text-xs">{userAnalytics.linksClicked}</span>
+                              <span className="font-bold text-zinc-900 dark:text-white text-xs">{userAnalytics.linksClicked}</span>
                             </div>
                             {userAnalytics.clickedLinks.length > 0 && (
                               <div className="text-[10px] text-zinc-500 mt-1 pl-7 line-clamp-2">
@@ -1293,22 +1294,22 @@ export default function UserManagement() {
                               </div>
                             )}
                           </div>
-                          <div className="bg-zinc-950 p-3 rounded-xl border border-zinc-800">
+                          <div className="bg-white dark:bg-zinc-950 p-3 rounded-xl border border-zinc-200 dark:border-zinc-800">
                             <div className="flex items-center justify-between mb-1">
-                              <div className="flex items-center gap-3 text-zinc-300">
+                              <div className="flex items-center gap-3 text-zinc-600 dark:text-zinc-300">
                                 <Heart className="w-4 h-4 text-emerald-500" />
                                 <span className="text-xs font-medium">Favorites</span>
                               </div>
-                              <span className="font-bold text-white text-xs">{(selectedUser.favorites || []).length}</span>
+                              <span className="font-bold text-zinc-900 dark:text-white text-xs">{(selectedUser.favorites || []).length}</span>
                             </div>
                           </div>
-                          <div className="bg-zinc-950 p-3 rounded-xl border border-zinc-800">
+                          <div className="bg-white dark:bg-zinc-950 p-3 rounded-xl border border-zinc-200 dark:border-zinc-800">
                             <div className="flex items-center justify-between mb-1">
-                              <div className="flex items-center gap-3 text-zinc-300">
+                              <div className="flex items-center gap-3 text-zinc-600 dark:text-zinc-300">
                                 <Bookmark className="w-4 h-4 text-emerald-500" />
                                 <span className="text-xs font-medium">Watch Later</span>
                               </div>
-                              <span className="font-bold text-white text-xs">{(selectedUser.watchLater || []).length}</span>
+                              <span className="font-bold text-zinc-900 dark:text-white text-xs">{(selectedUser.watchLater || []).length}</span>
                             </div>
                           </div>
                         </div>
@@ -1319,12 +1320,12 @@ export default function UserManagement() {
               )}
             </div>
 
-            <div className="p-4 md:p-6 border-t border-zinc-800 flex gap-4 shrink-0">
+            <div className="p-4 md:p-6 border-t border-zinc-200 dark:border-zinc-800 flex gap-4 shrink-0">
               {isEditingOverlay ? (
                 <>
                   <button
                     onClick={() => { setIsEditingOverlay(false); setSelectedUser(null); }}
-                    className="flex-1 bg-zinc-800 hover:bg-zinc-700 text-white py-3 rounded-xl font-bold transition-colors"
+                    className="flex-1 bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-300 dark:hover:bg-zinc-700 text-zinc-900 dark:text-white py-3 rounded-xl font-bold transition-colors"
                   >
                     Cancel
                   </button>
@@ -1353,7 +1354,7 @@ export default function UserManagement() {
                       onClick={() => {
                         handleEdit(selectedUser);
                       }}
-                      className="flex-1 bg-zinc-800 hover:bg-zinc-700 text-white py-3 rounded-xl font-bold transition-colors flex items-center justify-center gap-2"
+                      className="flex-1 bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-300 dark:hover:bg-zinc-700 text-zinc-900 dark:text-white py-3 rounded-xl font-bold transition-colors flex items-center justify-center gap-2"
                     >
                       <Edit2 className="w-5 h-5" />
                       Edit User
@@ -1369,11 +1370,11 @@ export default function UserManagement() {
       {/* Content Picker Modal */}
       {isContentPickerOpen && selectedUser && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 z-[60]">
-          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-2xl max-h-[80vh] flex flex-col">
-            <div className="p-6 border-b border-zinc-800 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl w-full max-w-2xl max-h-[80vh] flex flex-col">
+            <div className="p-6 border-b border-zinc-200 dark:border-zinc-800 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
               <div>
                 <h2 className="text-xl font-bold">Manage Access</h2>
-                <p className="text-zinc-400 text-sm">Select content for {selectedUser.displayName || selectedUser.email}</p>
+                <p className="text-zinc-500 dark:text-zinc-400 text-sm">Select content for {selectedUser.displayName || selectedUser.email}</p>
               </div>
               <div className="flex items-center gap-4">
                 <div className="relative w-full sm:w-48">
@@ -1383,10 +1384,10 @@ export default function UserManagement() {
                     placeholder="Search content..."
                     value={contentSearchTerm}
                     onChange={(e) => setContentSearchTerm(e.target.value)}
-                    className="w-full bg-zinc-950 border border-zinc-800 rounded-lg pl-9 pr-3 py-1.5 text-sm focus:outline-none focus:border-emerald-500"
+                    className="w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg pl-9 pr-3 py-1.5 text-sm focus:outline-none focus:border-emerald-500"
                   />
                 </div>
-                <button onClick={() => setIsContentPickerOpen(false)} className="text-zinc-400 hover:text-white p-2">
+                <button onClick={() => setIsContentPickerOpen(false)} className="text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:text-white p-2">
                   <X className="w-6 h-6" />
                 </button>
               </div>
@@ -1402,12 +1403,12 @@ export default function UserManagement() {
                     const isPartiallyAssigned = !isFullyAssigned && seasons.some((s: any) => assignedIds.has(`${content.id}:${s.id}`));
 
                     return (
-                      <div key={content.id} className="bg-zinc-950 border border-zinc-800 rounded-xl overflow-hidden">
+                      <div key={content.id} className="bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl overflow-hidden">
                         <label
                           className={`flex items-center gap-4 p-4 cursor-pointer transition-colors ${
                             isFullyAssigned
                               ? 'bg-emerald-500/10'
-                              : isPartiallyAssigned ? 'bg-emerald-500/5' : 'hover:bg-zinc-900'
+                              : isPartiallyAssigned ? 'bg-emerald-500/5' : 'hover:bg-zinc-100 dark:hover:bg-zinc-800'
                           }`}
                         >
                           <input 
@@ -1419,7 +1420,7 @@ export default function UserManagement() {
                           <div className={`w-6 h-6 rounded flex items-center justify-center border ${
                             isFullyAssigned ? 'bg-emerald-500 border-emerald-500' : isPartiallyAssigned ? 'border-emerald-500 bg-emerald-500/20' : 'border-zinc-600'
                           }`}>
-                            {isFullyAssigned && <Check className="w-4 h-4 text-white" />}
+                            {isFullyAssigned && <Check className="w-4 h-4 text-zinc-900 dark:text-white" />}
                             {!isFullyAssigned && isPartiallyAssigned && <div className="w-3 h-3 bg-emerald-500 rounded-sm" />}
                           </div>
                           <div className="flex-1 flex items-center justify-between">
@@ -1437,11 +1438,11 @@ export default function UserManagement() {
                         </label>
                         
                         {isSeries && seasons.length > 0 && (
-                          <div className="border-t border-zinc-800/50 bg-zinc-900/30 p-2 pl-14 space-y-1">
+                          <div className="border-t border-zinc-200 dark:border-zinc-800/50 bg-zinc-50 dark:bg-zinc-900/30 p-2 pl-14 space-y-1">
                             {seasons.map((season: any) => {
                               const isSeasonAssigned = isFullyAssigned || assignedIds.has(`${content.id}:${season.id}`);
                               return (
-                                <label key={season.id} className="flex items-center gap-3 p-2 rounded-lg cursor-pointer hover:bg-zinc-800/50">
+                                <label key={season.id} className="flex items-center gap-3 p-2 rounded-lg cursor-pointer hover:bg-zinc-200 dark:hover:bg-zinc-800/50">
                                   <input
                                     type="checkbox"
                                     className="hidden"
@@ -1451,9 +1452,9 @@ export default function UserManagement() {
                                   <div className={`w-5 h-5 rounded flex items-center justify-center border ${
                                     isSeasonAssigned ? 'bg-emerald-500 border-emerald-500' : 'border-zinc-600'
                                   }`}>
-                                    {isSeasonAssigned && <Check className="w-3 h-3 text-white" />}
+                                    {isSeasonAssigned && <Check className="w-3 h-3 text-zinc-900 dark:text-white" />}
                                   </div>
-                                  <span className="text-sm text-zinc-300">Season {season.seasonNumber}</span>
+                                  <span className="text-sm text-zinc-600 dark:text-zinc-300">Season {season.seasonNumber}</span>
                                 </label>
                               );
                             })}
@@ -1465,10 +1466,10 @@ export default function UserManagement() {
               </div>
             </div>
 
-            <div className="p-6 border-t border-zinc-800 flex justify-end gap-4">
+            <div className="p-6 border-t border-zinc-200 dark:border-zinc-800 flex justify-end gap-4">
               <button
                 onClick={() => setIsContentPickerOpen(false)}
-                className="px-6 py-2 rounded-xl font-medium text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors"
+                className="px-6 py-2 rounded-xl font-medium text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:text-white hover:bg-zinc-200 dark:hover:bg-zinc-800 transition-colors"
               >
                 Cancel
               </button>
@@ -1502,10 +1503,10 @@ export default function UserManagement() {
       {/* Add User Modal */}
       {isAddUserModalOpen && (
         <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4">
-          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-md overflow-hidden flex flex-col max-h-[90vh]">
-            <div className="p-4 md:p-6 border-b border-zinc-800 flex justify-between items-center shrink-0">
+          <div className="bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl w-full max-w-md overflow-hidden flex flex-col max-h-[90vh]">
+            <div className="p-4 md:p-6 border-b border-zinc-200 dark:border-zinc-800 flex justify-between items-center shrink-0">
               <h2 className="text-xl font-bold">{(profile?.role === 'user_manager' || profile?.role === 'manager' || profile?.role === 'owner') ? 'Search Pending User' : 'Add Pending User'}</h2>
-              <button onClick={() => { setIsAddUserModalOpen(false); setSearchedPendingUser(null); setSearchPendingQuery(''); setSearchPendingError(null); }} className="text-zinc-400 hover:text-white transition-colors">
+              <button onClick={() => { setIsAddUserModalOpen(false); setSearchedPendingUser(null); setSearchPendingQuery(''); setSearchPendingError(null); }} className="text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:text-white transition-colors">
                 <X className="w-6 h-6" />
               </button>
             </div>
@@ -1514,14 +1515,14 @@ export default function UserManagement() {
               {(profile?.role === 'user_manager' || profile?.role === 'manager' || profile?.role === 'owner') && !searchedPendingUser && (
                 <div className="space-y-4">
                   <div>
-                    <label className="block text-sm font-medium text-zinc-400 mb-1">Search by Email or WhatsApp</label>
+                    <label className="block text-sm font-medium text-zinc-500 dark:text-zinc-400 mb-1">Search by Email or WhatsApp</label>
                     <div className="flex gap-2">
                       <input
                         type="text"
                         value={searchPendingQuery}
                         onChange={(e) => setSearchPendingQuery(e.target.value)}
                         placeholder="user@example.com or +1234567890"
-                        className="flex-1 bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-2 focus:outline-none focus:border-emerald-500"
+                        className="flex-1 bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-2 focus:outline-none focus:border-emerald-500"
                         onKeyDown={(e) => e.key === 'Enter' && handleSearchPendingUser()}
                       />
                     </div>
@@ -1535,50 +1536,50 @@ export default function UserManagement() {
               {(!profile || (profile.role !== 'user_manager' && profile.role !== 'manager') || searchedPendingUser) && (
                 <>
                   {(profile?.role === 'user_manager' || profile?.role === 'manager' || profile?.role === 'owner') && searchedPendingUser && (
-                    <div className="bg-zinc-800/50 p-4 rounded-xl mb-4 flex items-center gap-4">
+                    <div className="bg-zinc-100 dark:bg-zinc-800/50 p-4 rounded-xl mb-4 flex items-center gap-4">
                       {searchedPendingUser.photoURL ? (
                         <img src={searchedPendingUser.photoURL} alt={searchedPendingUser.displayName} className="w-12 h-12 rounded-full object-cover" referrerPolicy="no-referrer" />
                       ) : (
-                        <div className="w-12 h-12 bg-zinc-900 rounded-full flex items-center justify-center text-xl font-bold text-emerald-500 shrink-0">
+                        <div className="w-12 h-12 bg-zinc-50 dark:bg-zinc-900 rounded-full flex items-center justify-center text-xl font-bold text-emerald-500 shrink-0">
                           {(searchedPendingUser.displayName || searchedPendingUser.email || '?').charAt(0).toUpperCase()}
                         </div>
                       )}
                       <div>
-                        <p className="text-sm text-zinc-400 mb-0.5 font-bold uppercase tracking-wider text-[10px]">Found Pending User:</p>
-                        <p className="font-bold text-white">{searchedPendingUser.displayName || 'No Name'}</p>
-                        <p className="text-xs text-zinc-400">{searchedPendingUser.email || searchedPendingUser.phone}</p>
+                        <p className="text-sm text-zinc-500 dark:text-zinc-400 mb-0.5 font-bold uppercase tracking-wider text-[10px]">Found Pending User:</p>
+                        <p className="font-bold text-zinc-900 dark:text-white">{searchedPendingUser.displayName || 'No Name'}</p>
+                        <p className="text-xs text-zinc-500 dark:text-zinc-400">{searchedPendingUser.email || searchedPendingUser.phone}</p>
                       </div>
                     </div>
                   )}
                   <div>
-                    <label className="block text-sm font-medium text-zinc-400 mb-1">Email</label>
+                    <label className="block text-sm font-medium text-zinc-500 dark:text-zinc-400 mb-1">Email</label>
                     <input
                       type="email"
                       value={newUserForm.email}
                       onChange={(e) => setNewUserForm({ ...newUserForm, email: e.target.value })}
                       placeholder="user@example.com"
                       disabled={!!searchedPendingUser}
-                      className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-2 focus:outline-none focus:border-emerald-500 disabled:opacity-50"
+                      className="w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-2 focus:outline-none focus:border-emerald-500 disabled:opacity-50"
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-zinc-400 mb-1">WhatsApp Number</label>
+                    <label className="block text-sm font-medium text-zinc-500 dark:text-zinc-400 mb-1">WhatsApp Number</label>
                     <input
                       type="text"
                       value={newUserForm.phone}
                       onChange={(e) => setNewUserForm({ ...newUserForm, phone: e.target.value })}
                       placeholder="+1234567890"
                       disabled={!!searchedPendingUser}
-                      className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-2 focus:outline-none focus:border-emerald-500 disabled:opacity-50"
+                      className="w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-2 focus:outline-none focus:border-emerald-500 disabled:opacity-50"
                     />
                   </div>
                   <div className="flex items-center gap-4">
                     <div className="flex-1">
-                      <label className="block text-sm font-medium text-zinc-400 mb-1">Role</label>
+                      <label className="block text-sm font-medium text-zinc-500 dark:text-zinc-400 mb-1">Role</label>
                       <select
                         value={newUserForm.role}
                         onChange={(e) => setNewUserForm({ ...newUserForm, role: e.target.value as Role })}
-                        className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-emerald-500"
+                        className="w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-emerald-500"
                       >
                         <option value="user">User</option>
                         <option value="trial">Trial</option>
@@ -1595,12 +1596,12 @@ export default function UserManagement() {
                       </select>
                     </div>
                     <div className="flex-1">
-                      <label className="block text-sm font-medium text-zinc-400 mb-1">Expiry Date</label>
+                      <label className="block text-sm font-medium text-zinc-500 dark:text-zinc-400 mb-1">Expiry Date</label>
                       <input
                         type="date"
                         value={newUserForm.expiryDate}
                         onChange={(e) => setNewUserForm({ ...newUserForm, expiryDate: e.target.value })}
-                        className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-emerald-500"
+                        className="w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-emerald-500"
                       />
                     </div>
                   </div>
@@ -1608,10 +1609,10 @@ export default function UserManagement() {
               )}
             </div>
 
-            <div className="p-4 md:p-6 border-t border-zinc-800 flex gap-4 shrink-0">
+            <div className="p-4 md:p-6 border-t border-zinc-200 dark:border-zinc-800 flex gap-4 shrink-0">
               <button
                 onClick={() => { setIsAddUserModalOpen(false); setSearchedPendingUser(null); setSearchPendingQuery(''); setSearchPendingError(null); }}
-                className="flex-1 bg-zinc-800 hover:bg-zinc-700 text-white py-3 rounded-xl font-bold transition-colors"
+                className="flex-1 bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-300 dark:hover:bg-zinc-700 text-zinc-900 dark:text-white py-3 rounded-xl font-bold transition-colors"
               >
                 Cancel
               </button>

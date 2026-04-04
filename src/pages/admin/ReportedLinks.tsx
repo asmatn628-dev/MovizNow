@@ -294,16 +294,16 @@ export default function ReportedLinks() {
           <AlertTriangle className="w-6 h-6 text-red-500" />
           Reported Links
         </h1>
-        <div className="bg-zinc-900 px-4 py-2 rounded-xl border border-zinc-800">
-          <span className="text-zinc-400">Total Reports: </span>
-          <span className="text-white font-bold">{reports.length}</span>
+        <div className="bg-zinc-50 dark:bg-zinc-900 px-4 py-2 rounded-xl border border-zinc-200 dark:border-zinc-800">
+          <span className="text-zinc-500 dark:text-zinc-400">Total Reports: </span>
+          <span className="text-zinc-900 dark:text-white font-bold">{reports.length}</span>
         </div>
       </div>
 
-      <div className="bg-zinc-900 rounded-2xl border border-zinc-800 overflow-hidden">
+      <div className="bg-zinc-50 dark:bg-zinc-900 rounded-2xl border border-zinc-200 dark:border-zinc-800 overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-left text-sm">
-            <thead className="bg-zinc-950/50 text-zinc-400">
+            <thead className="bg-white/50 dark:bg-zinc-950/50 text-zinc-500 dark:text-zinc-400">
               <tr>
                 <th className="px-6 py-4 font-medium whitespace-nowrap">User</th>
                 <th className="px-6 py-4 font-medium whitespace-nowrap">Content</th>
@@ -321,16 +321,16 @@ export default function ReportedLinks() {
                 </tr>
               ) : (
                 reports.map((report) => (
-                  <tr key={report.id} className="hover:bg-zinc-800/50 transition-colors">
+                  <tr key={report.id} className="hover:bg-zinc-200 dark:hover:bg-zinc-800/50 transition-colors">
                     <td className="px-6 py-4">
-                      <div className="font-medium text-white">{report.userName}</div>
+                      <div className="font-medium text-zinc-900 dark:text-white">{report.userName}</div>
                     </td>
                     <td className="px-6 py-4">
-                      <div className="font-medium text-white">{report.contentTitle}</div>
+                      <div className="font-medium text-zinc-900 dark:text-white">{report.contentTitle}</div>
                       <div className="text-xs text-zinc-500 capitalize">{report.contentType}</div>
                     </td>
                     <td className="px-6 py-4">
-                      <div className="font-medium text-zinc-300">{report.linkName}</div>
+                      <div className="font-medium text-zinc-600 dark:text-zinc-300">{report.linkName}</div>
                       <div className="text-xs text-zinc-500 truncate max-w-[200px]" title={report.linkUrl}>
                         {report.linkUrl}
                       </div>
@@ -354,7 +354,7 @@ export default function ReportedLinks() {
                           className={`p-2 rounded-lg transition-colors ${
                             notified === report.id 
                               ? 'text-emerald-500 bg-emerald-500/10' 
-                              : 'text-zinc-400 hover:text-blue-500 hover:bg-blue-500/10'
+                              : 'text-zinc-500 dark:text-zinc-400 hover:text-blue-500 hover:bg-blue-500/10'
                           }`}
                           title="Notify User"
                         >
@@ -368,14 +368,14 @@ export default function ReportedLinks() {
                         </button>
                         <button
                           onClick={() => handleEditClick(report)}
-                          className="p-2 text-zinc-400 hover:text-emerald-500 hover:bg-emerald-500/10 rounded-lg transition-colors"
+                          className="p-2 text-zinc-500 dark:text-zinc-400 hover:text-emerald-500 hover:bg-emerald-500/10 rounded-lg transition-colors"
                           title="Edit Link"
                         >
                           <Edit2 className="w-4 h-4" />
                         </button>
                         <button
                           onClick={() => handleDelete(report.id)}
-                          className="p-2 text-zinc-400 hover:text-red-500 hover:bg-red-500/10 rounded-lg transition-colors"
+                          className="p-2 text-zinc-500 dark:text-zinc-400 hover:text-red-500 hover:bg-red-500/10 rounded-lg transition-colors"
                           title="Delete Report"
                         >
                           <Trash2 className="w-4 h-4" />
@@ -392,12 +392,12 @@ export default function ReportedLinks() {
 
       {editingReport && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-zinc-900 rounded-2xl p-6 max-w-lg w-full border border-zinc-800 shadow-2xl">
+          <div className="bg-zinc-50 dark:bg-zinc-900 rounded-2xl p-6 max-w-lg w-full border border-zinc-200 dark:border-zinc-800 shadow-2xl">
             <div className="flex justify-between items-center mb-6">
-              <h3 className="text-xl font-bold text-white">Edit Link</h3>
+              <h3 className="text-xl font-bold text-zinc-900 dark:text-white">Edit Link</h3>
               <button
                 onClick={() => setEditingReport(null)}
-                className="text-zinc-400 hover:text-white transition-colors"
+                className="text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:text-white transition-colors"
               >
                 <X className="w-6 h-6" />
               </button>
@@ -405,29 +405,29 @@ export default function ReportedLinks() {
 
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-zinc-400 mb-1">Content</label>
-                <div className="text-white font-medium">{editingReport.contentTitle}</div>
+                <label className="block text-sm font-medium text-zinc-500 dark:text-zinc-400 mb-1">Content</label>
+                <div className="text-zinc-900 dark:text-white font-medium">{editingReport.contentTitle}</div>
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-zinc-400 mb-1">Link Name</label>
+                <label className="block text-sm font-medium text-zinc-500 dark:text-zinc-400 mb-1">Link Name</label>
                 <input
                   type="text"
                   value={editName}
                   onChange={(e) => setEditName(e.target.value)}
-                  className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
+                  className="w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-3 text-zinc-900 dark:text-white focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-zinc-400 mb-1">URL</label>
+                <label className="block text-sm font-medium text-zinc-500 dark:text-zinc-400 mb-1">URL</label>
                 <div className="flex gap-2">
                   <input
                     type="url"
                     value={editUrl}
                     onChange={(e) => setEditUrl(e.target.value)}
                     onBlur={(e) => handleUrlBlur(e.target.value)}
-                    className="flex-1 bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
+                    className="flex-1 bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-3 text-zinc-900 dark:text-white focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
                   />
                   <button
                     onClick={() => setIsLinkCheckerModalOpen(true)}
@@ -440,21 +440,21 @@ export default function ReportedLinks() {
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-zinc-400 mb-1">Size</label>
+                  <label className="block text-sm font-medium text-zinc-500 dark:text-zinc-400 mb-1">Size</label>
                   <input
                     type="text"
                     value={editSize}
                     onChange={(e) => setEditSize(e.target.value)}
-                    className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
+                    className="w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-3 text-zinc-900 dark:text-white focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
                     placeholder="e.g. 1.5"
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-zinc-400 mb-1">Unit</label>
+                  <label className="block text-sm font-medium text-zinc-500 dark:text-zinc-400 mb-1">Unit</label>
                   <select
                     value={editUnit}
                     onChange={(e) => setEditUnit(e.target.value as 'MB' | 'GB')}
-                    className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
+                    className="w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-3 text-zinc-900 dark:text-white focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
                   >
                     <option value="MB">MB</option>
                     <option value="GB">GB</option>
@@ -466,7 +466,7 @@ export default function ReportedLinks() {
             <div className="flex justify-end gap-3 mt-8">
               <button
                 onClick={() => setEditingReport(null)}
-                className="px-6 py-2.5 rounded-xl font-bold text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors"
+                className="px-6 py-2.5 rounded-xl font-bold text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:text-white hover:bg-zinc-200 dark:hover:bg-zinc-800 transition-colors"
                 disabled={saving}
               >
                 Cancel

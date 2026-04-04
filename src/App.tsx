@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import { Suspense, lazy, useState, useEffect } from 'react';
 import { AuthProvider } from './contexts/AuthContext';
+import { ThemeProvider } from './contexts/ThemeContext';
 import { ContentProvider } from './contexts/ContentContext';
 import { PWAProvider } from './contexts/PWAContext';
 import { CartProvider } from './contexts/CartContext';
@@ -38,7 +39,7 @@ import OrdersManagement from './pages/admin/OrdersManagement';
 const InstallApp = lazy(() => import('./pages/InstallApp'));
 
 const LoadingFallback = () => (
-  <div className="min-h-screen bg-zinc-950" />
+  <div className="min-h-screen bg-white dark:bg-zinc-950 transition-colors duration-300" />
 );
 
 function MediaModalController({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {
@@ -56,53 +57,55 @@ export default function App() {
   const [isMediaModalOpen, setIsMediaModalOpen] = useState(false);
 
   return (
-    <AuthProvider>
-      <ContentProvider>
-        <CartProvider>
-          <PWAProvider>
-            <SystemNotificationWrapper />
-            <BrowserRouter>
-              <MediaModalController isOpen={isMediaModalOpen} onClose={() => setIsMediaModalOpen(false)} />
-              <Suspense fallback={<LoadingFallback />}>
-                <Routes>
-                  <Route path="/login" element={<Login />} />
-                  <Route path="/app" element={<InstallApp />} />
-                  <Route path="/install" element={<InstallApp />} />
-                  
-                  {/* User Routes */}
-                  <Route path="/" element={<ProtectedRoute><Home onOpenMediaModal={() => setIsMediaModalOpen(true)} /></ProtectedRoute>} />
-                  <Route path="/movie/:id" element={<MovieDetails />} />
-                  <Route path="/watch-later" element={<ProtectedRoute><WatchLater /></ProtectedRoute>} />
-                  <Route path="/favorites" element={<ProtectedRoute><Favorites /></ProtectedRoute>} />
-                  <Route path="/requests" element={<ProtectedRoute><MovieRequests /></ProtectedRoute>} />
-                  <Route path="/top-up" element={<ProtectedRoute><TopUp /></ProtectedRoute>} />
-                  <Route path="/cart" element={<ProtectedRoute><Cart /></ProtectedRoute>} />
-                  
-                  {/* Admin Routes */}
-                  <Route path="/admin" element={<ProtectedRoute requireAdmin><AdminLayout /></ProtectedRoute>}>
-                    <Route index element={<Navigate to="content" replace />} />
-                    <Route path="analytics" element={<Analytics />} />
-                    <Route path="orders" element={<OrdersManagement />} />
-                    <Route path="content" element={<ContentManagement />} />
-                    <Route path="genres" element={<GenreManagement />} />
-                    <Route path="languages" element={<LanguageManagement />} />
-                    <Route path="qualities" element={<QualityManagement />} />
-                    <Route path="users" element={<UserManagement />} />
-                    <Route path="user-managers" element={<UserManagers />} />
-                    <Route path="temporary-users" element={<TemporaryUsers />} />
-                    <Route path="selected-content" element={<SelectedContentUsers />} />
-                    <Route path="income" element={<IncomeManagement />} />
-                    <Route path="error-links" element={<ErrorLinks />} />
-                    <Route path="reported-links" element={<ReportedLinks />} />
-                    <Route path="notifications" element={<Notifications />} />
-                    <Route path="requests" element={<MovieRequestsManagement />} />
-                  </Route>
-                </Routes>
-              </Suspense>
-            </BrowserRouter>
-          </PWAProvider>
-        </CartProvider>
-      </ContentProvider>
-    </AuthProvider>
+    <ThemeProvider>
+      <AuthProvider>
+        <ContentProvider>
+          <CartProvider>
+            <PWAProvider>
+              <SystemNotificationWrapper />
+              <BrowserRouter>
+                <MediaModalController isOpen={isMediaModalOpen} onClose={() => setIsMediaModalOpen(false)} />
+                <Suspense fallback={<LoadingFallback />}>
+                  <Routes>
+                    <Route path="/login" element={<Login />} />
+                    <Route path="/app" element={<InstallApp />} />
+                    <Route path="/install" element={<InstallApp />} />
+                    
+                    {/* User Routes */}
+                    <Route path="/" element={<ProtectedRoute><Home onOpenMediaModal={() => setIsMediaModalOpen(true)} /></ProtectedRoute>} />
+                    <Route path="/movie/:id" element={<MovieDetails />} />
+                    <Route path="/watch-later" element={<ProtectedRoute><WatchLater /></ProtectedRoute>} />
+                    <Route path="/favorites" element={<ProtectedRoute><Favorites /></ProtectedRoute>} />
+                    <Route path="/requests" element={<ProtectedRoute><MovieRequests /></ProtectedRoute>} />
+                    <Route path="/top-up" element={<ProtectedRoute><TopUp /></ProtectedRoute>} />
+                    <Route path="/cart" element={<ProtectedRoute><Cart /></ProtectedRoute>} />
+                    
+                    {/* Admin Routes */}
+                    <Route path="/admin" element={<ProtectedRoute requireAdmin><AdminLayout /></ProtectedRoute>}>
+                      <Route index element={<Navigate to="content" replace />} />
+                      <Route path="analytics" element={<Analytics />} />
+                      <Route path="orders" element={<OrdersManagement />} />
+                      <Route path="content" element={<ContentManagement />} />
+                      <Route path="genres" element={<GenreManagement />} />
+                      <Route path="languages" element={<LanguageManagement />} />
+                      <Route path="qualities" element={<QualityManagement />} />
+                      <Route path="users" element={<UserManagement />} />
+                      <Route path="user-managers" element={<UserManagers />} />
+                      <Route path="temporary-users" element={<TemporaryUsers />} />
+                      <Route path="selected-content" element={<SelectedContentUsers />} />
+                      <Route path="income" element={<IncomeManagement />} />
+                      <Route path="error-links" element={<ErrorLinks />} />
+                      <Route path="reported-links" element={<ReportedLinks />} />
+                      <Route path="notifications" element={<Notifications />} />
+                      <Route path="requests" element={<MovieRequestsManagement />} />
+                    </Route>
+                  </Routes>
+                </Suspense>
+              </BrowserRouter>
+            </PWAProvider>
+          </CartProvider>
+        </ContentProvider>
+      </AuthProvider>
+    </ThemeProvider>
   );
 }

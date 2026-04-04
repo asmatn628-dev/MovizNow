@@ -111,18 +111,18 @@ const ManageModal: React.FC<Props> = ({ isOpen, title, onClose, type, items: ini
           initial={{ scale: 0.95, opacity: 0 }}
           animate={{ scale: 1, opacity: 1 }}
           exit={{ scale: 0.95, opacity: 0 }}
-          className="w-full max-w-2xl bg-zinc-900 border border-zinc-800 rounded-2xl overflow-hidden shadow-2xl flex flex-col max-h-[90vh]"
+          className="w-full max-w-2xl bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl overflow-hidden shadow-2xl flex flex-col max-h-[90vh]"
         >
           {/* Header */}
-          <div className="flex items-center justify-between p-5 border-b border-zinc-800 bg-zinc-900/50">
-            <h2 className="text-xl font-bold text-white">{title}</h2>
-            <button onClick={onClose} className="p-2 hover:bg-zinc-800 rounded-full transition-colors text-zinc-400 hover:text-white">
+          <div className="flex items-center justify-between p-5 border-b border-zinc-200 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-900/50">
+            <h2 className="text-xl font-bold text-zinc-900 dark:text-white">{title}</h2>
+            <button onClick={onClose} className="p-2 hover:bg-zinc-200 dark:hover:bg-zinc-800 rounded-full transition-colors text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:text-white">
               <X className="w-6 h-6" />
             </button>
           </div>
 
           {/* Add New Item */}
-          <div className="p-5 bg-zinc-950/50 border-b border-zinc-800">
+          <div className="p-5 bg-white/50 dark:bg-zinc-950/50 border-b border-zinc-200 dark:border-zinc-800">
             <div className="flex flex-wrap gap-3">
               <div className="flex-1 min-w-[200px]">
                 <input
@@ -131,7 +131,7 @@ const ManageModal: React.FC<Props> = ({ isOpen, title, onClose, type, items: ini
                   value={newItemName}
                   onChange={(e) => setNewItemName(e.target.value)}
                   onKeyDown={(e) => e.key === 'Enter' && handleAddItem()}
-                  className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-2.5 text-white focus:outline-none focus:border-emerald-500 transition-colors"
+                  className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-2.5 text-zinc-900 dark:text-white focus:outline-none focus:border-emerald-500 transition-colors"
                 />
               </div>
               {type === 'quality' && (
@@ -139,7 +139,7 @@ const ManageModal: React.FC<Props> = ({ isOpen, title, onClose, type, items: ini
                   type="color"
                   value={newItemColor}
                   onChange={(e) => setNewItemColor(e.target.value)}
-                  className="w-12 h-11 bg-zinc-900 border border-zinc-800 rounded-xl p-1 cursor-pointer"
+                  className="w-12 h-11 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-1 cursor-pointer"
                 />
               )}
               <button
@@ -154,7 +154,7 @@ const ManageModal: React.FC<Props> = ({ isOpen, title, onClose, type, items: ini
           </div>
 
           {/* Search */}
-          <div className="px-5 py-3 border-b border-zinc-800">
+          <div className="px-5 py-3 border-b border-zinc-200 dark:border-zinc-800">
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
               <input
@@ -162,7 +162,7 @@ const ManageModal: React.FC<Props> = ({ isOpen, title, onClose, type, items: ini
                 placeholder="Search items..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full bg-zinc-900/50 border border-zinc-800 rounded-lg pl-10 pr-4 py-2 text-sm text-white focus:outline-none focus:border-emerald-500 transition-colors"
+                className="w-full bg-zinc-50/50 dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-800 rounded-lg pl-10 pr-4 py-2 text-sm text-zinc-900 dark:text-white focus:outline-none focus:border-emerald-500 transition-colors"
               />
             </div>
           </div>
@@ -181,11 +181,11 @@ const ManageModal: React.FC<Props> = ({ isOpen, title, onClose, type, items: ini
                             {...provided.draggableProps}
                             className={`flex items-center gap-3 p-3 rounded-xl border transition-all ${
                               snapshot.isDragging 
-                                ? 'bg-zinc-800 border-emerald-500 shadow-xl z-50' 
-                                : 'bg-zinc-900/50 border-zinc-800 hover:border-zinc-700'
+                                ? 'bg-zinc-100 dark:bg-zinc-800 border-emerald-500 shadow-xl z-50' 
+                                : 'bg-zinc-50/50 dark:bg-zinc-900/50 border-zinc-200 dark:border-zinc-800 hover:border-zinc-300 dark:border-zinc-700'
                             }`}
                           >
-                            <div {...provided.dragHandleProps} className={`text-zinc-600 hover:text-zinc-400 p-1 ${searchTerm ? 'cursor-not-allowed opacity-30' : 'cursor-grab active:cursor-grabbing'}`}>
+                            <div {...provided.dragHandleProps} className={`text-zinc-600 hover:text-zinc-500 dark:text-zinc-400 p-1 ${searchTerm ? 'cursor-not-allowed opacity-30' : 'cursor-grab active:cursor-grabbing'}`}>
                               <GripVertical className="w-5 h-5" />
                             </div>
 
@@ -196,14 +196,14 @@ const ManageModal: React.FC<Props> = ({ isOpen, title, onClose, type, items: ini
                                   value={editName}
                                   onChange={(e) => setEditName(e.target.value)}
                                   autoFocus
-                                  className="flex-1 bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-1 text-sm text-white focus:outline-none focus:border-emerald-500"
+                                  className="flex-1 bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg px-3 py-1 text-sm text-zinc-900 dark:text-white focus:outline-none focus:border-emerald-500"
                                 />
                                 {type === 'quality' && (
                                   <input
                                     type="color"
                                     value={editColor}
                                     onChange={(e) => setEditColor(e.target.value)}
-                                    className="w-8 h-8 bg-zinc-950 border border-zinc-800 rounded-lg p-0.5 cursor-pointer"
+                                    className="w-8 h-8 bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg p-0.5 cursor-pointer"
                                   />
                                 )}
                                 <button onClick={handleSaveEdit} className="p-1.5 text-emerald-500 hover:bg-emerald-500/10 rounded-lg transition-colors">
@@ -219,18 +219,18 @@ const ManageModal: React.FC<Props> = ({ isOpen, title, onClose, type, items: ini
                                   {type === 'quality' && item.color && (
                                     <div className="w-3 h-3 rounded-full shadow-sm" style={{ backgroundColor: item.color }} />
                                   )}
-                                  <span className="text-white font-medium">{item.name}</span>
+                                  <span className="text-zinc-900 dark:text-white font-medium">{item.name}</span>
                                 </div>
                                 <div className="flex items-center gap-1">
                                   <button
                                     onClick={() => handleStartEdit(item)}
-                                    className="p-2 text-zinc-400 hover:text-blue-500 hover:bg-blue-500/10 rounded-lg transition-colors"
+                                    className="p-2 text-zinc-500 dark:text-zinc-400 hover:text-blue-500 hover:bg-blue-500/10 rounded-lg transition-colors"
                                   >
                                     <Edit2 className="w-4 h-4" />
                                   </button>
                                   <button
                                     onClick={() => handleDeleteItem(item.id)}
-                                    className="p-2 text-zinc-400 hover:text-red-500 hover:bg-red-500/10 rounded-lg transition-colors"
+                                    className="p-2 text-zinc-500 dark:text-zinc-400 hover:text-red-500 hover:bg-red-500/10 rounded-lg transition-colors"
                                   >
                                     <Trash2 className="w-4 h-4" />
                                   </button>
@@ -254,10 +254,10 @@ const ManageModal: React.FC<Props> = ({ isOpen, title, onClose, type, items: ini
           </div>
 
           {/* Footer */}
-          <div className="p-5 border-t border-zinc-800 bg-zinc-900/50 flex justify-end gap-3">
+          <div className="p-5 border-t border-zinc-200 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-900/50 flex justify-end gap-3">
             <button
               onClick={onClose}
-              className="px-6 py-2.5 rounded-xl font-medium text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors"
+              className="px-6 py-2.5 rounded-xl font-medium text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:text-white hover:bg-zinc-200 dark:hover:bg-zinc-800 transition-colors"
             >
               Cancel
             </button>

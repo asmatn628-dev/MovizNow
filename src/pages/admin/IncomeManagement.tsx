@@ -90,30 +90,30 @@ export default function IncomeManagement() {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
-        <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 flex items-center gap-4">
+        <div className="bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-6 flex items-center gap-4">
           <div className="w-16 h-16 bg-emerald-500/10 rounded-2xl flex items-center justify-center text-emerald-500">
             <DollarSign className="w-8 h-8" />
           </div>
           <div>
-            <p className="text-zinc-400 font-medium">Total Earnings</p>
-            <h2 className="text-3xl font-bold text-white">${totalIncome.toFixed(2)}</h2>
+            <p className="text-zinc-500 dark:text-zinc-400 font-medium">Total Earnings</p>
+            <h2 className="text-3xl font-bold text-zinc-900 dark:text-white">${totalIncome.toFixed(2)}</h2>
           </div>
         </div>
-        <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 flex items-center gap-4">
+        <div className="bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-6 flex items-center gap-4">
           <div className="w-16 h-16 bg-blue-500/10 rounded-2xl flex items-center justify-center text-blue-500">
             <TrendingUp className="w-8 h-8" />
           </div>
           <div>
-            <p className="text-zinc-400 font-medium">This Month</p>
-            <h2 className="text-3xl font-bold text-white">${thisMonthIncome.toFixed(2)}</h2>
+            <p className="text-zinc-500 dark:text-zinc-400 font-medium">This Month</p>
+            <h2 className="text-3xl font-bold text-zinc-900 dark:text-white">${thisMonthIncome.toFixed(2)}</h2>
           </div>
         </div>
       </div>
 
-      <div className="bg-zinc-900 border border-zinc-800 rounded-2xl overflow-hidden">
+      <div className="bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-left text-sm">
-            <thead className="bg-zinc-950/50 text-zinc-400 uppercase font-semibold">
+            <thead className="bg-white/50 dark:bg-zinc-950/50 text-zinc-500 dark:text-zinc-400 uppercase font-semibold">
               <tr>
                 <th className="px-6 py-4 whitespace-nowrap">Date</th>
                 <th className="px-6 py-4 whitespace-nowrap">User / Source</th>
@@ -124,15 +124,15 @@ export default function IncomeManagement() {
             </thead>
             <tbody className="divide-y divide-zinc-800">
               {incomes.map((income) => (
-                <tr key={income.id} className="hover:bg-zinc-800/50 transition-colors">
-                  <td className="px-6 py-4 whitespace-nowrap text-zinc-300">
+                <tr key={income.id} className="hover:bg-zinc-200 dark:hover:bg-zinc-800/50 transition-colors">
+                  <td className="px-6 py-4 whitespace-nowrap text-zinc-600 dark:text-zinc-300">
                     <div className="flex items-center gap-2">
                       <Calendar className="w-4 h-4 text-zinc-500" />
                       {format(new Date(income.date), 'MMM dd, yyyy')}
                     </div>
                   </td>
-                  <td className="px-6 py-4 font-medium text-white">{income.userName}</td>
-                  <td className="px-6 py-4 text-zinc-400">{income.description}</td>
+                  <td className="px-6 py-4 font-medium text-zinc-900 dark:text-white">{income.userName}</td>
+                  <td className="px-6 py-4 text-zinc-500 dark:text-zinc-400">{income.description}</td>
                   <td className="px-6 py-4 font-bold text-emerald-400">${income.amount.toFixed(2)}</td>
                   <td className="px-6 py-4 text-right">
                     <button 
@@ -158,59 +158,59 @@ export default function IncomeManagement() {
 
       {isAdding && (
         <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4">
-          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-md overflow-hidden">
-            <div className="p-6 border-b border-zinc-800">
+          <div className="bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl w-full max-w-md overflow-hidden">
+            <div className="p-6 border-b border-zinc-200 dark:border-zinc-800">
               <h2 className="text-xl font-bold">Add Income Record</h2>
             </div>
             <form onSubmit={handleAdd} className="p-6 space-y-4">
               <div>
-                <label className="block text-sm font-medium text-zinc-400 mb-2">Amount ($)</label>
+                <label className="block text-sm font-medium text-zinc-500 dark:text-zinc-400 mb-2">Amount ($)</label>
                 <input
                   type="number"
                   step="0.01"
                   required
                   value={amount}
                   onChange={(e) => setAmount(e.target.value)}
-                  className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-3 focus:outline-none focus:border-emerald-500"
+                  className="w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-3 focus:outline-none focus:border-emerald-500"
                   placeholder="0.00"
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-zinc-400 mb-2">User / Source Name</label>
+                <label className="block text-sm font-medium text-zinc-500 dark:text-zinc-400 mb-2">User / Source Name</label>
                 <input
                   type="text"
                   value={userName}
                   onChange={(e) => setUserName(e.target.value)}
-                  className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-3 focus:outline-none focus:border-emerald-500"
+                  className="w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-3 focus:outline-none focus:border-emerald-500"
                   placeholder="e.g. John Doe"
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-zinc-400 mb-2">Description</label>
+                <label className="block text-sm font-medium text-zinc-500 dark:text-zinc-400 mb-2">Description</label>
                 <input
                   type="text"
                   required
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
-                  className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-3 focus:outline-none focus:border-emerald-500"
+                  className="w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-3 focus:outline-none focus:border-emerald-500"
                   placeholder="e.g. 1 Month Subscription"
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-zinc-400 mb-2">Date</label>
+                <label className="block text-sm font-medium text-zinc-500 dark:text-zinc-400 mb-2">Date</label>
                 <input
                   type="date"
                   required
                   value={date}
                   onChange={(e) => setDate(e.target.value)}
-                  className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-3 focus:outline-none focus:border-emerald-500"
+                  className="w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-3 focus:outline-none focus:border-emerald-500"
                 />
               </div>
               <div className="flex gap-4 pt-4">
                 <button
                   type="button"
                   onClick={() => setIsAdding(false)}
-                  className="flex-1 bg-zinc-800 hover:bg-zinc-700 text-white py-3 rounded-xl font-bold transition-colors"
+                  className="flex-1 bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-300 dark:hover:bg-zinc-700 text-zinc-900 dark:text-white py-3 rounded-xl font-bold transition-colors"
                 >
                   Cancel
                 </button>

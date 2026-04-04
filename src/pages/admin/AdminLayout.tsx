@@ -14,25 +14,35 @@ export default function AdminLayout() {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isLogoutModalOpen, setIsLogoutModalOpen] = useState(false);
   const [reportedLinksCount, setReportedLinksCount] = useState(0);
+  const [pendingOrdersCount, setPendingOrdersCount] = useState(0);
 
   useEffect(() => {
     if (profile?.role !== 'admin' && profile?.role !== 'owner' && profile?.role !== 'content_manager' && profile?.role !== 'manager') return;
 
-    const fetchReportedLinksCount = async () => {
-      try {
-        const q = query(collection(db, 'reported_links'), where('status', '==', 'pending'));
-        const snapshot = await getDocs(q);
-        setReportedLinksCount(snapshot.size);
-      } catch (error) {
-        console.error("Error fetching reported links count:", error);
-      }
+    const qReported = query(collection(db, 'reported_links'), where('status', '==', 'pending'));
+    const qOrders = query(collection(db, 'orders'), where('status', '==', 'pending'));
+    
+    const unsubReported = onSnapshot(qReported, (snap) => {
+      setReportedLinksCount(snap.size);
+    }, (error) => {
+      console.error("Error fetching reported links count:", error);
+    });
+
+    const unsubOrders = onSnapshot(qOrders, (snap) => {
+      setPendingOrdersCount(snap.size);
+    }, (error) => {
+      console.error("Error fetching pending orders count:", error);
+    });
+
+    return () => {
+      unsubReported();
+      unsubOrders();
     };
-    fetchReportedLinksCount();
   }, [profile]);
 
   const allNavItems = [
     { path: '/admin/analytics', label: 'Analytics', icon: BarChart3 },
-    { path: '/admin/orders', label: 'Orders', icon: DollarSign },
+    { path: '/admin/orders', label: `Orders${pendingOrdersCount > 0 ? ` (${pendingOrdersCount})` : ''}`, icon: DollarSign },
     { path: '/admin/content', label: 'Movies & Series', icon: Film },
     { path: '/admin/users', label: 'Membership', icon: Users },
     { path: '/admin/user-managers', label: 'User Managers', icon: Users },
@@ -65,9 +75,9 @@ export default function AdminLayout() {
   }
 
   return (
-    <div className="min-h-screen bg-zinc-950 text-white flex flex-col md:flex-row">
+    <div className="min-h-screen bg-white dark:bg-zinc-950 text-zinc-900 dark:text-white flex flex-col md:flex-row transition-colors duration-300">
       {/* Mobile Header */}
-      <div className="md:hidden flex items-center justify-between p-4 bg-zinc-900 border-b border-zinc-800">
+      <div className="md:hidden flex items-center justify-between p-4 bg-zinc-50 dark:bg-zinc-900 border-b border-zinc-200 dark:border-zinc-800">
         <h1 className="text-xl font-bold text-emerald-500 flex items-center gap-3">
           <img src="/logo.svg?v=2" alt="Logo" className="w-6 h-6" />
           <span className="tracking-tight">
@@ -80,14 +90,14 @@ export default function AdminLayout() {
         {(profile?.role === 'admin' || profile?.role === 'owner') ? (
           <button 
             onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-            className="p-2 text-zinc-400 hover:text-white"
+            className="p-2 text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:text-white"
           >
             {isMobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
           </button>
         ) : (
           <button 
             onClick={() => navigate('/')}
-            className="p-2 text-zinc-400 hover:text-white"
+            className="p-2 text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:text-white"
           >
             <X className="w-6 h-6" />
           </button>
@@ -96,7 +106,7 @@ export default function AdminLayout() {
 
       {/* Sidebar */}
       <aside className={clsx(
-        "fixed md:static inset-y-0 left-0 z-50 w-64 bg-zinc-900 border-r border-zinc-800 flex flex-col transform transition-transform duration-300 ease-in-out",
+        "fixed md:static inset-y-0 left-0 z-50 w-64 bg-zinc-50 dark:bg-zinc-900 border-r border-zinc-200 dark:border-zinc-800 flex flex-col transform transition-transform duration-300 ease-in-out",
         isMobileMenuOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0"
       )}>
         <div className="p-6 hidden md:block">
@@ -104,7 +114,7 @@ export default function AdminLayout() {
             <img src="/logo.svg?v=2" alt="Logo" className="w-8 h-8" />
             <span className="tracking-tight">MovizNow</span>
           </h1>
-          <p className="text-xs text-zinc-400 mt-1 uppercase tracking-wider font-semibold">
+          <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-1 uppercase tracking-wider font-semibold">
             {profile?.role === 'user_manager' ? 'User Manager' : 
              profile?.role === 'content_manager' ? 'Content Manager' : 
              profile?.role === 'manager' ? 'Manager' : 
@@ -115,7 +125,7 @@ export default function AdminLayout() {
         <nav className="flex-1 px-4 py-4 md:py-0 space-y-2 overflow-y-auto">
           <Link
             to="/"
-            className="flex items-center gap-3 px-4 py-3 rounded-xl transition-colors font-medium text-emerald-500 hover:bg-zinc-800 mb-4 border border-emerald-500/20"
+            className="flex items-center gap-3 px-4 py-3 rounded-xl transition-colors font-medium text-emerald-500 hover:bg-zinc-200 dark:hover:bg-zinc-800 mb-4 border border-emerald-500/20"
           >
             <Film className="w-5 h-5" />
             Back to App
@@ -133,7 +143,7 @@ export default function AdminLayout() {
                   'flex items-center gap-3 px-4 py-3 rounded-xl transition-colors font-medium',
                   isActive 
                     ? 'bg-emerald-500/10 text-emerald-500' 
-                    : 'text-zinc-400 hover:bg-zinc-800 hover:text-white'
+                    : 'text-zinc-500 dark:text-zinc-400 hover:bg-zinc-200 dark:hover:bg-zinc-800 hover:text-zinc-900 dark:text-white'
                 )}
               >
                 <Icon className="w-5 h-5" />
@@ -143,10 +153,10 @@ export default function AdminLayout() {
           })}
         </nav>
 
-        <div className="p-4 border-t border-zinc-800 mt-auto">
+        <div className="p-4 border-t border-zinc-200 dark:border-zinc-800 mt-auto">
           <button
             onClick={() => setIsLogoutModalOpen(true)}
-            className="flex items-center gap-3 px-4 py-3 w-full text-left text-zinc-400 hover:bg-zinc-800 hover:text-white rounded-xl transition-colors font-medium"
+            className="flex items-center gap-3 px-4 py-3 w-full text-left text-zinc-500 dark:text-zinc-400 hover:bg-zinc-200 dark:hover:bg-zinc-800 hover:text-zinc-900 dark:text-white rounded-xl transition-colors font-medium"
           >
             <LogOut className="w-5 h-5" />
             Sign Out

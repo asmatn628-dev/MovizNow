@@ -94,20 +94,20 @@ export const AdjustContentsModal: React.FC<Props> = ({ isOpen, onClose, contentL
               <div className="flex items-center gap-4">
                 <h2 className="text-lg md:text-xl font-bold">Adjust Contents Order</h2>
                 <div className="relative w-64 hidden sm:block">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400 dark:text-zinc-500" />
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500 dark:text-zinc-400 dark:text-zinc-500" />
                   <input
                     type="text"
                     placeholder="Search to find (disables drag)..."
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
-                    className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg pl-9 pr-4 py-2 text-sm text-zinc-900 dark:text-white focus:outline-none focus:border-emerald-500 transition-colors duration-300"
+                    className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg pl-9 pr-4 py-2 text-sm text-zinc-900 dark:text-white placeholder-zinc-500 dark:placeholder-zinc-400 focus:outline-none focus:border-emerald-500 transition-colors duration-300"
                   />
                 </div>
               </div>
               <div className="flex items-center gap-3">
                 <button
                   onClick={onClose}
-                  className="p-2 hover:bg-zinc-200 dark:hover:bg-zinc-800 rounded-full text-zinc-500 dark:text-zinc-400 transition-colors"
+                  className="p-2 hover:bg-zinc-200 dark:hover:bg-zinc-800 rounded-full text-zinc-500 dark:text-zinc-400 transition-all active:scale-95"
                   disabled={saving}
                 >
                   <X className="w-6 h-6" />
@@ -115,7 +115,7 @@ export const AdjustContentsModal: React.FC<Props> = ({ isOpen, onClose, contentL
                 <button
                   onClick={handleSave}
                   disabled={saving || !!searchTerm}
-                  className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white px-6 py-2 rounded-xl font-medium transition-colors disabled:opacity-50"
+                  className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white px-6 py-2 rounded-xl font-medium transition-all active:scale-95 disabled:opacity-50 border border-white/20 shadow-lg"
                 >
                   {saving ? <Loader2 className="w-5 h-5 animate-spin" /> : <Save className="w-5 h-5" />}
                   Save Order
@@ -158,7 +158,7 @@ export const AdjustContentsModal: React.FC<Props> = ({ isOpen, onClose, contentL
                             >
                               <div
                                 {...provided.dragHandleProps}
-                                className={`p-2 rounded-lg transition-colors ${searchTerm ? 'opacity-30 cursor-not-allowed' : 'hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-400 dark:text-zinc-500 hover:text-zinc-900 dark:hover:text-white cursor-grab active:cursor-grabbing'}`}
+                                className={`p-2 rounded-lg transition-colors ${searchTerm ? 'opacity-30 cursor-not-allowed' : 'hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-500 dark:text-zinc-400 dark:text-zinc-500 hover:text-zinc-900 dark:hover:text-white cursor-grab active:cursor-grabbing'}`}
                               >
                                 <GripVertical className="w-5 h-5" />
                               </div>
@@ -167,7 +167,7 @@ export const AdjustContentsModal: React.FC<Props> = ({ isOpen, onClose, contentL
                                 {item.posterUrl ? (
                                   <img src={item.posterUrl} alt={item.title} className="w-full h-full object-cover" />
                                 ) : (
-                                  <div className="w-full h-full flex items-center justify-center text-zinc-400 dark:text-zinc-600">
+                                  <div className="w-full h-full flex items-center justify-center text-zinc-500 dark:text-zinc-400 dark:text-zinc-600">
                                     No Img
                                   </div>
                                 )}

@@ -16,19 +16,47 @@ export default function UserManagers() {
   const navigate = useNavigate();
 
   useEffect(() => {
-    const fetchManagers = async () => {
-      try {
-        const q = query(collection(db, 'users'), where('isUserManager', '==', true));
-        const snapshot = await getDocs(q);
-        const data = snapshot.docs.map(doc => ({ ...doc.data() } as UserProfile));
-        setManagers(data);
-        setLoading(false);
-      } catch (error) {
-        console.error("Error fetching managers:", error);
-        setLoading(false);
-      }
+    const q1 = query(collection(db, 'users'), where('isUserManager', '==', true));
+    const q2 = query(collection(db, 'users'), where('role', 'in', ['user_manager', 'manager']));
+
+    const updateManagers = (snap1: any, snap2: any) => {
+      const combined = new Map<string, UserProfile>();
+      
+      snap1.forEach((doc: any) => {
+        combined.set(doc.id, { uid: doc.id, ...doc.data() } as UserProfile);
+      });
+      
+      snap2.forEach((doc: any) => {
+        combined.set(doc.id, { uid: doc.id, ...doc.data() } as UserProfile);
+      });
+      
+      setManagers(Array.from(combined.values()));
+      setLoading(false);
     };
-    fetchManagers();
+
+    let snap1Data: any[] = [];
+    let snap2Data: any[] = [];
+
+    const unsub1 = onSnapshot(q1, (snap) => {
+      snap1Data = snap.docs;
+      updateManagers(snap1Data, snap2Data);
+    }, (error) => {
+      console.error("Error fetching managers (q1):", error);
+      setLoading(false);
+    });
+
+    const unsub2 = onSnapshot(q2, (snap) => {
+      snap2Data = snap.docs;
+      updateManagers(snap1Data, snap2Data);
+    }, (error) => {
+      console.error("Error fetching managers (q2):", error);
+      setLoading(false);
+    });
+
+    return () => {
+      unsub1();
+      unsub2();
+    };
   }, []);
 
   const handleRemoveManager = async () => {
@@ -43,7 +71,9 @@ export default function UserManagers() {
     }
   };
 
-  const filteredManagers = smartSearch(managers, searchTerm, ['displayName', 'email']);
+  const filteredManagers = searchTerm.trim() 
+    ? smartSearch(managers, searchTerm, ['displayName', 'email'])
+    : managers;
 
   return (
     <div className="p-4 md:p-8">
@@ -99,12 +129,12 @@ export default function UserManagers() {
                       e.stopPropagation();
                       setManagerToRemove(manager.uid);
                     }}
-                    className="p-2 text-zinc-400 dark:text-zinc-500 hover:text-red-500 hover:bg-red-500/10 rounded-lg transition-colors"
+                    className="p-2 text-zinc-500 dark:text-zinc-400 dark:text-zinc-500 hover:text-red-500 hover:bg-red-500/10 rounded-lg transition-colors"
                     title="Remove from User Managers"
                   >
                     <X className="w-4 h-4" />
                   </button>
-                  <ChevronRight className="w-5 h-5 text-zinc-400 dark:text-zinc-600 group-hover:text-emerald-500 transition-colors" />
+                  <ChevronRight className="w-5 h-5 text-zinc-500 dark:text-zinc-400 dark:text-zinc-600 group-hover:text-emerald-500 transition-colors" />
                 </div>
               </div>
               
@@ -128,7 +158,7 @@ export default function UserManagers() {
           
           {filteredManagers.length === 0 && (
             <div className="col-span-full p-8 text-center text-zinc-500 dark:text-zinc-400 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl transition-colors duration-300">
-              No User Managers found.
+              {searchTerm.trim() ? `No User Managers found matching "${searchTerm}"` : 'No User Managers found.'}
             </div>
           )}
         </div>

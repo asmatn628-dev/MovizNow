@@ -117,21 +117,40 @@ export function formatQuality(q?: string) {
   return lower;
 }
 
-export function normalizePrintQuality(text?: string) {
+export function normalizePrintQuality(text?: string, qualities?: Quality[]) {
   if (!text) return undefined;
   
-  if (/(web[\.\-\s_]*rip)/i.test(text)) return "WEB-Rip";
-  if (/(hd[\.\-\s_]*rip)/i.test(text)) return "HD-Rip";
-  if (/(blu[\.\-\s_]*ray|bd[\.\-\s_]*rip|br[\.\-\s_]*rip)/i.test(text)) return "Blu-Ray";
-  if (/(web[\.\-\s_]*dl)/i.test(text)) return "WEB-DL";
-  if (/(hq[\.\-\s_]*hdtc)/i.test(text)) return "HQ HDTC";
-  if (/(hdtc)/i.test(text)) return "HDTC";
-  if (/(hdcam)/i.test(text)) return "HDCAM";
-  if (/(dvd[\.\-\s_]*rip)/i.test(text)) return "DVDRip";
+  let detected: string | undefined;
+  if (/(web[\.\-\s_]*rip)/i.test(text)) detected = "WEB-Rip";
+  else if (/(hd[\.\-\s_]*rip)/i.test(text)) detected = "HD-Rip";
+  else if (/(blu[\.\-\s_]*ray|bd[\.\-\s_]*rip|br[\.\-\s_]*rip)/i.test(text)) detected = "Blu-Ray";
+  else if (/(web[\.\-\s_]*dl)/i.test(text)) detected = "WEB-DL";
+  else if (/(hq[\.\-\s_]*hdtc)/i.test(text)) detected = "HQ HDTC";
+  else if (/(hdtc)/i.test(text)) detected = "HDTC";
+  else if (/(hdcam)/i.test(text)) detected = "HDCAM";
+  else if (/(dvd[\.\-\s_]*rip)/i.test(text)) detected = "DVDRip";
+  else if (/\bHD\b/i.test(text)) detected = "WEB-DL";
+
+  // If we have a list of qualities, try to find the exact name from the list
+  // by comparing normalized versions (ignoring hyphens, spaces, etc.)
+  if (qualities && qualities.length > 0) {
+    if (detected) {
+      const normalizedDetected = detected.replace(/[\.\-\s_]+/g, "").toLowerCase();
+      const match = qualities.find(q => q.name.replace(/[\.\-\s_]+/g, "").toLowerCase() === normalizedDetected);
+      if (match) return match.name;
+    }
+
+    // Try matching list items directly against text if no detected label yet
+    const normalizedText = text.replace(/[\.\-\s_]+/g, "").toLowerCase();
+    for (const q of qualities) {
+      const normalizedQuality = q.name.replace(/[\.\-\s_]+/g, "").toLowerCase();
+      if (normalizedQuality.length > 2 && normalizedText.includes(normalizedQuality)) {
+        return q.name;
+      }
+    }
+  }
   
-  if (/\bHD\b/i.test(text)) return "WEB-DL";
-  
-  return undefined;
+  return detected;
 }
 
 export function detectMetadataForLink(text: string, url: string, languages?: Language[], qualities?: Quality[]) {
@@ -275,7 +294,7 @@ export function detectMetadataForLink(text: string, url: string, languages?: Lan
     codecLabel: codec,
     audioLabel: audio,
     subtitleLabel: /subtitles|subs|softsub|hardsub|esub|esubs|msub|msubs/i.test(lower) ? "Yes" : undefined,
-    printQualityLabel: normalizePrintQuality(lower),
+    printQualityLabel: normalizePrintQuality(lower, qualities),
     season: parseInt(lower.match(/(?<=^|[^a-zA-Z0-9])S(?:eason)?\s*(\d+)\b/i)?.[1] || "0") || undefined,
     episode: parseInt(lower.match(/(?<=^|[^a-zA-Z0-9])E(?:pisode|p)?\s*(\d+)\b/i)?.[1] || "0") || undefined,
     isFullSeasonMKV: /full\s*season|complete\s*season/i.test(lower) && lower.includes(".mkv"),
@@ -449,15 +468,7 @@ export function detectFromFilename(fileName?: string, finalUrl?: string, languag
 
   const subtitle = /subtitles|subs|softsub|hardsub|esub|esubs|msub|msubs/i.test(source) ? "Subtitles" : undefined;
   
-  let printQuality = normalizePrintQuality(source);
-
-  if (!printQuality && qualities && qualities.length > 0) {
-    qualities.forEach(q => {
-      const escaped = q.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      const regex = new RegExp(`\\b${escaped}\\b`, 'i');
-      if (regex.test(source)) printQuality = q.name;
-    });
-  }
+  let printQuality = normalizePrintQuality(source, qualities);
 
   const result = {
     qualityLabel: quality,

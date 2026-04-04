@@ -135,15 +135,15 @@ export default function MovieRequestsManagement() {
             <MessageCircle className="w-7 h-7 text-emerald-500" />
             Movie Requests Management
           </h1>
-          <p className="text-zinc-400 text-sm mt-1">Manage and respond to user movie requests.</p>
+          <p className="text-zinc-500 dark:text-zinc-400 text-sm mt-1">Manage and respond to user movie requests.</p>
         </div>
 
-        <div className="flex items-center gap-4 bg-zinc-900/50 border border-zinc-800 p-2 rounded-2xl">
-          <div className="flex flex-col items-center px-4 border-r border-zinc-800">
+        <div className="flex items-center gap-4 bg-zinc-50/50 dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-800 p-2 rounded-2xl">
+          <div className="flex flex-col items-center px-4 border-r border-zinc-200 dark:border-zinc-800">
             <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider">Total</span>
-            <span className="text-xl font-bold text-white">{requests.length}</span>
+            <span className="text-xl font-bold text-zinc-900 dark:text-white">{requests.length}</span>
           </div>
-          <div className="flex flex-col items-center px-4 border-r border-zinc-800">
+          <div className="flex flex-col items-center px-4 border-r border-zinc-200 dark:border-zinc-800">
             <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider">Pending</span>
             <span className="text-xl font-bold text-yellow-500">{requests.filter(r => r.status === 'pending').length}</span>
           </div>
@@ -163,7 +163,7 @@ export default function MovieRequestsManagement() {
             placeholder="Search title, user..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full bg-zinc-900 border border-zinc-800 rounded-xl pl-10 pr-4 py-2.5 text-sm focus:outline-none focus:border-emerald-500"
+            className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl pl-10 pr-4 py-2.5 text-sm focus:outline-none focus:border-emerald-500"
           />
         </div>
 
@@ -171,7 +171,7 @@ export default function MovieRequestsManagement() {
           <select
             value={filterStatus}
             onChange={(e) => setFilterStatus(e.target.value)}
-            className="flex-1 bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-emerald-500"
+            className="flex-1 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-emerald-500"
           >
             <option value="all">All Status</option>
             <option value="pending">Pending</option>
@@ -182,7 +182,7 @@ export default function MovieRequestsManagement() {
           <select
             value={filterType}
             onChange={(e) => setFilterType(e.target.value)}
-            className="flex-1 bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-emerald-500"
+            className="flex-1 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-emerald-500"
           >
             <option value="all">All Types</option>
             <option value="movie">Movies</option>
@@ -194,7 +194,7 @@ export default function MovieRequestsManagement() {
           <select
             value={sortBy}
             onChange={(e) => setSortBy(e.target.value as any)}
-            className="flex-1 bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-emerald-500"
+            className="flex-1 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-emerald-500"
           >
             <option value="count">Sort by Popularity</option>
             <option value="date">Sort by Date</option>
@@ -202,7 +202,7 @@ export default function MovieRequestsManagement() {
 
           <button
             onClick={() => setSortOrder(prev => prev === 'asc' ? 'desc' : 'asc')}
-            className="bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-2.5 text-sm hover:bg-zinc-800 transition-colors"
+            className="bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-2.5 text-sm hover:bg-zinc-200 dark:hover:bg-zinc-800 transition-colors"
           >
             {sortOrder === 'asc' ? <ArrowUp className="w-4 h-4" /> : <ArrowDown className="w-4 h-4" />}
           </button>
@@ -210,11 +210,11 @@ export default function MovieRequestsManagement() {
       </div>
 
       {/* List */}
-      <div className="bg-zinc-900 border border-zinc-800 rounded-2xl overflow-hidden">
+      <div className="bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse">
             <thead>
-              <tr className="bg-zinc-950/50 border-b border-zinc-800">
+              <tr className="bg-white/50 dark:bg-zinc-950/50 border-b border-zinc-200 dark:border-zinc-800">
                 <th className="px-6 py-4 text-[10px] font-bold text-zinc-500 uppercase tracking-wider whitespace-nowrap">Request Details</th>
                 <th className="px-6 py-4 text-[10px] font-bold text-zinc-500 uppercase tracking-wider whitespace-nowrap">User Info</th>
                 <th className="px-6 py-4 text-[10px] font-bold text-zinc-500 uppercase tracking-wider whitespace-nowrap">Status</th>
@@ -237,7 +237,7 @@ export default function MovieRequestsManagement() {
                 </tr>
               ) : (
                 filteredRequests.map((request) => (
-                  <tr key={request.id} className="hover:bg-zinc-800/30 transition-colors group">
+                  <tr key={request.id} className="hover:bg-zinc-200 dark:hover:bg-zinc-800/30 transition-colors group">
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-3">
                         <div className={clsx(
@@ -254,7 +254,7 @@ export default function MovieRequestsManagement() {
                     </td>
                     <td className="px-6 py-4">
                       <div className="space-y-1">
-                        <div className="flex items-center gap-2 text-xs text-zinc-300">
+                        <div className="flex items-center gap-2 text-xs text-zinc-600 dark:text-zinc-300">
                           <User className="w-3 h-3 text-zinc-500" />
                           {request.userName}
                         </div>
@@ -359,21 +359,21 @@ export default function MovieRequestsManagement() {
       {/* Content Picker Modal */}
       {isPickerOpen && (
         <div className="fixed inset-0 bg-black/80 z-[100] flex items-center justify-center p-4">
-          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-md overflow-hidden flex flex-col max-h-[80vh] relative">
-            <div className="p-4 border-b border-zinc-800 flex justify-between items-center">
+          <div className="bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl w-full max-w-md overflow-hidden flex flex-col max-h-[80vh] relative">
+            <div className="p-4 border-b border-zinc-200 dark:border-zinc-800 flex justify-between items-center">
               <h2 className="text-lg font-bold">Select Existing Content</h2>
               <button 
                 onClick={(e) => {
                   e.stopPropagation();
                   setIsPickerOpen(false);
                 }} 
-                className="text-zinc-400 hover:text-white p-2 hover:bg-zinc-800 rounded-lg transition-colors"
+                className="text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:text-white p-2 hover:bg-zinc-200 dark:hover:bg-zinc-800 rounded-lg transition-colors"
               >
                 <X className="w-6 h-6" />
               </button>
             </div>
             
-            <div className="p-4 border-b border-zinc-800">
+            <div className="p-4 border-b border-zinc-200 dark:border-zinc-800">
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
                 <input
@@ -381,7 +381,7 @@ export default function MovieRequestsManagement() {
                   placeholder="Search movies or series..."
                   value={contentSearch}
                   onChange={(e) => setContentSearch(e.target.value)}
-                  className="w-full bg-zinc-950 border border-zinc-800 rounded-xl pl-10 pr-4 py-2 text-sm focus:outline-none focus:border-emerald-500"
+                  className="w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl pl-10 pr-4 py-2 text-sm focus:outline-none focus:border-emerald-500"
                 />
               </div>
             </div>
@@ -396,7 +396,7 @@ export default function MovieRequestsManagement() {
                     disabled={isSelecting !== null}
                     onClick={() => handleSelectContent(item.id)}
                     className={clsx(
-                      "w-full p-2 flex items-center gap-3 hover:bg-zinc-800 rounded-xl transition-colors text-left",
+                      "w-full p-2 flex items-center gap-3 hover:bg-zinc-200 dark:hover:bg-zinc-800 rounded-xl transition-colors text-left",
                       isSelecting === item.id && "bg-emerald-500/10 border border-emerald-500/50"
                     )}
                   >

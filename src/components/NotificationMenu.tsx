@@ -66,21 +66,21 @@ export const NotificationMenu: React.FC<NotificationMenuProps> = () => {
     <div className="relative" ref={menuRef}>
       <button 
         onClick={handleOpen}
-        className="relative p-2 text-zinc-400 hover:text-white transition-colors rounded-full hover:bg-zinc-800"
+        className="relative p-1 text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:text-white transition-all active:scale-95 rounded-full hover:bg-zinc-200 dark:hover:bg-zinc-800"
         title="Notifications"
       >
         <Bell className="w-5 h-5" />
         {unreadCount > 0 && (
-          <span className="absolute top-1 right-1 w-4 h-4 bg-red-500 rounded-full text-[10px] font-bold flex items-center justify-center text-white border-2 border-zinc-950">
+          <span className="absolute top-0 right-0 w-4 h-4 bg-red-500 rounded-full text-[10px] font-bold flex items-center justify-center text-white border-2 border-zinc-950">
             {unreadCount > 99 ? '99+' : unreadCount}
           </span>
         )}
       </button>
 
       {isOpen && (
-        <div className="absolute right-0 mt-2 w-80 sm:w-96 bg-zinc-900 border border-zinc-800 rounded-xl shadow-2xl overflow-hidden z-50">
-          <div className="p-4 border-b border-zinc-800 flex items-center justify-between bg-zinc-950/50">
-            <h3 className="font-bold text-white">Notifications</h3>
+        <div className="absolute right-0 mt-2 w-80 sm:w-96 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl shadow-2xl overflow-hidden z-50">
+          <div className="p-4 border-b border-zinc-200 dark:border-zinc-800 flex items-center justify-between bg-white/50 dark:bg-zinc-950/50">
+            <h3 className="font-bold text-zinc-900 dark:text-white">Notifications</h3>
             {unreadCount > 0 && (
               <span className="text-xs font-medium text-emerald-500">{unreadCount} new</span>
             )}
@@ -104,24 +104,24 @@ export const NotificationMenu: React.FC<NotificationMenuProps> = () => {
                       key={notification.id}
                       to={`/movie/${notification.contentId}`}
                       onClick={() => setIsOpen(false)}
-                      className={`block p-4 hover:bg-zinc-800/50 transition-colors ${isNew ? 'bg-emerald-500/5' : ''}`}
+                      className={`block p-4 hover:bg-zinc-200 dark:hover:bg-zinc-800/50 transition-colors ${isNew ? 'bg-emerald-500/5' : ''}`}
                     >
                       <div className="flex gap-4">
                         {notification.posterUrl ? (
                           <img 
                             src={notification.posterUrl} 
                             alt="Poster" 
-                            className="w-12 h-16 object-cover rounded-md shrink-0 border border-zinc-800"
+                            className="w-12 h-16 object-cover rounded-md shrink-0 border border-zinc-200 dark:border-zinc-800"
                             referrerPolicy="no-referrer"
                           />
                         ) : (
-                          <div className="w-12 h-16 bg-zinc-800 rounded-md shrink-0 flex items-center justify-center">
+                          <div className="w-12 h-16 bg-zinc-100 dark:bg-zinc-800 rounded-md shrink-0 flex items-center justify-center">
                             <Bell className="w-5 h-5 text-zinc-600" />
                           </div>
                         )}
                         <div className="flex-1 min-w-0">
-                          <h4 className="text-sm font-bold text-white mb-1 leading-tight">{notification.title}</h4>
-                          <p className="text-xs text-zinc-400 line-clamp-2 mb-2">{notification.body}</p>
+                          <h4 className="text-sm font-bold text-zinc-900 dark:text-white mb-1 leading-tight">{notification.title}</h4>
+                          <p className="text-xs text-zinc-500 dark:text-zinc-400 line-clamp-2 mb-2">{notification.body}</p>
                           <div className="flex items-center justify-between">
                             <span className="text-[10px] text-zinc-500 font-medium">
                               {formatDistanceToNow(new Date(notification.createdAt), { addSuffix: true })}

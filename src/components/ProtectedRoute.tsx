@@ -12,7 +12,7 @@ export function ProtectedRoute({ children, requireAdmin = false }: ProtectedRout
   const location = useLocation();
 
   if (authLoading) {
-    return <div className="min-h-screen bg-zinc-950" />;
+    return <div className="min-h-screen bg-white dark:bg-zinc-950" />;
   }
 
   if (!user) {
@@ -23,7 +23,7 @@ export function ProtectedRoute({ children, requireAdmin = false }: ProtectedRout
   // If admin is required, we must wait for the profile to check roles
   if (requireAdmin) {
     if (loading || !profile) {
-      return <div className="min-h-screen bg-zinc-950" />;
+      return <div className="min-h-screen bg-white dark:bg-zinc-950" />;
     }
     if (profile.role !== 'admin' && profile.role !== 'content_manager' && profile.role !== 'user_manager' && profile.role !== 'manager' && profile.role !== 'owner') {
       console.log('ProtectedRoute: Admin required but user is not admin/manager/owner, redirecting to home');

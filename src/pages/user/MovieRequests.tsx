@@ -140,7 +140,7 @@ export default function MovieRequests() {
       <header className="sticky top-0 z-40 bg-white/80 dark:bg-zinc-950/80 backdrop-blur-xl border-b border-zinc-200 dark:border-zinc-800 transition-colors duration-300">
         <div className="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between">
           <div className="flex items-center gap-4">
-            <Link to="/" className="p-2 hover:bg-zinc-100 dark:hover:bg-zinc-900 rounded-lg transition-colors text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white">
+            <Link to="/" className="p-2 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-lg transition-colors text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white">
               <ArrowLeft className="w-5 h-5" />
             </Link>
             <h1 className="text-xl font-bold flex items-center gap-2">
@@ -199,7 +199,7 @@ export default function MovieRequests() {
             placeholder="Search existing requests..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl pl-12 pr-4 py-3 focus:outline-none focus:border-emerald-500 transition-colors duration-300"
+            className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl pl-12 pr-4 py-3 focus:outline-none focus:border-emerald-500 text-zinc-900 dark:text-white placeholder-zinc-500 dark:placeholder-zinc-400 transition-colors duration-300"
           />
         </div>
 
@@ -224,7 +224,7 @@ export default function MovieRequests() {
             {filteredRequests.map((request) => (
               <div 
                 key={request.id}
-                className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-4 flex items-center justify-between group hover:border-zinc-300 dark:hover:border-zinc-700 transition-colors shadow-sm"
+                className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-4 flex items-center justify-between group hover:border-zinc-300 dark:hover:border-zinc-300 dark:border-zinc-700 transition-colors shadow-sm"
               >
             <div className="flex items-center gap-4">
               <div className={clsx(
@@ -278,7 +278,7 @@ export default function MovieRequests() {
                       className={clsx(
                         "px-4 py-2 rounded-xl text-sm font-bold transition-all flex items-center gap-2",
                         request.requestedBy.includes(profile?.uid || '')
-                          ? "bg-zinc-800 text-zinc-500 cursor-default"
+                          ? "bg-zinc-100 dark:bg-zinc-800 text-zinc-500 cursor-default"
                           : "bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500 hover:text-white"
                       )}
                     >
@@ -308,7 +308,7 @@ export default function MovieRequests() {
           <div className="bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-6 max-w-md w-full relative transition-colors duration-300 shadow-2xl">
             <button 
               onClick={() => setIsRequestModalOpen(false)}
-              className="absolute top-4 right-4 text-zinc-400 dark:text-zinc-500 hover:text-zinc-900 dark:hover:text-white transition-colors"
+              className="absolute top-4 right-4 text-zinc-500 dark:text-zinc-400 dark:text-zinc-500 hover:text-zinc-900 dark:hover:text-white transition-colors"
             >
               <XCircle className="w-6 h-6" />
             </button>
@@ -329,7 +329,7 @@ export default function MovieRequests() {
                       "flex items-center justify-center gap-2 py-3 rounded-xl border font-bold transition-all duration-300",
                       newRequest.type === 'movie' 
                         ? "bg-blue-500/10 border-blue-500 text-blue-500" 
-                        : "bg-zinc-50 dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800 text-zinc-500 hover:border-zinc-300 dark:hover:border-zinc-700"
+                        : "bg-zinc-50 dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800 text-zinc-500 hover:border-zinc-300 dark:hover:border-zinc-300 dark:border-zinc-700"
                     )}
                   >
                     <Film className="w-4 h-4" />
@@ -342,7 +342,7 @@ export default function MovieRequests() {
                       "flex items-center justify-center gap-2 py-3 rounded-xl border font-bold transition-all duration-300",
                       newRequest.type === 'series' 
                         ? "bg-purple-500/10 border-purple-500 text-purple-500" 
-                        : "bg-zinc-50 dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800 text-zinc-500 hover:border-zinc-300 dark:hover:border-zinc-700"
+                        : "bg-zinc-50 dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800 text-zinc-500 hover:border-zinc-300 dark:hover:border-zinc-300 dark:border-zinc-700"
                     )}
                   >
                     <Tv className="w-4 h-4" />

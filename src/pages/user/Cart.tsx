@@ -66,10 +66,10 @@ export default function Cart() {
       <motion.div 
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
-        className="min-h-screen bg-zinc-950 text-white p-4 md:p-8 flex flex-col items-center justify-center"
+        className="min-h-screen bg-white dark:bg-zinc-950 text-zinc-900 dark:text-white p-4 md:p-8 flex flex-col items-center justify-center transition-colors duration-300"
       >
         <h2 className="text-2xl font-bold mb-4">Your Cart is Empty</h2>
-        <button onClick={() => navigate('/')} className="text-red-500 hover:text-red-400 flex items-center">
+        <button onClick={() => navigate('/')} className="text-red-500 hover:text-red-400 flex items-center transition-all active:scale-95">
           <ArrowLeft className="w-5 h-5 mr-2" />
           Back to Home
         </button>
@@ -84,23 +84,23 @@ export default function Cart() {
     <motion.div 
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
-      className="min-h-screen bg-zinc-950 text-white p-4 md:p-8"
+      className="min-h-screen bg-white dark:bg-zinc-950 text-zinc-900 dark:text-white p-4 md:p-8 transition-colors duration-300"
     >
       <div className="max-w-2xl mx-auto">
-        <button onClick={() => navigate('/')} className="flex items-center text-zinc-400 hover:text-white mb-6">
+        <button onClick={() => navigate('/')} className="flex items-center text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:text-white mb-6 transition-all active:scale-95">
           <ArrowLeft className="w-5 h-5 mr-2" />
           Back to Home
         </button>
 
         <h1 className="text-2xl font-bold mb-6">Your Cart</h1>
 
-        <div className="bg-zinc-900 rounded-xl p-6 mb-6">
+        <div className="bg-zinc-50 dark:bg-zinc-900 rounded-xl p-6 mb-6">
           <div className="space-y-4">
             {cart.map((item, index) => (
-              <div key={index} className="flex items-start sm:items-center justify-between gap-4 border-b border-zinc-800 pb-4 last:border-0 last:pb-0">
+              <div key={index} className="flex items-start sm:items-center justify-between gap-4 border-b border-zinc-200 dark:border-zinc-800 pb-4 last:border-0 last:pb-0">
                 <div className="flex-1 min-w-0">
                   <h3 className="font-semibold truncate">{item.title}</h3>
-                  <p className="text-sm text-zinc-400">
+                  <p className="text-sm text-zinc-500 dark:text-zinc-400">
                     {item.type === 'season' ? `Season ${item.seasonNumber}` : 'Movie'}
                   </p>
                 </div>
@@ -117,18 +117,18 @@ export default function Cart() {
             ))}
           </div>
           
-          <div className="flex justify-between items-center border-t border-zinc-800 pt-4 mt-4">
+          <div className="flex justify-between items-center border-t border-zinc-200 dark:border-zinc-800 pt-4 mt-4">
             <span className="text-lg font-semibold">Total Amount</span>
             <span className="text-2xl font-bold text-red-500">Rs {totalPrice}</span>
           </div>
         </div>
 
-        <div className="bg-zinc-900 rounded-xl p-6 mb-6 shadow-2xl border border-zinc-800/50">
+        <div className="bg-zinc-50 dark:bg-zinc-900 rounded-xl p-6 mb-6 shadow-2xl border border-zinc-200 dark:border-zinc-800/50">
           <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
             <Wallet className="w-5 h-5 text-emerald-500" />
             Payment Details
           </h2>
-          <p className="text-zinc-400 mb-6 text-sm">
+          <p className="text-zinc-500 dark:text-zinc-400 mb-6 text-sm">
             Please send the payment to the following account via any of these methods:
           </p>
           
@@ -136,7 +136,7 @@ export default function Cart() {
         </div>
 
         <div className="text-center mb-6">
-          <p className="text-zinc-400 text-sm">
+          <p className="text-zinc-500 dark:text-zinc-400 text-sm">
             After Payment Send Screenshot for Confirmation
           </p>
         </div>
@@ -144,7 +144,7 @@ export default function Cart() {
         <button
           onClick={handleCheckout}
           disabled={loading}
-          className="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-4 rounded-xl flex items-center justify-center gap-2 transition-colors disabled:opacity-50"
+          className="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-4 rounded-xl flex items-center justify-center gap-2 transition-all active:scale-95 disabled:opacity-50 border border-white/20 shadow-lg"
         >
           {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Send className="w-5 h-5" />}
           {loading ? 'Processing...' : 'Send Now'}

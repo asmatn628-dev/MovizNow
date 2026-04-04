@@ -810,7 +810,7 @@ export default function ErrorLinks() {
             <AlertTriangle className="w-8 h-8 text-yellow-500" />
             Error Links
           </h1>
-          <p className="text-zinc-400 mt-1">Deep Scan using multiple algorithms to find broken links across your entire content library.</p>
+          <p className="text-zinc-500 dark:text-zinc-400 mt-1">Deep Scan using multiple algorithms to find broken links across your entire content library.</p>
         </div>
         
         <div className="flex flex-col gap-3 items-start lg:items-end w-full lg:w-auto">
@@ -827,7 +827,7 @@ export default function ErrorLinks() {
             )}
             
             {scanning ? (
-              <div className="bg-zinc-800/50 px-4 py-2 rounded-lg border border-zinc-700 flex items-center gap-3">
+              <div className="bg-zinc-100 dark:bg-zinc-800/50 px-4 py-2 rounded-lg border border-zinc-300 dark:border-zinc-700 flex items-center gap-3">
                 <div className="flex flex-col items-end">
                   <div className="text-[10px] text-zinc-500 uppercase font-bold tracking-wider">Scanning Progress</div>
                   <div className="text-sm font-mono text-emerald-500">{scanProgress} / {scanTotal}</div>
@@ -851,7 +851,7 @@ export default function ErrorLinks() {
                 setModalTitle('Manual Link Checker');
                 setIsLinkCheckerModalOpen(true);
               }}
-              className="bg-zinc-800 hover:bg-zinc-700 text-white px-4 py-2 rounded-lg text-sm font-medium flex items-center justify-center gap-2 transition-all active:scale-95 whitespace-nowrap border border-zinc-700"
+              className="bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-300 dark:hover:bg-zinc-700 text-zinc-900 dark:text-white px-4 py-2 rounded-lg text-sm font-medium flex items-center justify-center gap-2 transition-all active:scale-95 whitespace-nowrap border border-zinc-300 dark:border-zinc-700"
             >
               <Search className="w-4 h-4" />
               Manual Check
@@ -872,7 +872,7 @@ export default function ErrorLinks() {
                 <button
                   onClick={() => scanLinks(true)}
                   disabled={loading}
-                  className="bg-zinc-800 hover:bg-zinc-700 text-white px-4 py-2 rounded-lg text-sm font-medium flex items-center justify-center gap-2 transition-all active:scale-95 whitespace-nowrap border border-zinc-700"
+                  className="bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-300 dark:hover:bg-zinc-700 text-zinc-900 dark:text-white px-4 py-2 rounded-lg text-sm font-medium flex items-center justify-center gap-2 transition-all active:scale-95 whitespace-nowrap border border-zinc-300 dark:border-zinc-700"
                 >
                   <RefreshCw className="w-4 h-4" />
                   Re-check Filtered ({filteredAndSortedLinks.length})
@@ -902,20 +902,20 @@ export default function ErrorLinks() {
           <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-emerald-500"></div>
         </div>
       ) : (
-        <div className="bg-zinc-900 border border-zinc-800 rounded-2xl overflow-hidden">
+        <div className="bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl overflow-hidden">
           {scanning && errorLinks.length > 0 && (
-            <div className="p-6 border-b border-zinc-800 bg-zinc-900/80 backdrop-blur-sm">
+            <div className="p-6 border-b border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900/80 backdrop-blur-sm">
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center gap-3">
                   <RefreshCw className="w-5 h-5 animate-spin text-emerald-500" />
                   <div>
-                    <div className="text-white font-medium">Scanning in progress...</div>
+                    <div className="text-zinc-900 dark:text-white font-medium">Scanning in progress...</div>
                     <div className="text-xs text-zinc-500">Checking links: {scanProgress} / {scanTotal}</div>
                   </div>
                 </div>
                 <div className="text-emerald-500 font-bold font-mono">{Math.round((scanProgress / scanTotal) * 100)}%</div>
               </div>
-              <div className="w-full bg-zinc-800 h-1.5 rounded-full overflow-hidden">
+              <div className="w-full bg-zinc-100 dark:bg-zinc-800 h-1.5 rounded-full overflow-hidden">
                 <motion.div 
                   className="bg-emerald-500 h-full"
                   initial={{ width: 0 }}
@@ -934,10 +934,10 @@ export default function ErrorLinks() {
                       <span className="text-xl font-bold text-emerald-500">{Math.round((scanProgress / scanTotal) * 100)}%</span>
                     </div>
                   </div>
-                  <p className="text-xl text-white font-medium">Scanning links... {scanProgress} / {scanTotal}</p>
-                  <p className="text-sm text-zinc-400 mt-2">Checking all Pixeldrain links in your content library.</p>
+                  <p className="text-xl text-zinc-900 dark:text-white font-medium">Scanning links... {scanProgress} / {scanTotal}</p>
+                  <p className="text-sm text-zinc-500 dark:text-zinc-400 mt-2">Checking all Pixeldrain links in your content library.</p>
                   
-                  <div className="w-full max-w-md bg-zinc-800 h-2 rounded-full mt-8 overflow-hidden">
+                  <div className="w-full max-w-md bg-zinc-100 dark:bg-zinc-800 h-2 rounded-full mt-8 overflow-hidden">
                     <motion.div 
                       className="bg-emerald-500 h-full"
                       initial={{ width: 0 }}
@@ -948,32 +948,32 @@ export default function ErrorLinks() {
               ) : scanStatus === 'completed' ? (
                 <div className="flex flex-col items-center">
                   <CheckCircle2 className="w-16 h-16 mb-4 text-emerald-500" />
-                  <p className="text-xl text-white font-medium">All links are working perfectly!</p>
+                  <p className="text-xl text-zinc-900 dark:text-white font-medium">All links are working perfectly!</p>
                   <p className="text-sm mt-2">We checked the Pixeldrain links and found no errors.</p>
                 </div>
               ) : scanStatus === 'error' ? (
                 <div className="flex flex-col items-center">
                   <AlertTriangle className="w-16 h-16 mb-4 text-red-500" />
-                  <p className="text-xl text-white font-medium">Cannot scan links</p>
+                  <p className="text-xl text-zinc-900 dark:text-white font-medium">Cannot scan links</p>
                   <p className="text-sm mt-2">There was a problem scanning the links. Please try again.</p>
                 </div>
               ) : (
                 <div className="flex flex-col items-center">
                   <CheckCircle2 className="w-16 h-16 mb-4 text-emerald-500/50" />
-                  <p className="text-xl text-white">No error links found.</p>
+                  <p className="text-xl text-zinc-900 dark:text-white">No error links found.</p>
                   <p className="text-sm mt-2">Click "Start Deep Scan" to check all Pixeldrain links.</p>
                 </div>
               )}
             </div>
           ) : (
             <div className="flex flex-col">
-              <div className="p-4 border-b border-zinc-800 bg-zinc-900/50 flex flex-col sm:flex-row gap-4 justify-between items-center">
+              <div className="p-4 border-b border-zinc-200 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-900/50 flex flex-col sm:flex-row gap-4 justify-between items-center">
                 <div className="flex items-center gap-2 w-full sm:w-auto">
-                  <Filter className="w-4 h-4 text-zinc-400" />
+                  <Filter className="w-4 h-4 text-zinc-500 dark:text-zinc-400" />
                   <select
                     value={filterErrorType}
                     onChange={(e) => setFilterErrorType(e.target.value)}
-                    className="bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-emerald-500 w-full sm:w-auto"
+                    className="bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg px-3 py-2 text-sm text-zinc-900 dark:text-white focus:outline-none focus:border-emerald-500 w-full sm:w-auto"
                   >
                     <option value="all">All Errors</option>
                     {uniqueErrorTypes.map(type => (
@@ -982,11 +982,11 @@ export default function ErrorLinks() {
                   </select>
                 </div>
                 <div className="flex items-center gap-2 w-full sm:w-auto">
-                  <ArrowUpDown className="w-4 h-4 text-zinc-400" />
+                  <ArrowUpDown className="w-4 h-4 text-zinc-500 dark:text-zinc-400" />
                   <select
                     value={sortBy}
                     onChange={(e) => setSortBy(e.target.value as 'title' | 'error' | 'date')}
-                    className="bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-emerald-500 w-full sm:w-auto"
+                    className="bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg px-3 py-2 text-sm text-zinc-900 dark:text-white focus:outline-none focus:border-emerald-500 w-full sm:w-auto"
                   >
                     <option value="date">Sort by Date</option>
                     <option value="title">Sort by Title</option>
@@ -994,7 +994,7 @@ export default function ErrorLinks() {
                   </select>
                   <button
                     onClick={() => setSortOrder(prev => prev === 'asc' ? 'desc' : 'asc')}
-                    className="bg-zinc-950 border border-zinc-800 hover:bg-zinc-800 rounded-lg px-3 py-2 text-sm text-white transition-colors"
+                    className="bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-800 rounded-lg px-3 py-2 text-sm text-zinc-900 dark:text-white transition-colors"
                   >
                     {sortOrder === 'asc' ? 'Asc' : 'Desc'}
                   </button>
@@ -1002,7 +1002,7 @@ export default function ErrorLinks() {
               </div>
               <div className="overflow-x-auto">
                 <table className="w-full text-left text-sm">
-                  <thead className="bg-zinc-950 text-zinc-400">
+                  <thead className="bg-white dark:bg-zinc-950 text-zinc-500 dark:text-zinc-400">
                     <tr>
                       <th className="px-6 py-4 font-medium whitespace-nowrap">Date</th>
                       <th className="px-6 py-4 font-medium whitespace-nowrap">Content</th>
@@ -1014,9 +1014,9 @@ export default function ErrorLinks() {
                   </thead>
                   <tbody className="divide-y divide-zinc-800">
                     {filteredAndSortedLinks.map((info, i) => (
-                      <tr key={i} className="hover:bg-zinc-800/50 transition-colors">
+                      <tr key={i} className="hover:bg-zinc-200 dark:hover:bg-zinc-800/50 transition-colors">
                       <td className="px-6 py-4">
-                        <div className="text-zinc-300">
+                        <div className="text-zinc-600 dark:text-zinc-300">
                           {info.createdAt ? new Date(info.createdAt).toLocaleDateString() : 'N/A'}
                         </div>
                         <div className="text-[10px] text-zinc-500">
@@ -1024,13 +1024,13 @@ export default function ErrorLinks() {
                         </div>
                       </td>
                       <td className="px-6 py-4">
-                        <div className="font-medium text-white">{info.contentTitle}</div>
+                        <div className="font-medium text-zinc-900 dark:text-white">{info.contentTitle}</div>
                         <div className="text-xs text-zinc-500 uppercase">{info.contentType}</div>
                       </td>
-                      <td className="px-6 py-4 text-zinc-300">{info.location}</td>
+                      <td className="px-6 py-4 text-zinc-600 dark:text-zinc-300">{info.location}</td>
                       <td className="px-6 py-4">
                         <div className="flex items-center gap-2">
-                          <span className="text-zinc-300">{info.link.name}</span>
+                          <span className="text-zinc-600 dark:text-zinc-300">{info.link.name}</span>
                           <span className="text-xs text-zinc-500">({info.link.size}{info.link.unit})</span>
                         </div>
                         <a href={info.link.url} target="_blank" rel="noopener noreferrer" className="text-xs text-emerald-500 hover:underline flex items-center gap-1 mt-1 truncate max-w-[200px]">
@@ -1056,14 +1056,14 @@ export default function ErrorLinks() {
                                 setIsAddLinksModalOpen(true);
                               }
                             }}
-                            className="bg-zinc-800 hover:bg-zinc-700 text-white p-1.5 rounded-lg transition-colors"
+                            className="bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-300 dark:hover:bg-zinc-700 text-zinc-900 dark:text-white p-1.5 rounded-lg transition-colors"
                             title="Add Links"
                           >
                             <Plus className="w-4 h-4" />
                           </button>
                           <button
                             onClick={() => handleEditClick(info)}
-                            className="bg-zinc-800 hover:bg-zinc-700 text-white p-1.5 rounded-lg transition-colors"
+                            className="bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-300 dark:hover:bg-zinc-700 text-zinc-900 dark:text-white p-1.5 rounded-lg transition-colors"
                             title="Edit"
                           >
                             <Edit2 className="w-4 h-4" />
@@ -1100,30 +1100,30 @@ export default function ErrorLinks() {
               initial={{ opacity: 0, scale: 0.95, y: 20 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95, y: 20 }}
-              className="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-lg p-6"
+              className="bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl w-full max-w-lg p-6"
             >
               <div className="flex items-center justify-between mb-6">
-                <h2 className="text-xl font-bold text-white">Add Links to {addLinksContent.title}</h2>
-                <button onClick={() => setIsAddLinksModalOpen(false)} className="text-zinc-400 hover:text-white">
+                <h2 className="text-xl font-bold text-zinc-900 dark:text-white">Add Links to {addLinksContent.title}</h2>
+                <button onClick={() => setIsAddLinksModalOpen(false)} className="text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:text-white">
                   <X className="w-6 h-6" />
                 </button>
               </div>
 
               <div className="space-y-4">
                 <div>
-                  <label className="block text-sm font-medium text-zinc-400 mb-2">Paste Links (JSON or Name:URL format)</label>
+                  <label className="block text-sm font-medium text-zinc-500 dark:text-zinc-400 mb-2">Paste Links (JSON or Name:URL format)</label>
                   <textarea
                     value={addLinksInput}
                     onChange={(e) => setAddLinksInput(e.target.value)}
                     placeholder='[{"name":"720p","url":"..."},...]'
-                    className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-3 focus:outline-none focus:border-emerald-500 h-40 font-mono text-sm"
+                    className="w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-3 focus:outline-none focus:border-emerald-500 h-40 font-mono text-sm"
                   />
                 </div>
 
                 <div className="flex gap-3 pt-2">
                   <button
                     onClick={() => setIsAddLinksModalOpen(false)}
-                    className="flex-1 bg-zinc-800 hover:bg-zinc-700 text-white py-3 rounded-xl font-bold transition-colors"
+                    className="flex-1 bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-300 dark:hover:bg-zinc-700 text-zinc-900 dark:text-white py-3 rounded-xl font-bold transition-colors"
                   >
                     Cancel
                   </button>
@@ -1155,39 +1155,39 @@ export default function ErrorLinks() {
               initial={{ opacity: 0, scale: 0.95, y: 20 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95, y: 20 }}
-              className="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-md p-6"
+              className="bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl w-full max-w-md p-6"
             >
               <div className="flex items-center justify-between mb-6">
                 <h2 className="text-xl font-bold">Edit Link</h2>
-                <button onClick={() => setEditingLink(null)} className="text-zinc-400 hover:text-white">
+                <button onClick={() => setEditingLink(null)} className="text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:text-white">
                   <X className="w-6 h-6" />
                 </button>
               </div>
 
               <div className="space-y-4">
                 <div>
-                  <label className="block text-sm font-medium text-zinc-400 mb-1">Content</label>
-                  <div className="text-white font-medium">{editingLink.contentTitle} <span className="text-zinc-500 text-sm">({editingLink.location})</span></div>
+                  <label className="block text-sm font-medium text-zinc-500 dark:text-zinc-400 mb-1">Content</label>
+                  <div className="text-zinc-900 dark:text-white font-medium">{editingLink.contentTitle} <span className="text-zinc-500 text-sm">({editingLink.location})</span></div>
                 </div>
                 
                 <div>
-                  <label className="block text-sm font-medium text-zinc-400 mb-1">Name</label>
+                  <label className="block text-sm font-medium text-zinc-500 dark:text-zinc-400 mb-1">Name</label>
                   <input
                     type="text"
                     value={editName}
                     onChange={(e) => setEditName(e.target.value)}
-                    className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-3 focus:outline-none focus:border-emerald-500"
+                    className="w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-3 focus:outline-none focus:border-emerald-500"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-zinc-400 mb-1">URL</label>
+                  <label className="block text-sm font-medium text-zinc-500 dark:text-zinc-400 mb-1">URL</label>
                   <input
                     type="text"
                     value={editUrl}
                     onChange={(e) => setEditUrl(e.target.value)}
                     onBlur={(e) => handleUrlBlur(e.target.value)}
-                    className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-3 focus:outline-none focus:border-emerald-500"
+                    className="w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-3 focus:outline-none focus:border-emerald-500"
                   />
                   <div className="flex items-center justify-between mt-1">
                     <p className="text-xs text-zinc-500">Paste a new Pixeldrain link to auto-fetch size.</p>
@@ -1212,12 +1212,12 @@ export default function ErrorLinks() {
 
                 <div className="flex gap-4">
                   <div className="flex-1">
-                    <label className="block text-sm font-medium text-zinc-400 mb-1">Size</label>
+                    <label className="block text-sm font-medium text-zinc-500 dark:text-zinc-400 mb-1">Size</label>
                     <input
                       type="number"
                       value={editSize}
                       onChange={(e) => setEditSize(e.target.value)}
-                      className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-3 focus:outline-none focus:border-emerald-500"
+                      className="w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-3 focus:outline-none focus:border-emerald-500"
                     />
                     {editingLink.fetchedSize && (
                       <button
@@ -1232,19 +1232,19 @@ export default function ErrorLinks() {
                     )}
                   </div>
                   <div className="w-32">
-                    <label className="block text-sm font-medium text-zinc-400 mb-1">Unit</label>
-                    <div className="flex bg-zinc-950 border border-zinc-800 rounded-xl p-1 shrink-0">
+                    <label className="block text-sm font-medium text-zinc-500 dark:text-zinc-400 mb-1">Unit</label>
+                    <div className="flex bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl p-1 shrink-0">
                       <button
                         type="button"
                         onClick={() => setEditUnit('MB')}
-                        className={`flex-1 py-2 rounded-lg text-sm font-bold transition-all ${editUnit === 'MB' ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/20' : 'text-zinc-500 hover:text-zinc-300'}`}
+                        className={`flex-1 py-2 rounded-lg text-sm font-bold transition-all ${editUnit === 'MB' ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/20' : 'text-zinc-500 hover:text-zinc-600 dark:text-zinc-300'}`}
                       >
                         MB
                       </button>
                       <button
                         type="button"
                         onClick={() => setEditUnit('GB')}
-                        className={`flex-1 py-2 rounded-lg text-sm font-bold transition-all ${editUnit === 'GB' ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/20' : 'text-zinc-500 hover:text-zinc-300'}`}
+                        className={`flex-1 py-2 rounded-lg text-sm font-bold transition-all ${editUnit === 'GB' ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/20' : 'text-zinc-500 hover:text-zinc-600 dark:text-zinc-300'}`}
                       >
                         GB
                       </button>
@@ -1256,7 +1256,7 @@ export default function ErrorLinks() {
               <div className="mt-8 flex justify-end gap-3">
                 <button
                   onClick={() => setEditingLink(null)}
-                  className="px-4 py-2 text-zinc-400 hover:text-white transition-colors font-medium"
+                  className="px-4 py-2 text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:text-white transition-colors font-medium"
                 >
                   Cancel
                 </button>

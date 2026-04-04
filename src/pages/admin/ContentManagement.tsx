@@ -4,7 +4,7 @@ import { db } from '../../firebase';
 import { collection, addDoc, deleteDoc, doc, updateDoc, onSnapshot, writeBatch, getDocs } from 'firebase/firestore';
 import { useAuth } from '../../contexts/AuthContext';
 import { useContent } from '../../contexts/ContentContext';
-import { Content, Genre, Language, Quality, QualityLinks, Season, Episode, LinkDef, Role } from '../../types';
+import { Content, Genre, Language, Quality, QualityLinks, Season, Episode, LinkDef, Role, Trailer } from '../../types';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Plus, Edit2, Trash2, Share2, Film, Tv, X, Save, Upload, Search, Eye, EyeOff, ArrowUp, ArrowDown, Copy, ClipboardPaste, GripVertical, Bell, RefreshCw, ChevronDown, ChevronUp, User, Lock } from 'lucide-react';
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
@@ -92,7 +92,7 @@ const QualityInputs: React.FC<QualityInputsProps> = ({ links, onChange, droppabl
                   <div 
                     ref={provided.innerRef}
                     {...provided.draggableProps}
-                    className={`flex flex-col gap-2 bg-zinc-900 p-3 rounded-xl border ${snapshot.isDragging ? 'border-emerald-500 shadow-lg shadow-emerald-500/20 z-50' : 'border-zinc-800'} transition-all`}
+                    className={`flex flex-col gap-2 bg-zinc-50 dark:bg-zinc-900 p-3 rounded-xl border ${snapshot.isDragging ? 'border-emerald-500 shadow-lg shadow-emerald-500/20 z-50' : 'border-zinc-200 dark:border-zinc-800'} transition-all`}
                   >
                       {/* 1st line: Name field */}
                       <div className="flex gap-2 items-center">
@@ -108,7 +108,7 @@ const QualityInputs: React.FC<QualityInputsProps> = ({ links, onChange, droppabl
                               return newLinks;
                             });
                           }}
-                          className={`${droppableId.startsWith('episode-links') ? 'w-45' : 'w-55'} bg-zinc-950 border border-zinc-800 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:border-emerald-500`}
+                          className={`${droppableId.startsWith('episode-links') ? 'w-45' : 'w-55'} bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:border-emerald-500`}
                         />
                         <button
                           type="button"
@@ -139,9 +139,9 @@ const QualityInputs: React.FC<QualityInputsProps> = ({ links, onChange, droppabl
                                 return newLinks;
                               });
                             }}
-                            className="w-20 bg-zinc-950 border border-zinc-800 rounded-lg px-2 py-1.5 text-sm text-center focus:outline-none focus:border-emerald-500"
+                            className="w-20 bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg px-2 py-1.5 text-sm text-center focus:outline-none focus:border-emerald-500"
                           />
-                          <div className="flex bg-zinc-950 border border-zinc-800 rounded-lg p-0.5 shrink-0">
+                          <div className="flex bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg p-0.5 shrink-0">
                             <button
                               type="button"
                               onClick={() => {
@@ -152,7 +152,7 @@ const QualityInputs: React.FC<QualityInputsProps> = ({ links, onChange, droppabl
                                   return newLinks;
                                 });
                               }}
-                              className={`px-2 py-1 rounded-md text-xs font-bold transition-all ${link.unit === 'MB' ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/20' : 'text-zinc-500 hover:text-zinc-300'}`}
+                              className={`px-2 py-1 rounded-md text-xs font-bold transition-all ${link.unit === 'MB' ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/20' : 'text-zinc-500 hover:text-zinc-600 dark:text-zinc-300'}`}
                             >
                               MB
                             </button>
@@ -166,7 +166,7 @@ const QualityInputs: React.FC<QualityInputsProps> = ({ links, onChange, droppabl
                                   return newLinks;
                                 });
                               }}
-                              className={`px-2 py-1 rounded-md text-xs font-bold transition-all ${link.unit === 'GB' ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/20' : 'text-zinc-500 hover:text-zinc-300'}`}
+                              className={`px-2 py-1 rounded-md text-xs font-bold transition-all ${link.unit === 'GB' ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/20' : 'text-zinc-500 hover:text-zinc-600 dark:text-zinc-300'}`}
                             >
                               GB
                             </button>
@@ -184,7 +184,7 @@ const QualityInputs: React.FC<QualityInputsProps> = ({ links, onChange, droppabl
                         >
                           <Trash2 className="w-4 h-4" />
                         </button>
-                        <div {...provided.dragHandleProps} className="text-zinc-600 hover:text-zinc-400 cursor-grab active:cursor-grabbing p-2 hover:bg-zinc-800 rounded-lg transition-colors">
+                        <div {...provided.dragHandleProps} className="text-zinc-600 hover:text-zinc-500 dark:text-zinc-400 cursor-grab active:cursor-grabbing p-2 hover:bg-zinc-200 dark:hover:bg-zinc-800 rounded-lg transition-colors">
                           <GripVertical className="w-4 h-4" />
                         </div>
                       </div>
@@ -202,7 +202,7 @@ const QualityInputs: React.FC<QualityInputsProps> = ({ links, onChange, droppabl
                           });
                         }}
                         onBlur={(e) => handleUrlBlur(e.target.value, idx)}
-                        className="flex-1 bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-emerald-500"
+                        className="flex-1 bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-emerald-500"
                       />
                     </div>
                   </div>
@@ -236,6 +236,7 @@ export default function ContentManagement() {
   const [posterUrl, setPosterUrl] = useState('');
   const [trailerUrl, setTrailerUrl] = useState('');
   const [trailerTitle, setTrailerTitle] = useState('');
+  const [trailers, setTrailers] = useState<Trailer[]>([]);
   const [sampleUrl, setSampleUrl] = useState('');
   const [imdbLink, setImdbLink] = useState('');
   const [imdbRating, setImdbRating] = useState('');
@@ -446,6 +447,8 @@ export default function ContentManagement() {
     setDescription('');
     setPosterUrl('');
     setTrailerUrl('');
+    setTrailerTitle('');
+    setTrailers([]);
     setSampleUrl('');
     setImdbLink('');
     setImdbRating('');
@@ -495,6 +498,7 @@ export default function ContentManagement() {
     setDescription(content.description);
     setPosterUrl(content.posterUrl);
     setTrailerUrl(content.trailerUrl);
+    setTrailers(content.trailers ? JSON.parse(content.trailers) : []);
     setSampleUrl(content.sampleUrl || '');
     setImdbLink(content.imdbLink || '');
     setImdbRating(content.imdbRating || '');
@@ -592,6 +596,7 @@ export default function ContentManagement() {
         description,
         posterUrl,
         trailerUrl,
+        trailers: JSON.stringify(trailers),
         sampleUrl,
         imdbLink,
         imdbRating,
@@ -2033,7 +2038,7 @@ export default function ContentManagement() {
             {(profile?.role === 'admin' || profile?.role === 'owner') && (
               <button
                 onClick={() => setIsAdjustContentsModalOpen(true)}
-                className="flex items-center gap-1.5 bg-zinc-800 hover:bg-zinc-700 text-white px-3 py-1.5 rounded-lg transition-colors font-medium text-xs md:text-sm whitespace-nowrap"
+                className="flex items-center gap-1.5 bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-300 dark:hover:bg-zinc-700 text-zinc-900 dark:text-white px-3 py-1.5 rounded-lg transition-colors font-medium text-xs md:text-sm whitespace-nowrap"
               >
                 <GripVertical className="w-3.5 h-3.5" />
                 Adjust Contents
@@ -2048,12 +2053,12 @@ export default function ContentManagement() {
                 placeholder="Search content..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full bg-zinc-900 border border-zinc-800 rounded-xl pl-10 pr-4 py-3 focus:outline-none focus:border-emerald-500"
+                className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl pl-10 pr-4 py-3 focus:outline-none focus:border-emerald-500"
               />
             </div>
             {selectedContent.length > 0 && (
-              <div className="flex items-center gap-2 bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-2">
-                <span className="text-sm text-zinc-400">{selectedContent.length} selected</span>
+              <div className="flex items-center gap-2 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-2">
+                <span className="text-sm text-zinc-500 dark:text-zinc-400">{selectedContent.length} selected</span>
                 <select
                   onChange={(e) => {
                     if (e.target.value === 'delete') {
@@ -2090,22 +2095,22 @@ export default function ContentManagement() {
           </div>
         </div>
         
-        <div className="flex flex-col gap-1 bg-zinc-900 p-3 rounded-xl border border-zinc-800">
+        <div className="flex flex-col gap-1 bg-zinc-50 dark:bg-zinc-900 p-3 rounded-xl border border-zinc-200 dark:border-zinc-800">
           {/* Line 1 */}
           <div className="flex flex-row flex-nowrap gap-1">
-            <button onClick={clearFilters} className="flex-none bg-zinc-800 hover:bg-zinc-700 text-white rounded-lg px-2 py-1 text-xs flex items-center gap-1">
+            <button onClick={clearFilters} className="flex-none bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-300 dark:hover:bg-zinc-700 text-zinc-900 dark:text-white rounded-lg px-2 py-1 text-xs flex items-center gap-1">
               <X className="w-3 h-3" />
             </button>
-            <select value={filterType} onChange={(e) => setFilterType(e.target.value as any)} className="bg-zinc-950 border border-zinc-800 rounded-lg px-2 py-1 text-xs focus:border-emerald-500">
+            <select value={filterType} onChange={(e) => setFilterType(e.target.value as any)} className="bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg px-2 py-1 text-xs focus:border-emerald-500">
               <option value="all">Types</option>
               <option value="movie">Movies</option>
               <option value="series">Series</option>
             </select>
-            <select value={filterYear} onChange={(e) => setFilterYear(e.target.value)} className="bg-zinc-950 border border-zinc-800 rounded-lg px-2 py-1 text-xs focus:border-emerald-500">
+            <select value={filterYear} onChange={(e) => setFilterYear(e.target.value)} className="bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg px-2 py-1 text-xs focus:border-emerald-500">
               <option value="all">Years</option>
               {uniqueYears.map(y => <option key={y} value={y.toString()}>{y}</option>)}
             </select>
-            <select value={filterSort} onChange={(e) => setFilterSort(e.target.value as any)} className="bg-zinc-950 border border-zinc-800 rounded-lg px-2 py-1 text-xs focus:border-emerald-500">
+            <select value={filterSort} onChange={(e) => setFilterSort(e.target.value as any)} className="bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg px-2 py-1 text-xs focus:border-emerald-500">
               <option value="default">Default Order</option>
               <option value="newest">Newest Added</option>
               <option value="oldest">Oldest Added</option>
@@ -2113,28 +2118,28 @@ export default function ContentManagement() {
           </div>
           {/* Line 2 */}
           <div className="flex flex-row flex-nowrap gap-1">
-            <select value={filterGenre} onChange={(e) => setFilterGenre(e.target.value)} className="bg-zinc-950 border border-zinc-800 rounded-lg px-2 py-1 text-xs focus:border-emerald-500">
+            <select value={filterGenre} onChange={(e) => setFilterGenre(e.target.value)} className="bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg px-2 py-1 text-xs focus:border-emerald-500">
               <option value="all">Genres</option>
               {genres.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
             </select>
-            <select value={filterLanguage} onChange={(e) => setFilterLanguage(e.target.value)} className="bg-zinc-950 border border-zinc-800 rounded-lg px-2 py-1 text-xs focus:border-emerald-500">
+            <select value={filterLanguage} onChange={(e) => setFilterLanguage(e.target.value)} className="bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg px-2 py-1 text-xs focus:border-emerald-500">
               <option value="all">Languages</option>
               {languages.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
             </select>
-            <select value={filterQuality} onChange={(e) => setFilterQuality(e.target.value)} className="bg-zinc-950 border border-zinc-800 rounded-lg px-2 py-1 text-xs focus:border-emerald-500">
+            <select value={filterQuality} onChange={(e) => setFilterQuality(e.target.value)} className="bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg px-2 py-1 text-xs focus:border-emerald-500">
               <option value="all">Qualities</option>
               {qualities.map(q => <option key={q.id} value={q.id}>{q.name}</option>)}
             </select>
           </div>
           {/* Line 3 */}
           <div className="flex flex-row flex-nowrap gap-1">
-            <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value as any)} className="bg-zinc-950 border border-zinc-800 rounded-lg px-2 py-1 text-xs focus:border-emerald-500">
+            <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value as any)} className="bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg px-2 py-1 text-xs focus:border-emerald-500">
               <option value="all">Status</option>
               <option value="published">Published</option>
               <option value="draft">Draft</option>
             </select>
             {(profile?.role === 'admin' || profile?.role === 'owner') && (
-              <select value={filterAddedBy} onChange={(e) => setFilterAddedBy(e.target.value)} className="bg-zinc-950 border border-zinc-800 rounded-lg px-2 py-1 text-xs focus:border-emerald-500">
+              <select value={filterAddedBy} onChange={(e) => setFilterAddedBy(e.target.value)} className="bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg px-2 py-1 text-xs focus:border-emerald-500">
                 <option value="all">Added By: All</option>
                 {Object.entries(managers).map(([id, name]) => (
                   <option key={id} value={id}>{name}</option>
@@ -2151,11 +2156,11 @@ export default function ContentManagement() {
             type="checkbox" 
             checked={selectedContent.length === filteredContent.length && filteredContent.length > 0}
             onChange={handleSelectAll}
-            className="w-4 h-4 rounded border-zinc-700 bg-zinc-900 text-emerald-500 focus:ring-emerald-500 focus:ring-offset-zinc-950"
+            className="w-4 h-4 rounded border-zinc-300 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-900 text-emerald-500 focus:ring-emerald-500 focus:ring-offset-zinc-950"
           />
-          <span className="text-sm text-zinc-400">Select All</span>
+          <span className="text-sm text-zinc-500 dark:text-zinc-400">Select All</span>
         </div>
-        <div className="text-sm text-zinc-400">
+        <div className="text-sm text-zinc-500 dark:text-zinc-400">
           {filteredContent.length} items found
         </div>
       </div>
@@ -2165,14 +2170,14 @@ export default function ContentManagement() {
           <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-emerald-500"></div>
         </div>
       ) : filteredContent.length === 0 ? (
-        <div className="text-center py-20 text-zinc-500 bg-zinc-900 border border-zinc-800 rounded-xl">
+        <div className="text-center py-20 text-zinc-500 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl">
           <Film className="w-16 h-16 mx-auto mb-4 opacity-20" />
           <p className="text-xl">No content found matching your filters.</p>
         </div>
       ) : (
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3 md:gap-6">
           {filteredContent.map((content) => (
-            <div key={content.id} className="bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden flex flex-col group relative">
+            <div key={content.id} className="bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl overflow-hidden flex flex-col group relative">
               <div className="absolute top-2 left-2 z-10">
                 <input 
                   type="checkbox" 
@@ -2181,7 +2186,7 @@ export default function ContentManagement() {
                     e.stopPropagation();
                     handleSelectContent(content.id, e as any);
                   }}
-                  className="w-4 h-4 rounded border-zinc-700 bg-zinc-900 text-emerald-500 focus:ring-emerald-500 focus:ring-offset-zinc-950"
+                  className="w-4 h-4 rounded border-zinc-300 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-900 text-emerald-500 focus:ring-emerald-500 focus:ring-offset-zinc-950"
                 />
               </div>
               <div className="relative aspect-[2/3]">
@@ -2189,7 +2194,7 @@ export default function ContentManagement() {
                   <img src={content.posterUrl || 'https://picsum.photos/seed/movie/400/600'} alt={content.title} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
                 </Link>
                 <div className="absolute top-1 right-1 flex flex-col gap-1 items-end">
-                  <div className="bg-black/80 backdrop-blur-md px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider">
+                  <div className={`backdrop-blur-md px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider text-white ${content.type === 'series' ? 'bg-purple-500/90' : 'bg-blue-500/90'}`}>
                     {content.type}
                   </div>
                   {content.status === 'draft' && (
@@ -2202,9 +2207,9 @@ export default function ContentManagement() {
               </div>
               <div className="p-2 md:p-3 flex-1 flex flex-col">
                 <h3 className="font-bold text-sm md:text-base mb-0.5 line-clamp-1" title={content.title}>{content.title}</h3>
-                <p className="text-zinc-400 text-xs mb-2">{content.year}</p>
+                <p className="text-zinc-500 dark:text-zinc-400 text-xs mb-2">{content.year}</p>
                 
-                <div className="mt-auto flex items-center justify-between pt-2 border-t border-zinc-800/50">
+                <div className="mt-auto flex items-center justify-between pt-2 border-t border-zinc-200 dark:border-zinc-800/50">
                   <div className="flex gap-1">
                     <button onClick={() => handleShare(content)} className="text-emerald-500 hover:text-emerald-400 p-1.5 transition-colors" title="Share to WhatsApp" disabled={loadingShareId === content.id}>
                       {loadingShareId === content.id ? <RefreshCw className="w-4 h-4 md:w-5 md:h-5 animate-spin" /> : <Share2 className="w-4 h-4 md:w-5 md:h-5" />}
@@ -2215,14 +2220,14 @@ export default function ContentManagement() {
                       </button>
                     )}
                     {(profile?.role === 'admin' || profile?.role === 'owner') && (
-                      <button onClick={() => handleCopyData(content)} className="text-zinc-400 hover:text-white p-1.5 transition-colors" title="Copy Data">
+                      <button onClick={() => handleCopyData(content)} className="text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:text-white p-1.5 transition-colors" title="Copy Data">
                         <Copy className="w-4 h-4 md:w-5 md:h-5" />
                       </button>
                     )}
                   </div>
                   <div className="flex gap-1">
                     {(profile?.role === 'admin' || profile?.role === 'owner' || content.status === 'draft') && (
-                      <button onClick={() => handleEdit(content)} className="text-zinc-400 hover:text-white p-1.5 transition-colors">
+                      <button onClick={() => handleEdit(content)} className="text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:text-white p-1.5 transition-colors">
                         <Edit2 className="w-4 h-4 md:w-5 md:h-5" />
                       </button>
                     )}
@@ -2252,9 +2257,9 @@ export default function ContentManagement() {
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95, y: 20 }}
               transition={{ duration: 0.2 }}
-              className="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-4xl my-8 flex flex-col max-h-[90vh] shadow-2xl"
+              className="bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl w-full max-w-4xl my-8 flex flex-col max-h-[90vh] shadow-2xl"
             >
-              <div className="p-4 border-b border-zinc-800 flex items-center justify-between sticky top-0 bg-zinc-900 z-10 rounded-t-2xl">
+              <div className="p-4 border-b border-zinc-200 dark:border-zinc-800 flex items-center justify-between sticky top-0 bg-zinc-50 dark:bg-zinc-900 z-10 rounded-t-2xl">
                 <div className="flex items-center gap-2 sm:gap-4">
                   <h2 className="text-lg sm:text-xl font-bold whitespace-nowrap">{editingId ? 'Edit Content' : 'Add Content'}</h2>
                   <button
@@ -2265,7 +2270,7 @@ export default function ContentManagement() {
                     <ClipboardPaste className="w-3.5 h-3.5 sm:w-4 sm:h-4" /> Auto-Fill from Text
                   </button>
                 </div>
-                <button onClick={() => setIsModalOpen(false)} className="text-zinc-400 hover:text-white p-1 sm:p-2 ml-2 shrink-0 transition-colors">
+                <button onClick={() => setIsModalOpen(false)} className="text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:text-white p-1 sm:p-2 ml-2 shrink-0 transition-colors">
                   <X className="w-5 h-5" />
                 </button>
               </div>
@@ -2280,11 +2285,11 @@ export default function ContentManagement() {
                       <div className="flex-1">
                         <label className="block text-xs font-medium text-zinc-500 mb-1">Type</label>
                         <div className="flex gap-2">
-                          <label className={`flex-1 flex items-center justify-center gap-1 p-1.5 rounded-lg border cursor-pointer transition-colors text-xs ${type === 'movie' ? 'bg-emerald-500/10 border-emerald-500 text-emerald-500' : 'bg-zinc-950 border-zinc-800 text-zinc-400'}`}>
+                          <label className={`flex-1 flex items-center justify-center gap-1 p-1.5 rounded-lg border cursor-pointer transition-colors text-xs ${type === 'movie' ? 'bg-emerald-500/10 border-emerald-500 text-emerald-500' : 'bg-white dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800 text-zinc-500 dark:text-zinc-400'}`}>
                             <input type="radio" name="type" value="movie" checked={type === 'movie'} onChange={() => setType('movie')} className="hidden" />
                             <Film className="w-3.5 h-3.5" /> Movie
                           </label>
-                          <label className={`flex-1 flex items-center justify-center gap-1 p-1.5 rounded-lg border cursor-pointer transition-colors text-xs ${type === 'series' ? 'bg-emerald-500/10 border-emerald-500 text-emerald-500' : 'bg-zinc-950 border-zinc-800 text-zinc-400'}`}>
+                          <label className={`flex-1 flex items-center justify-center gap-1 p-1.5 rounded-lg border cursor-pointer transition-colors text-xs ${type === 'series' ? 'bg-emerald-500/10 border-emerald-500 text-emerald-500' : 'bg-white dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800 text-zinc-500 dark:text-zinc-400'}`}>
                             <input type="radio" name="type" value="series" checked={type === 'series'} onChange={() => setType('series')} className="hidden" />
                             <Tv className="w-3.5 h-3.5" /> Series
                           </label>
@@ -2295,11 +2300,11 @@ export default function ContentManagement() {
                         <div className="flex gap-2">
                           {(profile?.role === 'admin' || profile?.role === 'owner') && (
                             <>
-                              <label className={`flex-1 flex items-center justify-center gap-1 p-1.5 rounded-lg border cursor-pointer transition-colors text-xs ${status === 'published' ? 'bg-emerald-500/10 border-emerald-500 text-emerald-500' : 'bg-zinc-950 border-zinc-800 text-zinc-400'}`}>
+                              <label className={`flex-1 flex items-center justify-center gap-1 p-1.5 rounded-lg border cursor-pointer transition-colors text-xs ${status === 'published' ? 'bg-emerald-500/10 border-emerald-500 text-emerald-500' : 'bg-white dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800 text-zinc-500 dark:text-zinc-400'}`}>
                                 <input type="radio" name="status" value="published" checked={status === 'published'} onChange={() => setStatus('published')} className="hidden" />
                                 <Eye className="w-3.5 h-3.5" /> Pub
                               </label>
-                              <label className={`flex-1 flex items-center justify-center gap-1 p-1.5 rounded-lg border cursor-pointer transition-colors text-xs ${status === 'draft' ? 'bg-yellow-500/10 border-yellow-500 text-yellow-500' : 'bg-zinc-950 border-zinc-800 text-zinc-400'}`}>
+                              <label className={`flex-1 flex items-center justify-center gap-1 p-1.5 rounded-lg border cursor-pointer transition-colors text-xs ${status === 'draft' ? 'bg-yellow-500/10 border-yellow-500 text-yellow-500' : 'bg-white dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800 text-zinc-500 dark:text-zinc-400'}`}>
                                 <input type="radio" name="status" value="draft" checked={status === 'draft'} onChange={() => setStatus('draft')} className="hidden" />
                                 <EyeOff className="w-3.5 h-3.5" /> Draft
                               </label>
@@ -2327,21 +2332,21 @@ export default function ContentManagement() {
                       }} 
                       onFocus={() => setShowTitleSuggestions(true)}
                       onBlur={() => setTimeout(() => setShowTitleSuggestions(false), 200)}
-                      className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-emerald-500" 
+                      className="w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-emerald-500" 
                     />
                     {showTitleSuggestions && titleSuggestions.length > 0 && (
-                      <div className="absolute z-50 w-full mt-1 bg-zinc-900 border border-zinc-700 rounded-lg shadow-xl max-h-48 overflow-y-auto">
-                        <div className="p-2 text-xs text-zinc-400 border-b border-zinc-800">Similar content found:</div>
+                      <div className="absolute z-50 w-full mt-1 bg-zinc-50 dark:bg-zinc-900 border border-zinc-300 dark:border-zinc-700 rounded-lg shadow-xl max-h-48 overflow-y-auto">
+                        <div className="p-2 text-xs text-zinc-500 dark:text-zinc-400 border-b border-zinc-200 dark:border-zinc-800">Similar content found:</div>
                         {titleSuggestions.map(suggestion => (
                           <div 
                             key={suggestion.id} 
-                            className="px-3 py-2 hover:bg-zinc-800 cursor-pointer text-sm flex justify-between items-center"
+                            className="px-3 py-2 hover:bg-zinc-200 dark:hover:bg-zinc-800 cursor-pointer text-sm flex justify-between items-center"
                             onClick={() => {
                               setTitle(suggestion.title);
                               setShowTitleSuggestions(false);
                             }}
                           >
-                            <span className="text-zinc-200">{suggestion.title}</span>
+                            <span className="text-zinc-900 dark:text-zinc-200">{suggestion.title}</span>
                             <span className="text-xs text-zinc-500 capitalize">{suggestion.type} • {suggestion.year}</span>
                           </div>
                         ))}
@@ -2353,7 +2358,7 @@ export default function ContentManagement() {
                   <div>
                     <label className="block text-xs font-medium text-zinc-500 mb-1">Release Year</label>
                     <div className="flex gap-2">
-                      <input type="number" value={year || ''} onChange={(e) => setYear(parseInt(e.target.value) || new Date().getFullYear())} className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:border-emerald-500" />
+                      <input type="number" value={year || ''} onChange={(e) => setYear(parseInt(e.target.value) || new Date().getFullYear())} className="w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:border-emerald-500" />
                       <button type="button" onClick={() => setIsLinkCheckerOpen(true)} className="bg-emerald-500 hover:bg-emerald-600 text-white px-2 py-1.5 rounded-lg text-xs font-medium transition-colors flex items-center justify-center gap-2 whitespace-nowrap" title="Add Links via Link Checker">
                         <RefreshCw className="w-3.5 h-3.5" />
                         Add Links
@@ -2361,7 +2366,7 @@ export default function ContentManagement() {
                       <button
                         type="button"
                         onClick={() => setIsMasterFetchModalOpen(true)}
-                        className="px-3 py-1.5 bg-black border border-cyan-500 text-white rounded-lg text-xs font-medium hover:bg-zinc-900 transition-colors flex items-center gap-1.5 whitespace-nowrap"
+                        className="px-3 py-1.5 bg-black border border-cyan-500 text-white rounded-lg text-xs font-medium hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors flex items-center gap-1.5 whitespace-nowrap"
                       >
                         <Search className="w-3 h-3" />
                         Master Fetch
@@ -2373,20 +2378,102 @@ export default function ContentManagement() {
                   <div className="grid grid-cols-2 gap-4">
                     <div>
                       <label className="block text-xs font-medium text-zinc-500 mb-1">Release Date</label>
-                      <input type="text" placeholder="DD-MM-YYYY" value={releaseDate} onChange={(e) => setReleaseDate(e.target.value)} className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-emerald-500" />
+                      <input type="text" placeholder="DD-MM-YYYY" value={releaseDate} onChange={(e) => setReleaseDate(e.target.value)} className="w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-emerald-500" />
                     </div>
                     <div>
                       <label className="block text-xs font-medium text-zinc-500 mb-1">Runtime</label>
-                      <input type="text" placeholder="e.g. 120 min" value={runtime} onChange={(e) => setRuntime(e.target.value)} className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-emerald-500" />
+                      <input type="text" placeholder="e.g. 120 min" value={runtime} onChange={(e) => setRuntime(e.target.value)} className="w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-emerald-500" />
                     </div>
                   </div>
 
-                  {/* 5. Trailer Link */}
-                  <div>
-                    <label className="block text-xs font-medium text-zinc-500 mb-1">
-                      {trailerTitle ? trailerTitle : "Trailer URL (YouTube)"}
-                    </label>
-                    <input type="url" value={trailerUrl} onChange={(e) => setTrailerUrl(e.target.value)} className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-emerald-500" />
+                  {/* 5. Trailer Links */}
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <label className="block text-xs font-medium text-zinc-500">
+                        Trailers (YouTube)
+                      </label>
+                      <button
+                        type="button"
+                        onClick={() => setTrailers(prev => [...prev, { id: Math.random().toString(36).substr(2, 9), url: '', title: '' }])}
+                        className="p-1.5 bg-emerald-500/10 border border-emerald-500/20 text-emerald-500 rounded-lg hover:bg-emerald-500/20 transition-colors"
+                        title="Add Trailer"
+                      >
+                        <Plus className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                    
+                    {/* Main Trailer (Backward Compatibility) */}
+                    <div className="space-y-2">
+                      <label className="block text-[10px] font-medium text-zinc-400 uppercase tracking-wider">Main Trailer</label>
+                      <div className="flex flex-col gap-2 bg-zinc-50 dark:bg-zinc-900/50 p-3 rounded-xl border border-zinc-200 dark:border-zinc-800">
+                        <div className="text-[10px] text-zinc-500 mb-1">
+                          {trailerTitle ? trailerTitle : "Main Trailer URL"}
+                        </div>
+                        <input 
+                          type="url" 
+                          value={trailerUrl} 
+                          onChange={(e) => setTrailerUrl(e.target.value)} 
+                          placeholder="https://www.youtube.com/watch?v=..."
+                          className="w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-emerald-500" 
+                        />
+                      </div>
+                    </div>
+
+                    {/* Additional Trailers */}
+                    {trailers.map((trailer, idx) => (
+                      <div key={trailer.id} className="space-y-2">
+                        <div className="flex items-center justify-between">
+                          <label className="block text-[10px] font-medium text-zinc-400 uppercase tracking-wider">Trailer {idx + 1}</label>
+                          <button
+                            type="button"
+                            onClick={() => setTrailers(prev => prev.filter((_, i) => i !== idx))}
+                            className="p-1 text-red-500 hover:bg-red-500/10 rounded-lg transition-colors"
+                          >
+                            <X className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                        <div className="flex flex-col gap-2 bg-zinc-50 dark:bg-zinc-900/50 p-3 rounded-xl border border-zinc-200 dark:border-zinc-800">
+                          <input 
+                            type="text" 
+                            placeholder="Trailer Title (e.g. Season 1 Trailer, Teaser)"
+                            value={trailer.title}
+                            onChange={(e) => {
+                              const newTrailers = [...trailers];
+                              newTrailers[idx] = { ...newTrailers[idx], title: e.target.value };
+                              setTrailers(newTrailers);
+                            }}
+                            className="w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-emerald-500" 
+                          />
+                          <input 
+                            type="url" 
+                            placeholder="YouTube URL"
+                            value={trailer.url}
+                            onChange={(e) => {
+                              const newTrailers = [...trailers];
+                              newTrailers[idx] = { ...newTrailers[idx], url: e.target.value };
+                              setTrailers(newTrailers);
+                            }}
+                            className="w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-emerald-500" 
+                          />
+                          {type === 'series' && (
+                            <div className="flex items-center gap-2">
+                              <label className="text-[10px] text-zinc-500">Season (Optional):</label>
+                              <input 
+                                type="number" 
+                                placeholder="Season #"
+                                value={trailer.seasonNumber || ''}
+                                onChange={(e) => {
+                                  const newTrailers = [...trailers];
+                                  newTrailers[idx] = { ...newTrailers[idx], seasonNumber: parseInt(e.target.value) || undefined };
+                                  setTrailers(newTrailers);
+                                }}
+                                className="w-16 bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg px-2 py-1 text-xs focus:outline-none focus:border-emerald-500" 
+                              />
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    ))}
                   </div>
 
                   {/* 6. IMDb Link + Rating */}
@@ -2398,7 +2485,7 @@ export default function ContentManagement() {
                           type="url" 
                           value={imdbLink} 
                           onChange={(e) => setImdbLink(e.target.value)} 
-                          className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-emerald-500" 
+                          className="w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-emerald-500" 
                           placeholder="https://www.imdb.com/title/..." 
                         />
                       </div>
@@ -2407,7 +2494,7 @@ export default function ContentManagement() {
                           type="text" 
                           value={imdbRating} 
                           onChange={(e) => setImdbRating(e.target.value)} 
-                          className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:border-emerald-500" 
+                          className="w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:border-emerald-500" 
                           placeholder="Rating" 
                         />
                       </div>
@@ -2419,8 +2506,8 @@ export default function ContentManagement() {
                     <div className="flex-1">
                       <label className="block text-xs font-medium text-zinc-500 mb-1">Poster (URL or Upload)</label>
                       <div className="flex gap-2">
-                        <input type="text" placeholder="https://..." value={posterUrl} onChange={(e) => setPosterUrl(e.target.value)} className="flex-1 bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-emerald-500" />
-                        <label className="flex items-center justify-center bg-zinc-800 hover:bg-zinc-700 text-white px-3 py-1.5 rounded-lg cursor-pointer transition-colors">
+                        <input type="text" placeholder="https://..." value={posterUrl} onChange={(e) => setPosterUrl(e.target.value)} className="flex-1 bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-emerald-500" />
+                        <label className="flex items-center justify-center bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-300 dark:hover:bg-zinc-700 text-zinc-900 dark:text-white px-3 py-1.5 rounded-lg cursor-pointer transition-colors">
                           <Upload className="w-4 h-4" />
                           <input type="file" accept="image/*" onChange={handleImageUpload} className="hidden" />
                         </label>
@@ -2432,7 +2519,7 @@ export default function ContentManagement() {
                       )}
                     </div>
                     {posterUrl && (
-                      <div className="w-12 aspect-[2/3] rounded-lg overflow-hidden border border-zinc-800 bg-zinc-950 shrink-0">
+                      <div className="w-12 aspect-[2/3] rounded-lg overflow-hidden border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 shrink-0">
                         <img 
                           src={posterUrl} 
                           alt="Mini Poster" 
@@ -2450,43 +2537,43 @@ export default function ContentManagement() {
                   <div className="grid grid-cols-3 gap-4">
                     <div className="relative">
                       <div 
-                        className="flex items-center justify-between bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-1 cursor-pointer"
+                        className="flex items-center justify-between bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg px-3 py-1 cursor-pointer"
                         onClick={() => setIsDescriptionExpanded(!isDescriptionExpanded)}
                       >
-                        <span className="text-xs font-medium text-zinc-400">Description</span>
-                        {isDescriptionExpanded ? <ChevronUp className="w-3.5 h-3.5 text-zinc-400" /> : <ChevronDown className="w-3.5 h-3.5 text-zinc-400" />}
+                        <span className="text-xs font-medium text-zinc-500 dark:text-zinc-400">Description</span>
+                        {isDescriptionExpanded ? <ChevronUp className="w-3.5 h-3.5 text-zinc-500 dark:text-zinc-400" /> : <ChevronDown className="w-3.5 h-3.5 text-zinc-500 dark:text-zinc-400" />}
                       </div>
                       {isDescriptionExpanded && (
                         <div className="mt-1">
-                          <textarea rows={3} value={description} onChange={(e) => setDescription(e.target.value)} className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-emerald-500" placeholder="Enter description..." />
+                          <textarea rows={3} value={description} onChange={(e) => setDescription(e.target.value)} className="w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-emerald-500" placeholder="Enter description..." />
                         </div>
                       )}
                     </div>
                     <div className="relative">
                       <div 
-                        className="flex items-center justify-between bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-1 cursor-pointer"
+                        className="flex items-center justify-between bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg px-3 py-1 cursor-pointer"
                         onClick={() => setIsCastExpanded(!isCastExpanded)}
                       >
-                        <span className="text-xs font-medium text-zinc-400">Cast</span>
-                        {isCastExpanded ? <ChevronUp className="w-3.5 h-3.5 text-zinc-400" /> : <ChevronDown className="w-3.5 h-3.5 text-zinc-400" />}
+                        <span className="text-xs font-medium text-zinc-500 dark:text-zinc-400">Cast</span>
+                        {isCastExpanded ? <ChevronUp className="w-3.5 h-3.5 text-zinc-500 dark:text-zinc-400" /> : <ChevronDown className="w-3.5 h-3.5 text-zinc-500 dark:text-zinc-400" />}
                       </div>
                       {isCastExpanded && (
                         <div className="mt-1">
-                          <textarea rows={3} value={cast} onChange={(e) => setCast(e.target.value)} className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-emerald-500" placeholder="Enter cast (comma separated)..." />
+                          <textarea rows={3} value={cast} onChange={(e) => setCast(e.target.value)} className="w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-emerald-500" placeholder="Enter cast (comma separated)..." />
                         </div>
                       )}
                     </div>
                     <div className="relative">
                       <div 
-                        className="flex items-center justify-between bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-1 cursor-pointer"
+                        className="flex items-center justify-between bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg px-3 py-1 cursor-pointer"
                         onClick={() => setIsCountryExpanded(!isCountryExpanded)}
                       >
-                        <span className="text-xs font-medium text-zinc-400">Country</span>
-                        {isCountryExpanded ? <ChevronUp className="w-3.5 h-3.5 text-zinc-400" /> : <ChevronDown className="w-3.5 h-3.5 text-zinc-400" />}
+                        <span className="text-xs font-medium text-zinc-500 dark:text-zinc-400">Country</span>
+                        {isCountryExpanded ? <ChevronUp className="w-3.5 h-3.5 text-zinc-500 dark:text-zinc-400" /> : <ChevronDown className="w-3.5 h-3.5 text-zinc-500 dark:text-zinc-400" />}
                       </div>
                       {isCountryExpanded && (
                         <div className="mt-1">
-                          <textarea rows={3} value={country} onChange={(e) => setCountry(e.target.value)} className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-emerald-500" placeholder="Enter country (comma separated)..." />
+                          <textarea rows={3} value={country} onChange={(e) => setCountry(e.target.value)} className="w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-emerald-500" placeholder="Enter country (comma separated)..." />
                         </div>
                       )}
                     </div>
@@ -2496,7 +2583,7 @@ export default function ContentManagement() {
                   <div>
                     <div className="flex justify-between items-center mb-1">
                       <label className="text-xs font-medium text-zinc-500">Genres</label>
-                      <button type="button" onClick={() => setManageModal({ isOpen: true, type: 'genre' })} className="text-[10px] bg-zinc-800 text-zinc-300 px-2 py-0.5 rounded hover:bg-zinc-700">Manage</button>
+                      <button type="button" onClick={() => setManageModal({ isOpen: true, type: 'genre' })} className="text-[10px] bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 px-2 py-0.5 rounded hover:bg-zinc-300 dark:hover:bg-zinc-700">Manage</button>
                     </div>
                     <div className="flex flex-wrap gap-2">
                       {genres.map(g => {
@@ -2515,7 +2602,7 @@ export default function ContentManagement() {
                             className={`px-3 py-1 rounded-full text-xs font-medium transition-colors border ${
                               isSelected 
                                 ? 'bg-emerald-500/20 border-emerald-500 text-emerald-500'
-                                : 'bg-zinc-900 border-zinc-700 text-zinc-400 hover:bg-zinc-800 hover:text-white'
+                                : 'bg-zinc-50 dark:bg-zinc-900 border-zinc-300 dark:border-zinc-700 text-zinc-500 dark:text-zinc-400 hover:bg-zinc-200 dark:hover:bg-zinc-800 hover:text-zinc-900 dark:text-white'
                             }`}
                           >
                             {g.name}
@@ -2529,7 +2616,7 @@ export default function ContentManagement() {
                   <div>
                     <div className="flex justify-between items-center mb-1">
                       <label className="text-xs font-medium text-zinc-500">Languages</label>
-                      <button type="button" onClick={() => setManageModal({ isOpen: true, type: 'language' })} className="text-[10px] bg-zinc-800 text-zinc-300 px-2 py-0.5 rounded hover:bg-zinc-700">Manage</button>
+                      <button type="button" onClick={() => setManageModal({ isOpen: true, type: 'language' })} className="text-[10px] bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 px-2 py-0.5 rounded hover:bg-zinc-300 dark:hover:bg-zinc-700">Manage</button>
                     </div>
                     <div className="flex flex-wrap gap-2">
                       {languages.map(l => {
@@ -2548,7 +2635,7 @@ export default function ContentManagement() {
                             className={`px-3 py-1 rounded-full text-xs font-medium transition-colors border ${
                               isSelected 
                                 ? 'bg-emerald-500/20 border-emerald-500 text-emerald-500'
-                                : 'bg-zinc-900 border-zinc-700 text-zinc-400 hover:bg-zinc-800 hover:text-white'
+                                : 'bg-zinc-50 dark:bg-zinc-900 border-zinc-300 dark:border-zinc-700 text-zinc-500 dark:text-zinc-400 hover:bg-zinc-200 dark:hover:bg-zinc-800 hover:text-zinc-900 dark:text-white'
                             }`}
                           >
                             {l.name}
@@ -2562,7 +2649,7 @@ export default function ContentManagement() {
                   <div>
                     <div className="flex justify-between items-center mb-1">
                       <label className="text-xs font-medium text-zinc-500">Print Quality</label>
-                      <button type="button" onClick={() => setManageModal({ isOpen: true, type: 'quality' })} className="text-[10px] bg-zinc-800 text-zinc-300 px-2 py-0.5 rounded hover:bg-zinc-700">Manage</button>
+                      <button type="button" onClick={() => setManageModal({ isOpen: true, type: 'quality' })} className="text-[10px] bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 px-2 py-0.5 rounded hover:bg-zinc-300 dark:hover:bg-zinc-700">Manage</button>
                     </div>
                     <div className="flex flex-wrap gap-2">
                       {qualities.map(q => (
@@ -2573,7 +2660,7 @@ export default function ContentManagement() {
                           className={`px-3 py-1 rounded-full text-xs font-medium transition-colors border ${
                             selectedQuality === q.id
                               ? 'bg-emerald-500/20 border-emerald-500 text-emerald-500'
-                              : 'bg-zinc-900 border-zinc-700 text-zinc-400 hover:bg-zinc-800 hover:text-white'
+                              : 'bg-zinc-50 dark:bg-zinc-900 border-zinc-300 dark:border-zinc-700 text-zinc-500 dark:text-zinc-400 hover:bg-zinc-200 dark:hover:bg-zinc-800 hover:text-zinc-900 dark:text-white'
                           }`}
                         >
                           {q.name}
@@ -2592,7 +2679,7 @@ export default function ContentManagement() {
                         className={`px-4 py-1 rounded-full text-xs font-medium transition-colors border ${
                           subtitles
                             ? 'bg-emerald-500/20 border-emerald-500 text-emerald-500'
-                            : 'bg-zinc-900 border-zinc-700 text-zinc-400 hover:bg-zinc-800 hover:text-white'
+                            : 'bg-zinc-50 dark:bg-zinc-900 border-zinc-300 dark:border-zinc-700 text-zinc-500 dark:text-zinc-400 hover:bg-zinc-200 dark:hover:bg-zinc-800 hover:text-zinc-900 dark:text-white'
                         }`}
                       >
                         Yes
@@ -2603,7 +2690,7 @@ export default function ContentManagement() {
                         className={`px-4 py-1 rounded-full text-xs font-medium transition-colors border ${
                           !subtitles
                             ? 'bg-emerald-500/20 border-emerald-500 text-emerald-500'
-                            : 'bg-zinc-900 border-zinc-700 text-zinc-400 hover:bg-zinc-800 hover:text-white'
+                            : 'bg-zinc-50 dark:bg-zinc-900 border-zinc-300 dark:border-zinc-700 text-zinc-500 dark:text-zinc-400 hover:bg-zinc-200 dark:hover:bg-zinc-800 hover:text-zinc-900 dark:text-white'
                         }`}
                       >
                         No
@@ -2613,12 +2700,12 @@ export default function ContentManagement() {
 
                   {/* 12. Sample link */}
                   <div>
-                    <input type="url" value={sampleUrl} onChange={(e) => setSampleUrl(e.target.value)} className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-emerald-500" placeholder="Sample Video file" />
+                    <input type="url" value={sampleUrl} onChange={(e) => setSampleUrl(e.target.value)} className="w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-emerald-500" placeholder="Sample Video file" />
                   </div>
 
                 </div>
 
-                <hr className="border-zinc-800 my-4" />
+                <hr className="border-zinc-200 dark:border-zinc-800 my-4" />
 
                 {type === 'movie' ? (
                   <div>
@@ -2654,7 +2741,7 @@ export default function ContentManagement() {
                     
                     <div className="space-y-6">
                       {seasons.map((season, sIdx) => (
-                        <div key={season.id} className="bg-zinc-950 border border-zinc-800 rounded-xl p-4">
+                        <div key={season.id} className="bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl p-4">
                           <div className="flex items-center justify-between mb-4">
                             <div className="flex items-center gap-4">
                               <div className="flex items-center gap-2">
@@ -2667,11 +2754,11 @@ export default function ContentManagement() {
                                     newSeasons[sIdx].seasonNumber = parseInt(e.target.value) || 0;
                                     setSeasons(newSeasons);
                                   }}
-                                  className="w-16 bg-zinc-900 border border-zinc-700 rounded px-2 py-1 text-sm text-center"
+                                  className="w-16 bg-zinc-50 dark:bg-zinc-900 border border-zinc-300 dark:border-zinc-700 rounded px-2 py-1 text-sm text-center"
                                 />
                               </div>
                               <div className="flex items-center gap-2">
-                                <h4 className="font-bold text-sm text-zinc-400">Year</h4>
+                                <h4 className="font-bold text-sm text-zinc-500 dark:text-zinc-400">Year</h4>
                                 <input
                                   type="number"
                                   value={season.year || ''}
@@ -2681,7 +2768,7 @@ export default function ContentManagement() {
                                     setSeasons(newSeasons);
                                   }}
                                   placeholder="YYYY"
-                                  className="w-20 bg-zinc-900 border border-zinc-700 rounded px-2 py-1 text-sm text-center"
+                                  className="w-20 bg-zinc-50 dark:bg-zinc-900 border border-zinc-300 dark:border-zinc-700 rounded px-2 py-1 text-sm text-center"
                                 />
                               </div>
                             </div>
@@ -2691,7 +2778,7 @@ export default function ContentManagement() {
                           </div>
                           
                           <div className="mb-6">
-                            <h5 className="text-sm font-medium text-zinc-400 mb-2">Season ZIP Links</h5>
+                            <h5 className="text-sm font-medium text-zinc-500 dark:text-zinc-400 mb-2">Season ZIP Links</h5>
                             <QualityInputs 
                               links={season.zipLinks} 
                               onChange={(updater) => {
@@ -2707,7 +2794,7 @@ export default function ContentManagement() {
                           </div>
 
                           <div className="mb-6">
-                            <h5 className="text-sm font-medium text-zinc-400 mb-2">Season MKV Links</h5>
+                            <h5 className="text-sm font-medium text-zinc-500 dark:text-zinc-400 mb-2">Season MKV Links</h5>
                             <QualityInputs 
                               links={season.mkvLinks || []} 
                               onChange={(updater) => {
@@ -2724,7 +2811,7 @@ export default function ContentManagement() {
 
                           <div>
                             <div className="flex items-center justify-between mb-2">
-                              <h5 className="text-sm font-medium text-zinc-400">Episodes</h5>
+                              <h5 className="text-sm font-medium text-zinc-500 dark:text-zinc-400">Episodes</h5>
                               <button
                                 type="button"
                                 onClick={() => {
@@ -2747,7 +2834,7 @@ export default function ContentManagement() {
                             
                             <div className="space-y-4">
                               {season.episodes.map((ep, eIdx) => (
-                                <div key={ep.id} className="bg-zinc-900 border border-zinc-800 rounded-lg p-4">
+                                <div key={ep.id} className="bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg p-4">
                                   <div className="flex gap-1 mb-4">
                                     <input
                                       type="number"
@@ -2757,7 +2844,7 @@ export default function ContentManagement() {
                                         newSeasons[sIdx].episodes[eIdx].episodeNumber = parseInt(e.target.value) || 0;
                                         setSeasons(newSeasons);
                                       }}
-                                      className="w-10 bg-zinc-950 border border-zinc-800 rounded-lg px-1 py-1 text-sm text-center"
+                                      className="w-10 bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg px-1 py-1 text-sm text-center"
                                       placeholder="Ep #"
                                     />
                                     <input
@@ -2768,7 +2855,7 @@ export default function ContentManagement() {
                                         newSeasons[sIdx].episodes[eIdx].duration = e.target.value;
                                         setSeasons(newSeasons);
                                       }}
-                                      className="w-14 bg-zinc-950 border border-zinc-800 rounded-lg px-1 py-1 text-sm text-center"
+                                      className="w-14 bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg px-1 py-1 text-sm text-center"
                                       placeholder="Dur"
                                     />
                                     <input
@@ -2779,13 +2866,13 @@ export default function ContentManagement() {
                                         newSeasons[sIdx].episodes[eIdx].title = e.target.value;
                                         setSeasons(newSeasons);
                                       }}
-                                      className="flex-1 bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm"
+                                      className="flex-1 bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg px-3 py-2 text-sm"
                                       placeholder="Episode Title"
                                     />
                                     <button
                                       type="button"
                                       onClick={() => setExpandedEpisodes(prev => ({ ...prev, [ep.id]: !prev[ep.id] }))}
-                                      className="text-zinc-400 hover:text-white p-2 transition-colors"
+                                      className="text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:text-white p-2 transition-colors"
                                       title="Toggle Description"
                                     >
                                       {expandedEpisodes[ep.id] ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
@@ -2808,7 +2895,7 @@ export default function ContentManagement() {
                                           newSeasons[sIdx].episodes[eIdx].description = e.target.value;
                                           setSeasons(newSeasons);
                                         }}
-                                        className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm min-h-[80px]"
+                                        className="w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg px-3 py-2 text-sm min-h-[80px]"
                                         placeholder="Episode Description..."
                                       />
                                     </div>
@@ -2841,11 +2928,11 @@ export default function ContentManagement() {
               </form>
             </div>
 
-            <div className="p-6 border-t border-zinc-800 flex justify-end gap-4 sticky bottom-0 bg-zinc-900 z-10 rounded-b-2xl">
+            <div className="p-6 border-t border-zinc-200 dark:border-zinc-800 flex justify-end gap-4 sticky bottom-0 bg-zinc-50 dark:bg-zinc-900 z-10 rounded-b-2xl">
               <button
                 type="button"
                 onClick={() => setIsModalOpen(false)}
-                className="px-6 py-3 rounded-xl font-medium text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors"
+                className="px-6 py-3 rounded-xl font-medium text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:text-white hover:bg-zinc-200 dark:hover:bg-zinc-800 transition-colors"
               >
                 Cancel
               </button>
@@ -2877,16 +2964,16 @@ export default function ContentManagement() {
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.95 }}
               transition={{ duration: 0.2 }}
-              className="bg-zinc-900 border border-zinc-800 rounded-3xl w-full max-w-2xl overflow-hidden shadow-2xl"
+              className="bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-3xl w-full max-w-2xl overflow-hidden shadow-2xl"
             >
-              <div className="p-6 border-b border-zinc-800 flex items-center justify-between bg-zinc-900/50">
+              <div className="p-6 border-b border-zinc-200 dark:border-zinc-800 flex items-center justify-between bg-zinc-50/50 dark:bg-zinc-900/50">
                 <div>
-                  <h3 className="text-xl font-bold text-white">Auto-Fill from Text</h3>
-                  <p className="text-sm text-zinc-400 mt-1">Paste WhatsApp or copied data to automatically populate fields</p>
+                  <h3 className="text-xl font-bold text-zinc-900 dark:text-white">Auto-Fill from Text</h3>
+                  <p className="text-sm text-zinc-500 dark:text-zinc-400 mt-1">Paste WhatsApp or copied data to automatically populate fields</p>
                 </div>
                 <button 
                   onClick={() => setIsAutoFillModalOpen(false)}
-                  className="text-zinc-400 hover:text-white p-2 hover:bg-zinc-800 rounded-full transition-all"
+                  className="text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:text-white p-2 hover:bg-zinc-200 dark:hover:bg-zinc-800 rounded-full transition-all"
                 >
                 <X className="w-6 h-6" />
               </button>
@@ -2897,14 +2984,14 @@ export default function ContentManagement() {
                 value={autoFillText}
                 onChange={(e) => setAutoFillText(e.target.value)}
                 placeholder="Paste your movie/series data here..."
-                className="w-full h-64 bg-zinc-950 border border-zinc-800 rounded-2xl p-4 text-zinc-300 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500 transition-all resize-none font-mono text-sm"
+                className="w-full h-64 bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-4 text-zinc-600 dark:text-zinc-300 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500 transition-all resize-none font-mono text-sm"
               />
               
               <div className="mt-6 flex gap-3">
                 <button
                   onClick={handleAutoFill}
                   disabled={!autoFillText.trim()}
-                  className="flex-1 bg-emerald-500 hover:bg-emerald-400 disabled:opacity-50 disabled:cursor-not-allowed text-black font-bold py-4 rounded-2xl flex items-center justify-center gap-2 transition-all shadow-lg shadow-emerald-500/20"
+                  className="flex-1 bg-emerald-500 hover:bg-emerald-400 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold py-4 rounded-2xl flex items-center justify-center gap-2 transition-all shadow-lg shadow-emerald-500/20"
                 >
                   <ClipboardPaste className="w-5 h-5" /> Process & Auto-Fill
                 </button>
@@ -2913,7 +3000,7 @@ export default function ContentManagement() {
                     setAutoFillText('');
                     setIsAutoFillModalOpen(false);
                   }}
-                  className="px-8 bg-zinc-800 hover:bg-zinc-700 text-white font-bold py-4 rounded-2xl transition-all"
+                  className="px-8 bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-300 dark:hover:bg-zinc-700 text-zinc-900 dark:text-white font-bold py-4 rounded-2xl transition-all"
                 >
                   Cancel
                 </button>
@@ -2968,20 +3055,20 @@ export default function ContentManagement() {
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.95 }}
               transition={{ duration: 0.2 }}
-              className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 max-w-md w-full relative shadow-2xl"
+              className="bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-6 max-w-md w-full relative shadow-2xl"
             >
               <button
                 onClick={() => setImdbSeasonsPopup(null)}
-                className="absolute top-4 right-4 text-zinc-400 hover:text-white transition-colors"
+                className="absolute top-4 right-4 text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:text-white transition-colors"
               >
               <X className="w-5 h-5" />
             </button>
             <h3 className="text-xl font-bold mb-2">Select Seasons</h3>
-            <p className="text-zinc-400 mb-6">Choose which seasons to fetch for "{imdbSeasonsPopup.show.name}"</p>
+            <p className="text-zinc-500 dark:text-zinc-400 mb-6">Choose which seasons to fetch for "{imdbSeasonsPopup.show.name}"</p>
             
             <div className="max-h-60 overflow-y-auto space-y-2 mb-6 pr-2 custom-scrollbar">
               {imdbSeasonsPopup.seasons.map(season => (
-                <label key={season} className="flex items-center gap-3 p-3 rounded-xl hover:bg-zinc-800/50 cursor-pointer border border-zinc-800/50 transition-colors">
+                <label key={season} className="flex items-center gap-3 p-3 rounded-xl hover:bg-zinc-200 dark:hover:bg-zinc-800/50 cursor-pointer border border-zinc-200 dark:border-zinc-800/50 transition-colors">
                   <input
                     type="checkbox"
                     checked={selectedImdbSeasons.includes(season)}
@@ -2992,7 +3079,7 @@ export default function ContentManagement() {
                         setSelectedImdbSeasons(prev => prev.filter(s => s !== season));
                       }
                     }}
-                    className="w-5 h-5 rounded border-zinc-700 text-emerald-500 focus:ring-emerald-500/20 bg-zinc-950"
+                    className="w-5 h-5 rounded border-zinc-300 dark:border-zinc-700 text-emerald-500 focus:ring-emerald-500/20 bg-white dark:bg-zinc-950"
                   />
                   <span className="font-medium">Season {season}</span>
                 </label>
@@ -3004,7 +3091,7 @@ export default function ContentManagement() {
                 onClick={() => {
                   setSelectedImdbSeasons(imdbSeasonsPopup.seasons);
                 }}
-                className="flex-1 py-2 px-4 rounded-xl font-medium bg-zinc-800 hover:bg-zinc-700 text-white transition-colors text-sm"
+                className="flex-1 py-2 px-4 rounded-xl font-medium bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-300 dark:hover:bg-zinc-700 text-zinc-900 dark:text-white transition-colors text-sm"
               >
                 Select All
               </button>
@@ -3012,7 +3099,7 @@ export default function ContentManagement() {
                 onClick={() => {
                   setSelectedImdbSeasons([]);
                 }}
-                className="flex-1 py-2 px-4 rounded-xl font-medium bg-zinc-800 hover:bg-zinc-700 text-white transition-colors text-sm"
+                className="flex-1 py-2 px-4 rounded-xl font-medium bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-300 dark:hover:bg-zinc-700 text-zinc-900 dark:text-white transition-colors text-sm"
               >
                 Deselect All
               </button>
@@ -3021,7 +3108,7 @@ export default function ContentManagement() {
             <div className="mt-6 flex justify-end gap-3">
               <button
                 onClick={() => setImdbSeasonsPopup(null)}
-                className="px-6 py-2 rounded-xl font-medium hover:bg-zinc-800 transition-colors"
+                className="px-6 py-2 rounded-xl font-medium hover:bg-zinc-200 dark:hover:bg-zinc-800 transition-colors"
               >
                 Cancel
               </button>
@@ -3042,18 +3129,18 @@ export default function ContentManagement() {
       </AnimatePresence>
       {shareSeasonModal.isOpen && shareSeasonModal.content && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-[60] p-4">
-          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 max-w-md w-full relative">
+          <div className="bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-6 max-w-md w-full relative">
             <button
               onClick={() => setShareSeasonModal({ ...shareSeasonModal, isOpen: false })}
-              className="absolute top-4 right-4 text-zinc-400 hover:text-white transition-colors"
+              className="absolute top-4 right-4 text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:text-white transition-colors"
             >
               <X className="w-5 h-5" />
             </button>
             <h3 className="text-xl font-bold mb-2">Share Series</h3>
-            <p className="text-zinc-400 mb-6">Select which seasons of "{shareSeasonModal.content.title}" you want to share on WhatsApp.</p>
+            <p className="text-zinc-500 dark:text-zinc-400 mb-6">Select which seasons of "{shareSeasonModal.content.title}" you want to share on WhatsApp.</p>
             
             <div className="max-h-60 overflow-y-auto space-y-2 mb-6 pr-2 custom-scrollbar">
-              <label className={`flex items-center gap-3 p-3 rounded-xl cursor-pointer border transition-colors ${selectedShareSeasons.length === shareSeasonModal.seasons.length ? 'bg-emerald-500/10 border-emerald-500 text-emerald-500' : 'bg-zinc-950 border-zinc-800 hover:bg-zinc-800/50'}`}>
+              <label className={`flex items-center gap-3 p-3 rounded-xl cursor-pointer border transition-colors ${selectedShareSeasons.length === shareSeasonModal.seasons.length ? 'bg-emerald-500/10 border-emerald-500 text-emerald-500' : 'bg-white dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-800/50'}`}>
                 <input
                   type="checkbox"
                   checked={selectedShareSeasons.length === shareSeasonModal.seasons.length}
@@ -3064,13 +3151,13 @@ export default function ContentManagement() {
                       setSelectedShareSeasons([]);
                     }
                   }}
-                  className="w-5 h-5 rounded border-zinc-700 text-emerald-500 focus:ring-emerald-500/20 bg-zinc-950"
+                  className="w-5 h-5 rounded border-zinc-300 dark:border-zinc-700 text-emerald-500 focus:ring-emerald-500/20 bg-white dark:bg-zinc-950"
                 />
                 <span className="font-medium">All Seasons</span>
               </label>
-              <div className="h-px bg-zinc-800 my-2" />
+              <div className="h-px bg-zinc-100 dark:bg-zinc-800 my-2" />
               {shareSeasonModal.seasons.map(season => (
-                <label key={season.id} className={`flex items-center gap-3 p-3 rounded-xl cursor-pointer border transition-colors ${selectedShareSeasons.includes(season.seasonNumber) ? 'bg-emerald-500/10 border-emerald-500 text-emerald-500' : 'bg-zinc-950 border-zinc-800 hover:bg-zinc-800/50'}`}>
+                <label key={season.id} className={`flex items-center gap-3 p-3 rounded-xl cursor-pointer border transition-colors ${selectedShareSeasons.includes(season.seasonNumber) ? 'bg-emerald-500/10 border-emerald-500 text-emerald-500' : 'bg-white dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-800/50'}`}>
                   <input
                     type="checkbox"
                     checked={selectedShareSeasons.includes(season.seasonNumber)}
@@ -3081,7 +3168,7 @@ export default function ContentManagement() {
                         setSelectedShareSeasons(prev => prev.filter(s => s !== season.seasonNumber));
                       }
                     }}
-                    className="w-5 h-5 rounded border-zinc-700 text-emerald-500 focus:ring-emerald-500/20 bg-zinc-950"
+                    className="w-5 h-5 rounded border-zinc-300 dark:border-zinc-700 text-emerald-500 focus:ring-emerald-500/20 bg-white dark:bg-zinc-950"
                   />
                   <span className="font-medium">Season {season.seasonNumber}</span>
                 </label>
@@ -3091,7 +3178,7 @@ export default function ContentManagement() {
             <div className="flex justify-end gap-3">
               <button
                 onClick={() => setShareSeasonModal({ ...shareSeasonModal, isOpen: false })}
-                className="px-6 py-2 rounded-xl font-medium hover:bg-zinc-800 transition-colors"
+                className="px-6 py-2 rounded-xl font-medium hover:bg-zinc-200 dark:hover:bg-zinc-800 transition-colors"
               >
                 Cancel
               </button>
@@ -3115,13 +3202,13 @@ export default function ContentManagement() {
       {/* Notification Modal */}
       {notificationModal.isOpen && notificationModal.content && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 z-[60]">
-          <div className="bg-zinc-900 rounded-2xl p-6 max-w-md w-full border border-zinc-800 shadow-2xl">
+          <div className="bg-zinc-50 dark:bg-zinc-900 rounded-2xl p-6 max-w-md w-full border border-zinc-200 dark:border-zinc-800 shadow-2xl">
             <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
               <Bell className="w-6 h-6 text-blue-500" />
               Send Notification
             </h2>
             
-            <div className="bg-zinc-950 p-4 rounded-xl border border-zinc-800 mb-6 flex gap-4">
+            <div className="bg-white dark:bg-zinc-950 p-4 rounded-xl border border-zinc-200 dark:border-zinc-800 mb-6 flex gap-4">
               {notificationModal.content.posterUrl && (
                 <img 
                   src={notificationModal.content.posterUrl} 
@@ -3131,13 +3218,13 @@ export default function ContentManagement() {
                 />
               )}
               <div>
-                <h3 className="font-bold text-white mb-1">{getNotificationPreview(notificationModal.content).title}</h3>
-                <p className="text-sm text-zinc-400 line-clamp-2">{getNotificationPreview(notificationModal.content).body}</p>
+                <h3 className="font-bold text-zinc-900 dark:text-white mb-1">{getNotificationPreview(notificationModal.content).title}</h3>
+                <p className="text-sm text-zinc-500 dark:text-zinc-400 line-clamp-2">{getNotificationPreview(notificationModal.content).body}</p>
               </div>
             </div>
 
             {notificationModal.status === 'idle' && (
-              <p className="text-zinc-400 mb-6">
+              <p className="text-zinc-500 dark:text-zinc-400 mb-6">
                 This will send a push notification to all users about this new content. Do you want to proceed?
               </p>
             )}
@@ -3171,7 +3258,7 @@ export default function ContentManagement() {
               <div className="flex justify-end gap-3">
                 <button
                   onClick={() => setNotificationModal({ isOpen: false, content: null, status: 'idle' })}
-                  className="px-6 py-2 rounded-xl font-medium hover:bg-zinc-800 transition-colors"
+                  className="px-6 py-2 rounded-xl font-medium hover:bg-zinc-200 dark:hover:bg-zinc-800 transition-colors"
                 >
                   Cancel
                 </button>
@@ -3188,7 +3275,7 @@ export default function ContentManagement() {
               <div className="flex justify-end gap-3 mt-4">
                 <button
                   onClick={() => setNotificationModal({ isOpen: false, content: null, status: 'idle' })}
-                  className="bg-zinc-800 hover:bg-zinc-700 text-white px-6 py-2 rounded-xl font-bold transition-colors"
+                  className="bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-300 dark:hover:bg-zinc-700 text-zinc-900 dark:text-white px-6 py-2 rounded-xl font-bold transition-colors"
                 >
                   Close
                 </button>

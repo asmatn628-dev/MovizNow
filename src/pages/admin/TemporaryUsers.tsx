@@ -222,7 +222,7 @@ export default function TemporaryUsers() {
                     className="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg pl-9 pr-3 py-1.5 text-sm focus:outline-none focus:border-emerald-500 text-zinc-900 dark:text-white transition-colors duration-300"
                   />
                 </div>
-                <button onClick={() => setSelectedUser(null)} className="text-zinc-400 hover:text-zinc-900 dark:hover:text-white p-2 transition-colors">
+                <button onClick={() => setSelectedUser(null)} className="text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white p-2 transition-colors">
                   <X className="w-6 h-6" />
                 </button>
               </div>
@@ -242,7 +242,7 @@ export default function TemporaryUsers() {
                         className={`flex items-center gap-4 p-4 cursor-pointer transition-colors ${
                           isFullyAssigned
                             ? 'bg-emerald-500/10'
-                            : isPartiallyAssigned ? 'bg-emerald-500/5' : 'hover:bg-zinc-100 dark:hover:bg-zinc-900'
+                            : isPartiallyAssigned ? 'bg-emerald-500/5' : 'hover:bg-zinc-100 dark:hover:bg-zinc-800'
                         }`}
                       >
                         <input 
@@ -254,7 +254,7 @@ export default function TemporaryUsers() {
                         <div className={`w-6 h-6 rounded flex items-center justify-center border transition-colors ${
                           isFullyAssigned ? 'bg-emerald-500 border-emerald-500' : isPartiallyAssigned ? 'border-emerald-500 bg-emerald-500/20' : 'border-zinc-300 dark:border-zinc-600'
                         }`}>
-                          {isFullyAssigned && <Check className="w-4 h-4 text-white" />}
+                          {isFullyAssigned && <Check className="w-4 h-4 text-zinc-900 dark:text-white" />}
                           {!isFullyAssigned && isPartiallyAssigned && <div className="w-3 h-3 bg-emerald-500 rounded-sm" />}
                         </div>
                         <div className="flex-1 flex items-center justify-between">
@@ -283,7 +283,7 @@ export default function TemporaryUsers() {
                                 <div className={`w-5 h-5 rounded flex items-center justify-center border transition-colors ${
                                   isSeasonAssigned ? 'bg-emerald-500 border-emerald-500' : 'border-zinc-300 dark:border-zinc-600'
                                 }`}>
-                                  {isSeasonAssigned && <Check className="w-3 h-3 text-white" />}
+                                  {isSeasonAssigned && <Check className="w-3 h-3 text-zinc-900 dark:text-white" />}
                                 </div>
                                 <span className="text-sm text-zinc-600 dark:text-zinc-300 transition-colors duration-300">Season {season.seasonNumber}</span>
                               </label>

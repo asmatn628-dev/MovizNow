@@ -218,7 +218,7 @@ export default function Analytics() {
             {topContent.length > 0 ? topContent.map((item, index) => (
               <div key={item.id} className="flex items-center justify-between p-4 bg-zinc-50 dark:bg-zinc-950 rounded-xl border border-zinc-200 dark:border-zinc-800 transition-colors duration-300">
                 <div className="flex items-center gap-4">
-                  <span className="text-xl font-bold text-zinc-400 dark:text-zinc-600 w-6 transition-colors duration-300">{index + 1}</span>
+                  <span className="text-xl font-bold text-zinc-500 dark:text-zinc-400 dark:text-zinc-600 w-6 transition-colors duration-300">{index + 1}</span>
                   <span className="font-medium text-zinc-900 dark:text-white transition-colors duration-300">{item.title}</span>
                 </div>
                 <span className="bg-emerald-500/10 text-emerald-500 px-3 py-1 rounded-full text-sm font-medium">
@@ -241,7 +241,7 @@ export default function Analytics() {
             {topLinks.length > 0 ? topLinks.map((item, index) => (
               <div key={item.id} className="flex items-center justify-between p-4 bg-zinc-50 dark:bg-zinc-950 rounded-xl border border-zinc-200 dark:border-zinc-800 transition-colors duration-300">
                 <div className="flex items-center gap-4">
-                  <span className="text-xl font-bold text-zinc-400 dark:text-zinc-600 w-6 transition-colors duration-300">{index + 1}</span>
+                  <span className="text-xl font-bold text-zinc-500 dark:text-zinc-400 dark:text-zinc-600 w-6 transition-colors duration-300">{index + 1}</span>
                   <div>
                     <p className="font-medium text-zinc-900 dark:text-white transition-colors duration-300">{item.contentTitle}</p>
                     <p className="text-sm text-zinc-500 dark:text-zinc-400 transition-colors duration-300">{item.linkName}</p>
@@ -267,7 +267,7 @@ export default function Analytics() {
             {topUsersBySessions.filter(u => u.periodSessions > 0).length > 0 ? topUsersBySessions.filter(u => u.periodSessions > 0).map((user, index) => (
               <div key={user.uid} className="flex items-center justify-between p-4 bg-zinc-50 dark:bg-zinc-950 rounded-xl border border-zinc-200 dark:border-zinc-800 transition-colors duration-300">
                 <div className="flex items-center gap-4">
-                  <span className="text-xl font-bold text-zinc-400 dark:text-zinc-600 w-6 transition-colors duration-300">{index + 1}</span>
+                  <span className="text-xl font-bold text-zinc-500 dark:text-zinc-400 dark:text-zinc-600 w-6 transition-colors duration-300">{index + 1}</span>
                   <div className="flex items-center gap-3">
                     {user.photoURL && user.photoURL.trim() !== "" ? (
                       <img src={user.photoURL} alt={user.displayName} className="w-8 h-8 rounded-full" referrerPolicy="no-referrer" />
@@ -302,7 +302,7 @@ export default function Analytics() {
             {topUsersByTime.filter(u => u.periodTimeSpent > 0).length > 0 ? topUsersByTime.filter(u => u.periodTimeSpent > 0).map((user, index) => (
               <div key={user.uid} className="flex items-center justify-between p-4 bg-zinc-50 dark:bg-zinc-950 rounded-xl border border-zinc-200 dark:border-zinc-800 transition-colors duration-300">
                 <div className="flex items-center gap-4">
-                  <span className="text-xl font-bold text-zinc-400 dark:text-zinc-600 w-6 transition-colors duration-300">{index + 1}</span>
+                  <span className="text-xl font-bold text-zinc-500 dark:text-zinc-400 dark:text-zinc-600 w-6 transition-colors duration-300">{index + 1}</span>
                   <div className="flex items-center gap-3">
                     {user.photoURL && user.photoURL.trim() !== "" ? (
                       <img src={user.photoURL} alt={user.displayName} className="w-8 h-8 rounded-full" referrerPolicy="no-referrer" />

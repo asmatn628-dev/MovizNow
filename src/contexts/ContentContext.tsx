@@ -58,21 +58,21 @@ export function ContentProvider({ children }: { children: React.ReactNode }) {
         return;
       }
 
-      let isAdminOrOwner = false;
+      let isAdminOrEditor = false;
       if (user) {
         try {
           const userDoc = await getDoc(doc(db, 'users', user.uid));
           if (userDoc.exists()) {
             const role = userDoc.data().role;
-            isAdminOrOwner = role === 'admin' || role === 'owner';
+            isAdminOrEditor = role === 'admin' || role === 'owner' || role === 'content_manager' || role === 'manager';
           }
         } catch (e) {
           console.error("Error fetching user role", e);
         }
       }
 
-      if (isAdminOrOwner) {
-        // Admin/Owner: Load all content and keep search_index updated
+      if (isAdminOrEditor) {
+        // Admin/Editor: Load all content and keep search_index updated
         const q = collection(db, 'content');
         unsubContent = onSnapshot(q, (snapshot) => {
           const rawContent = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() } as Content));
