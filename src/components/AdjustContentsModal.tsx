@@ -1,11 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, GripVertical, Save, Loader2, Search } from 'lucide-react';
+import { clsx } from 'clsx';
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
 import { Content } from '../types';
 import { db } from '../firebase';
 import { writeBatch, doc } from 'firebase/firestore';
 import { handleFirestoreError, OperationType } from '../utils/firestoreErrorHandler';
+import { useModalBehavior } from '../hooks/useModalBehavior';
 
 interface Props {
   isOpen: boolean;
@@ -17,6 +19,8 @@ export const AdjustContentsModal: React.FC<Props> = ({ isOpen, onClose, contentL
   const [items, setItems] = useState<Content[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [saving, setSaving] = useState(false);
+
+  useModalBehavior(isOpen, onClose);
 
   useEffect(() => {
     if (isOpen) {
@@ -178,9 +182,10 @@ export const AdjustContentsModal: React.FC<Props> = ({ isOpen, onClose, contentL
                               </div>
                               
                               <div className="flex flex-col items-end gap-1 flex-shrink-0">
-                                <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${
-                                  item.type === 'movie' ? 'bg-blue-500/20 text-blue-600 dark:text-blue-400' : 'bg-purple-500/20 text-purple-600 dark:text-purple-400'
-                                }`}>
+                                <span className={clsx(
+                                  "px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider text-white",
+                                  item.type === 'movie' ? 'bg-blue-500/90' : 'bg-purple-500/90'
+                                )}>
                                   {item.type}
                                 </span>
                                 <span className="px-2 py-0.5 rounded bg-zinc-100 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400 text-[10px] font-bold transition-colors duration-300">

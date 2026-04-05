@@ -4,8 +4,9 @@ import { db } from '../../firebase';
 import { collection, addDoc, deleteDoc, doc, updateDoc, onSnapshot, writeBatch, getDocs } from 'firebase/firestore';
 import { useAuth } from '../../contexts/AuthContext';
 import { useContent } from '../../contexts/ContentContext';
-import { Content, Genre, Language, Quality, QualityLinks, Season, Episode, LinkDef, Role } from '../../types';
+import { Content, Genre, Language, Quality, QualityLinks, Season, Episode, LinkDef, Role, Trailer } from '../../types';
 import { motion, AnimatePresence } from 'framer-motion';
+import { clsx } from 'clsx';
 import { Plus, Edit2, Trash2, Share2, Film, Tv, X, Save, Upload, Search, Eye, EyeOff, ArrowUp, ArrowDown, Copy, ClipboardPaste, GripVertical, Bell, RefreshCw, ChevronDown, ChevronUp, User, Lock } from 'lucide-react';
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
 import ConfirmModal from '../../components/ConfirmModal';
@@ -18,6 +19,7 @@ import { formatContentTitle, formatReleaseDate, formatRuntime, formatDateToMonth
 import { smartSearch } from '../../utils/searchUtils';
 import { handleFirestoreError, OperationType } from '../../utils/firestoreErrorHandler';
 import { generateTinyUrl } from '../../utils/tinyurl';
+import { useModalBehavior } from '../../hooks/useModalBehavior';
 
 interface QualityInputsProps {
   links: QualityLinks;
@@ -236,6 +238,7 @@ export default function ContentManagement() {
   const [posterUrl, setPosterUrl] = useState('');
   const [trailerUrl, setTrailerUrl] = useState('');
   const [trailerTitle, setTrailerTitle] = useState('');
+  const [trailers, setTrailers] = useState<Trailer[]>([]);
   const [sampleUrl, setSampleUrl] = useState('');
   const [imdbLink, setImdbLink] = useState('');
   const [imdbRating, setImdbRating] = useState('');
@@ -292,6 +295,19 @@ export default function ContentManagement() {
   const [shareAnywayConfig, setShareAnywayConfig] = useState<{ isOpen: boolean; content: Content | null }>({ isOpen: false, content: null });
   const [selectedShareSeasons, setSelectedShareSeasons] = useState<number[]>([]);
   const location = useLocation();
+
+  useModalBehavior(isModalOpen, () => setIsModalOpen(false));
+  useModalBehavior(imdbSeasonsPopup?.isOpen || false, () => setImdbSeasonsPopup(null));
+  useModalBehavior(shareSeasonModal.isOpen, () => setShareSeasonModal({ ...shareSeasonModal, isOpen: false }));
+  useModalBehavior(notificationModal.isOpen, () => setNotificationModal({ isOpen: false, content: null, status: 'idle' }));
+  useModalBehavior(shareAnywayConfig.isOpen, () => setShareAnywayConfig({ isOpen: false, content: null }));
+  useModalBehavior(isAutoFillModalOpen, () => setIsAutoFillModalOpen(false));
+  useModalBehavior(isMasterFetchModalOpen, () => setIsMasterFetchModalOpen(false));
+  useModalBehavior(isLinkCheckerOpen, () => setIsLinkCheckerOpen(false));
+  useModalBehavior(isAdjustContentsModalOpen, () => setIsAdjustContentsModalOpen(false));
+  useModalBehavior(manageModal.isOpen, () => setManageModal({ isOpen: false, type: null }));
+  useModalBehavior(alertConfig.isOpen, () => setAlertConfig({ ...alertConfig, isOpen: false }));
+  useModalBehavior(!!deleteId, () => setDeleteId(null));
 
   const prefilledDataApplied = useRef(false);
 
@@ -446,6 +462,8 @@ export default function ContentManagement() {
     setDescription('');
     setPosterUrl('');
     setTrailerUrl('');
+    setTrailerTitle('');
+    setTrailers([]);
     setSampleUrl('');
     setImdbLink('');
     setImdbRating('');
@@ -495,6 +513,7 @@ export default function ContentManagement() {
     setDescription(content.description);
     setPosterUrl(content.posterUrl);
     setTrailerUrl(content.trailerUrl);
+    setTrailers(content.trailers ? JSON.parse(content.trailers) : []);
     setSampleUrl(content.sampleUrl || '');
     setImdbLink(content.imdbLink || '');
     setImdbRating(content.imdbRating || '');
@@ -592,6 +611,7 @@ export default function ContentManagement() {
         description,
         posterUrl,
         trailerUrl,
+        trailers: JSON.stringify(trailers),
         sampleUrl,
         imdbLink,
         imdbRating,
@@ -1129,7 +1149,22 @@ export default function ContentManagement() {
         createdBy: 'admin' // In a real app, this would be the admin's UID
       };
 
+      // Add to Firestore for in-app history
       await addDoc(collection(db, 'notifications'), notification);
+      
+      // Send push notification via backend
+      await fetch('/api/notifications/send', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          title,
+          body,
+          imageUrl: content.posterUrl,
+          url: `/movie/${content.id}`
+        })
+      });
       
       setNotificationModal(prev => ({ ...prev, status: 'success' }));
       
@@ -1917,17 +1952,19 @@ export default function ContentManagement() {
       result = smartSearch(result, searchTerm);
     }
     
-    result.sort((a, b) => {
-      if (filterSort === 'default') {
-        if (a.order !== undefined && b.order !== undefined) return a.order - b.order;
-        if (a.order === undefined && b.order !== undefined) return -1;
-        if (a.order !== undefined && b.order === undefined) return 1;
-        return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
-      }
-      const timeA = new Date(a.createdAt).getTime();
-      const timeB = new Date(b.createdAt).getTime();
-      return filterSort === 'newest' ? timeB - timeA : timeA - timeB;
-    });
+    if (!searchTerm) {
+      result.sort((a, b) => {
+        if (filterSort === 'default') {
+          if (a.order !== undefined && b.order !== undefined) return a.order - b.order;
+          if (a.order === undefined && b.order !== undefined) return -1;
+          if (a.order !== undefined && b.order === undefined) return 1;
+          return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+        }
+        const timeA = new Date(a.createdAt).getTime();
+        const timeB = new Date(b.createdAt).getTime();
+        return filterSort === 'newest' ? timeB - timeA : timeA - timeB;
+      });
+    }
     
     return result;
   }, [contentList, searchTerm, filterType, filterGenre, filterLanguage, filterQuality, filterYear, filterStatus, filterSort, filterAddedBy, profile, user]);
@@ -2189,7 +2226,10 @@ export default function ContentManagement() {
                   <img src={content.posterUrl || 'https://picsum.photos/seed/movie/400/600'} alt={content.title} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
                 </Link>
                 <div className="absolute top-1 right-1 flex flex-col gap-1 items-end">
-                  <div className="bg-black/80 backdrop-blur-md px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider">
+                  <div className={clsx(
+                    "px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider text-white",
+                    content.type === 'movie' ? 'bg-blue-500/90' : 'bg-purple-500/90'
+                  )}>
                     {content.type}
                   </div>
                   {content.status === 'draft' && (
@@ -2280,11 +2320,21 @@ export default function ContentManagement() {
                       <div className="flex-1">
                         <label className="block text-xs font-medium text-zinc-500 mb-1">Type</label>
                         <div className="flex gap-2">
-                          <label className={`flex-1 flex items-center justify-center gap-1 p-1.5 rounded-lg border cursor-pointer transition-colors text-xs ${type === 'movie' ? 'bg-emerald-500/10 border-emerald-500 text-emerald-500' : 'bg-white dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800 text-zinc-500 dark:text-zinc-400'}`}>
+                          <label className={clsx(
+                            "flex-1 flex items-center justify-center gap-1 p-1.5 rounded-lg border cursor-pointer transition-colors text-xs",
+                            type === 'movie' 
+                              ? 'bg-blue-500/10 border-blue-500 text-blue-500' 
+                              : 'bg-white dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800 text-zinc-500 dark:text-zinc-400'
+                          )}>
                             <input type="radio" name="type" value="movie" checked={type === 'movie'} onChange={() => setType('movie')} className="hidden" />
                             <Film className="w-3.5 h-3.5" /> Movie
                           </label>
-                          <label className={`flex-1 flex items-center justify-center gap-1 p-1.5 rounded-lg border cursor-pointer transition-colors text-xs ${type === 'series' ? 'bg-emerald-500/10 border-emerald-500 text-emerald-500' : 'bg-white dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800 text-zinc-500 dark:text-zinc-400'}`}>
+                          <label className={clsx(
+                            "flex-1 flex items-center justify-center gap-1 p-1.5 rounded-lg border cursor-pointer transition-colors text-xs",
+                            type === 'series' 
+                              ? 'bg-purple-500/10 border-purple-500 text-purple-500' 
+                              : 'bg-white dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800 text-zinc-500 dark:text-zinc-400'
+                          )}>
                             <input type="radio" name="type" value="series" checked={type === 'series'} onChange={() => setType('series')} className="hidden" />
                             <Tv className="w-3.5 h-3.5" /> Series
                           </label>
@@ -2341,7 +2391,7 @@ export default function ContentManagement() {
                               setShowTitleSuggestions(false);
                             }}
                           >
-                            <span className="text-zinc-200">{suggestion.title}</span>
+                            <span className="text-zinc-900 dark:text-zinc-200">{suggestion.title}</span>
                             <span className="text-xs text-zinc-500 capitalize">{suggestion.type} • {suggestion.year}</span>
                           </div>
                         ))}
@@ -2381,12 +2431,94 @@ export default function ContentManagement() {
                     </div>
                   </div>
 
-                  {/* 5. Trailer Link */}
-                  <div>
-                    <label className="block text-xs font-medium text-zinc-500 mb-1">
-                      {trailerTitle ? trailerTitle : "Trailer URL (YouTube)"}
-                    </label>
-                    <input type="url" value={trailerUrl} onChange={(e) => setTrailerUrl(e.target.value)} className="w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-emerald-500" />
+                  {/* 5. Trailer Links */}
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <label className="block text-xs font-medium text-zinc-500">
+                        Trailers (YouTube)
+                      </label>
+                      <button
+                        type="button"
+                        onClick={() => setTrailers(prev => [...prev, { id: Math.random().toString(36).substr(2, 9), url: '', title: '' }])}
+                        className="p-1.5 bg-emerald-500/10 border border-emerald-500/20 text-emerald-500 rounded-lg hover:bg-emerald-500/20 transition-colors"
+                        title="Add Trailer"
+                      >
+                        <Plus className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                    
+                    {/* Main Trailer (Backward Compatibility) */}
+                    <div className="space-y-2">
+                      <label className="block text-[10px] font-medium text-zinc-400 uppercase tracking-wider">Main Trailer</label>
+                      <div className="flex flex-col gap-2 bg-zinc-50 dark:bg-zinc-900/50 p-3 rounded-xl border border-zinc-200 dark:border-zinc-800">
+                        <div className="text-[10px] text-zinc-500 mb-1">
+                          {trailerTitle ? trailerTitle : "Main Trailer URL"}
+                        </div>
+                        <input 
+                          type="url" 
+                          value={trailerUrl} 
+                          onChange={(e) => setTrailerUrl(e.target.value)} 
+                          placeholder="https://www.youtube.com/watch?v=..."
+                          className="w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-emerald-500" 
+                        />
+                      </div>
+                    </div>
+
+                    {/* Additional Trailers */}
+                    {trailers.map((trailer, idx) => (
+                      <div key={trailer.id} className="space-y-2">
+                        <div className="flex items-center justify-between">
+                          <label className="block text-[10px] font-medium text-zinc-400 uppercase tracking-wider">Trailer {idx + 1}</label>
+                          <button
+                            type="button"
+                            onClick={() => setTrailers(prev => prev.filter((_, i) => i !== idx))}
+                            className="p-1 text-red-500 hover:bg-red-500/10 rounded-lg transition-colors"
+                          >
+                            <X className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                        <div className="flex flex-col gap-2 bg-zinc-50 dark:bg-zinc-900/50 p-3 rounded-xl border border-zinc-200 dark:border-zinc-800">
+                          <input 
+                            type="text" 
+                            placeholder="Trailer Title (e.g. Season 1 Trailer, Teaser)"
+                            value={trailer.title}
+                            onChange={(e) => {
+                              const newTrailers = [...trailers];
+                              newTrailers[idx] = { ...newTrailers[idx], title: e.target.value };
+                              setTrailers(newTrailers);
+                            }}
+                            className="w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-emerald-500" 
+                          />
+                          <input 
+                            type="url" 
+                            placeholder="YouTube URL"
+                            value={trailer.url}
+                            onChange={(e) => {
+                              const newTrailers = [...trailers];
+                              newTrailers[idx] = { ...newTrailers[idx], url: e.target.value };
+                              setTrailers(newTrailers);
+                            }}
+                            className="w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-emerald-500" 
+                          />
+                          {type === 'series' && (
+                            <div className="flex items-center gap-2">
+                              <label className="text-[10px] text-zinc-500">Season (Optional):</label>
+                              <input 
+                                type="number" 
+                                placeholder="Season #"
+                                value={trailer.seasonNumber || ''}
+                                onChange={(e) => {
+                                  const newTrailers = [...trailers];
+                                  newTrailers[idx] = { ...newTrailers[idx], seasonNumber: parseInt(e.target.value) || undefined };
+                                  setTrailers(newTrailers);
+                                }}
+                                className="w-16 bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg px-2 py-1 text-xs focus:outline-none focus:border-emerald-500" 
+                              />
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    ))}
                   </div>
 
                   {/* 6. IMDb Link + Rating */}
@@ -3230,7 +3362,7 @@ export default function ContentManagement() {
         }
         onSave={async (items) => {
           if (!manageModal.type) return;
-          const collectionName = `${manageModal.type}s`;
+          const collectionName = manageModal.type === 'quality' ? 'qualities' : `${manageModal.type}s`;
           const batch = writeBatch(db);
           
           // Delete all existing

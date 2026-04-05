@@ -7,6 +7,7 @@ import { handleFirestoreError, OperationType } from '../../utils/firestoreErrorH
 import { LinkCheckerModal } from '../../components/LinkCheckerModal';
 import { motion, AnimatePresence } from 'framer-motion';
 import { performFullLinkScan, LinkCheckResult } from '../../utils/linkScanner';
+import { useModalBehavior } from '../../hooks/useModalBehavior';
 
 const parseLinks = (linksStr: string | undefined): QualityLinks => {
   if (!linksStr) return [];
@@ -67,6 +68,10 @@ export default function ErrorLinks() {
   const [addLinksContent, setAddLinksContent] = useState<Content | null>(null);
   const [addLinksInput, setAddLinksInput] = useState('');
   const [addingLinks, setAddingLinks] = useState(false);
+
+  useModalBehavior(isLinkCheckerModalOpen, () => setIsLinkCheckerModalOpen(false));
+  useModalBehavior(isAddLinksModalOpen, () => setIsAddLinksModalOpen(false));
+  useModalBehavior(!!editingLink, () => setEditingLink(null));
 
   const categorizeError = (detail: string): string => {
     const d = detail.toLowerCase();

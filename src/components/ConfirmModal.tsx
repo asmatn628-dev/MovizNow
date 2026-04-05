@@ -1,6 +1,7 @@
 import React from 'react';
 import { AlertTriangle, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useModalBehavior } from '../hooks/useModalBehavior';
 
 interface ConfirmModalProps {
   isOpen: boolean;
@@ -21,6 +22,8 @@ export default function ConfirmModal({
   confirmText = 'Confirm',
   cancelText = 'Cancel'
 }: ConfirmModalProps) {
+  useModalBehavior(isOpen, onCancel);
+
   return (
     <AnimatePresence>
       {isOpen && (

@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { X } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useModalBehavior } from '../hooks/useModalBehavior';
 
 interface CommentModalProps {
   isOpen: boolean;
@@ -11,6 +12,8 @@ interface CommentModalProps {
 
 export default function CommentModal({ isOpen, onClose, onSave, initialComment }: CommentModalProps) {
   const [comment, setComment] = useState(initialComment);
+
+  useModalBehavior(isOpen, onClose);
 
   return (
     <AnimatePresence>

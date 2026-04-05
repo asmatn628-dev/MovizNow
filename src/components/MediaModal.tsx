@@ -1,6 +1,8 @@
 import React, { useState, useMemo } from 'react';
 import { X, Search, Loader2, Film, Save } from 'lucide-react';
+import { clsx } from 'clsx';
 import { motion, AnimatePresence } from 'motion/react';
+import { useModalBehavior } from '../hooks/useModalBehavior';
 
 interface MediaModalProps {
   isOpen: boolean;
@@ -111,6 +113,8 @@ export const MediaModal: React.FC<MediaModalProps> = ({ isOpen, onClose, initial
     const saved = localStorage.getItem('mediaModal_includeEpisodeDescriptions');
     return saved ? JSON.parse(saved) : true;
   });
+
+  useModalBehavior(isOpen, onClose);
 
   React.useEffect(() => {
     localStorage.setItem('mediaModal_includeEpisodeDescriptions', JSON.stringify(includeEpisodeDescriptions));
@@ -485,7 +489,10 @@ export const MediaModal: React.FC<MediaModalProps> = ({ isOpen, onClose, initial
                         {res.item.title || res.item.name}
                       </div>
                       <div className="text-xs text-zinc-500 dark:text-zinc-400 flex items-center gap-2 mt-1">
-                        <span className="capitalize px-1.5 py-0.5 bg-zinc-200 dark:bg-zinc-700 rounded text-[10px] font-bold">
+                        <span className={clsx(
+                          "px-1.5 py-0.5 rounded text-[10px] font-bold text-white",
+                          res.type === 'movie' ? 'bg-blue-500/90' : 'bg-purple-500/90'
+                        )}>
                           {res.type === 'movie' ? 'Movie' : 'Series'}
                         </span>
                         <span>{(res.item.release_date || res.item.first_air_date || '').split('-')[0]}</span>

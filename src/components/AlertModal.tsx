@@ -1,6 +1,7 @@
 import React from 'react';
 import { AlertCircle, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useModalBehavior } from '../hooks/useModalBehavior';
 
 interface AlertModalProps {
   isOpen: boolean;
@@ -19,6 +20,8 @@ export default function AlertModal({
   buttonText = 'OK',
   children
 }: AlertModalProps) {
+  useModalBehavior(isOpen, onClose);
+
   return (
     <AnimatePresence>
       {isOpen && (

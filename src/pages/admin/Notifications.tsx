@@ -12,12 +12,15 @@ import { AppNotification } from "../../types";
 import { Bell, Trash2, Search, Calendar } from "lucide-react";
 import { format, isToday } from "date-fns";
 import ConfirmModal from "../../components/ConfirmModal";
+import { useModalBehavior } from "../../hooks/useModalBehavior";
 
 export default function Notifications() {
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [deleteId, setDeleteId] = useState<string | null>(null);
+
+  useModalBehavior(!!deleteId, () => setDeleteId(null));
 
   useEffect(() => {
     const q = query(

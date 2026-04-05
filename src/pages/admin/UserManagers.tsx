@@ -7,12 +7,16 @@ import { format } from 'date-fns';
 import { useNavigate } from 'react-router-dom';
 import { smartSearch } from '../../utils/searchUtils';
 import ConfirmModal from '../../components/ConfirmModal';
+import { useModalBehavior } from '../../hooks/useModalBehavior';
 
 export default function UserManagers() {
   const [managers, setManagers] = useState<UserProfile[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [managerToRemove, setManagerToRemove] = useState<string | null>(null);
+
+  useModalBehavior(!!managerToRemove, () => setManagerToRemove(null));
+
   const navigate = useNavigate();
 
   useEffect(() => {

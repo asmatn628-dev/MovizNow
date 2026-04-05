@@ -5,6 +5,7 @@ import { AlertTriangle, Edit2, Trash2, Bell, CheckCircle2, X, Save } from 'lucid
 import { handleFirestoreError, OperationType } from '../../utils/firestoreErrorHandler';
 import { Content, QualityLinks, Season } from '../../types';
 import { LinkCheckerModal } from '../../components/LinkCheckerModal';
+import { useModalBehavior } from '../../hooks/useModalBehavior';
 
 interface ReportedLink {
   id: string;
@@ -30,6 +31,9 @@ export default function ReportedLinks() {
   const [editName, setEditName] = useState('');
   const [saving, setSaving] = useState(false);
   const [isLinkCheckerModalOpen, setIsLinkCheckerModalOpen] = useState(false);
+
+  useModalBehavior(!!editingReport, () => setEditingReport(null));
+  useModalBehavior(isLinkCheckerModalOpen, () => setIsLinkCheckerModalOpen(false));
 
   useEffect(() => {
     const fetchReports = async () => {

@@ -121,8 +121,11 @@ service cloud.firestore {
 
     match /fcm_tokens/{tokenId} {
       allow read: if isAdmin();
-      allow create: if isAuthenticated() && isValidFCMToken(request.resource.data) && request.resource.data.userId == request.auth.uid;
-      allow update, delete: if isAdmin();
+      allow create: if (isAuthenticated() && isValidFCMToken(request.resource.data) && request.resource.data.userId == request.auth.uid) ||
+                       (!isAuthenticated() && isValidFCMToken(request.resource.data) && request.resource.data.userId == 'anonymous');
+      allow update: if (isAuthenticated() && isValidFCMToken(request.resource.data) && request.resource.data.userId == request.auth.uid && resource.data.userId == request.auth.uid) ||
+                       (!isAuthenticated() && isValidFCMToken(request.resource.data) && request.resource.data.userId == 'anonymous' && resource.data.userId == 'anonymous');
+      allow delete: if isAdmin();
     }
 
     match /movie_requests/{requestId} {

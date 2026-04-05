@@ -29,6 +29,7 @@ import {
   buildMismatchWarnings,
   performFullLinkScan
 } from '../utils/linkScanner';
+import { useModalBehavior } from '../hooks/useModalBehavior';
 
 type Props = {
   isOpen: boolean;
@@ -83,6 +84,8 @@ export const LinkCheckerModal: React.FC<Props> = ({
   const [selectedUrls, setSelectedUrls] = useState<Set<string>>(new Set());
   const [error, setError] = useState<string | null>(null);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+
+  useModalBehavior(isOpen, onClose);
 
   // Update input when initialInput changes
   React.useEffect(() => {

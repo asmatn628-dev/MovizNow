@@ -10,6 +10,7 @@ import { clsx } from 'clsx';
 import { handleFirestoreError, OperationType } from '../../utils/firestoreErrorHandler';
 import { smartSearch } from '../../utils/searchUtils';
 import { format } from 'date-fns';
+import { useModalBehavior } from '../../hooks/useModalBehavior';
 
 interface MovieRequest {
   id: string;
@@ -35,6 +36,8 @@ export default function MovieRequests() {
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
   const [userRequestCount, setUserRequestCount] = useState(0);
+
+  useModalBehavior(isRequestModalOpen, () => setIsRequestModalOpen(false));
 
   const MAX_REQUESTS_PER_USER = 3;
 

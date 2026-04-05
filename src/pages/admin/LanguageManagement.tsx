@@ -6,6 +6,7 @@ import { Plus, Edit2, Trash2, X, Check, Search, GripVertical } from 'lucide-reac
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
 import ConfirmModal from '../../components/ConfirmModal';
 import { handleFirestoreError, OperationType } from '../../utils/firestoreErrorHandler';
+import { useModalBehavior } from '../../hooks/useModalBehavior';
 
 export default function LanguageManagement() {
   const [languages, setLanguages] = useState<Language[]>([]);
@@ -16,25 +17,36 @@ export default function LanguageManagement() {
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
+  useModalBehavior(!!deleteId, () => setDeleteId(null));
+
   useEffect(() => {
-    const fetchLanguages = async () => {
-      try {
-        const snapshot = await getDocs(collection(db, 'languages'));
-        const data = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() } as Language));
-        setLanguages(data.sort((a, b) => {
-          if (a.order !== undefined && b.order !== undefined) return a.order - b.order;
-          if (a.order !== undefined) return -1;
-          if (b.order !== undefined) return 1;
-          return a.name.localeCompare(b.name);
-        }));
-        setLoading(false);
-      } catch (error) {
-        console.error("Languages fetch error:", error);
-        setLoading(false);
+    // Load from cache initially
+    const cachedLanguages = localStorage.getItem('languages_cache');
+    if (cachedLanguages) {
+      setLanguages(JSON.parse(cachedLanguages));
+      setLoading(false);
+    }
+
+    const unsub = onSnapshot(collection(db, 'languages'), (snapshot) => {
+      const data = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() } as Language));
+      const sortedData = data.sort((a, b) => {
+        if (a.order !== undefined && b.order !== undefined) return a.order - b.order;
+        if (a.order !== undefined) return -1;
+        if (b.order !== undefined) return 1;
+        return a.name.localeCompare(b.name);
+      });
+      setLanguages(sortedData);
+      localStorage.setItem('languages_cache', JSON.stringify(sortedData));
+      setLoading(false);
+    }, (error) => {
+      console.error("Languages snapshot error:", error);
+      setLoading(false);
+      if (navigator.onLine) {
         handleFirestoreError(error, OperationType.LIST, 'languages');
       }
-    };
-    fetchLanguages();
+    });
+
+    return () => unsub();
   }, []);
 
   const handleAdd = async (e: React.FormEvent) => {

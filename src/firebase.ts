@@ -42,8 +42,14 @@ export const requestNotificationPermission = async () => {
         registration = await navigator.serviceWorker.register('/firebase-messaging-sw.js?v=4');
       }
 
+      const vapidKey = import.meta.env.VITE_FCM_VAPID_KEY;
+      if (!vapidKey) {
+        console.warn('FCM VAPID key is missing. Notifications will not work.');
+        return null;
+      }
+
       const token = await getToken(messaging, {
-        vapidKey: import.meta.env.VITE_FCM_VAPID_KEY,
+        vapidKey,
         serviceWorkerRegistration: registration
       });
       
@@ -74,7 +80,29 @@ export const requestNotificationPermission = async () => {
 if (messaging) {
   onMessage(messaging, (payload) => {
     console.log('Message received. ', payload);
-    // Custom handling for foreground messages if needed
+    // Show system notification even when app is in foreground
+    if (Notification.permission === 'granted' && payload.notification) {
+      navigator.serviceWorker.getRegistrations().then((registrations) => {
+        const myReg = registrations.find(
+          (reg) => reg.active && reg.active.scriptURL.includes("firebase-messaging-sw.js")
+        );
+        if (myReg) {
+          myReg.showNotification(payload.notification.title || 'New Notification', {
+            body: payload.notification.body,
+            icon: payload.notification.image || '/logo.svg',
+            image: payload.notification.image,
+            data: payload.data,
+          } as any);
+        } else {
+          new Notification(payload.notification.title || 'New Notification', {
+            body: payload.notification.body,
+            icon: payload.notification.image || '/logo.svg',
+            image: payload.notification.image,
+            data: payload.data,
+          } as any);
+        }
+      });
+    }
   });
 }
 

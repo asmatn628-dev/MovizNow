@@ -12,7 +12,8 @@ const __dirname = path.dirname(__filename);
 // Initialize Firebase Admin
 if (!admin.apps.length) {
   admin.initializeApp({
-    credential: admin.credential.applicationDefault()
+    credential: admin.credential.applicationDefault(),
+    projectId: firebaseConfig.projectId
   });
 }
 const db = getFirestore(admin.app(), firebaseConfig.firestoreDatabaseId);
@@ -355,6 +356,45 @@ async function startServer() {
       res.json({ results });
     } catch (error) {
       console.error("Scan Links Error:", error);
+      res.status(500).json({ error: "Internal Server Error" });
+    }
+  });
+
+  // Subscribe to FCM topic
+  app.post(["/api/notifications/subscribe", "/notifications/subscribe"], async (req, res) => {
+    try {
+      const { token } = req.body;
+      if (!token) return res.status(400).json({ error: "Token required" });
+      
+      await admin.messaging().subscribeToTopic(token, "all_users");
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error subscribing to topic:", error);
+      res.status(500).json({ error: "Internal Server Error" });
+    }
+  });
+
+  // Send FCM notification
+  app.post(["/api/notifications/send", "/notifications/send"], async (req, res) => {
+    try {
+      const { title, body, imageUrl, url } = req.body;
+      
+      const message = {
+        notification: {
+          title,
+          body,
+          ...(imageUrl && { imageUrl })
+        },
+        data: {
+          url: url || "/"
+        },
+        topic: "all_users"
+      };
+
+      const response = await admin.messaging().send(message);
+      res.json({ success: true, messageId: response });
+    } catch (error) {
+      console.error("Error sending notification:", error);
       res.status(500).json({ error: "Internal Server Error" });
     }
   });

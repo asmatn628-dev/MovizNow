@@ -6,6 +6,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { AppNotification } from '../types';
 import { formatDistanceToNow } from 'date-fns';
 import { Link } from 'react-router-dom';
+import { useModalBehavior } from '../hooks/useModalBehavior';
 
 interface NotificationMenuProps {}
 
@@ -14,6 +15,8 @@ export const NotificationMenu: React.FC<NotificationMenuProps> = () => {
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [isOpen, setIsOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
+
+  useModalBehavior(isOpen, () => setIsOpen(false));
 
   useEffect(() => {
     if (!profile) return;

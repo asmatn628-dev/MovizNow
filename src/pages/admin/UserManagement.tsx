@@ -11,6 +11,7 @@ import { handleFirestoreError, OperationType } from '../../utils/firestoreErrorH
 import { formatDateToMonthDDYYYY } from '../../utils/contentUtils';
 import { useAuth } from '../../contexts/AuthContext';
 import { smartSearch } from '../../utils/searchUtils';
+import { useModalBehavior } from '../../hooks/useModalBehavior';
 
 import { useLocation, useNavigate } from 'react-router-dom';
 
@@ -57,6 +58,12 @@ export default function UserManagement() {
   const [searchPendingError, setSearchPendingError] = useState<string | null>(null);
   const [newUserForm, setNewUserForm] = useState({ email: '', phone: '', role: 'user' as Role, expiryDate: '' });
   const [managers, setManagers] = useState<Record<string, string>>({});
+
+  useModalBehavior(alertConfig.isOpen, () => setAlertConfig(prev => ({ ...prev, isOpen: false })));
+  useModalBehavior(!!deleteConfirm, () => setDeleteConfirm(null));
+  useModalBehavior(isContentPickerOpen, () => setIsContentPickerOpen(false));
+  useModalBehavior(isAddUserModalOpen, () => setIsAddUserModalOpen(false));
+  useModalBehavior(!!selectedUser, () => setSelectedUser(null));
 
   useEffect(() => {
     let q = collection(db, 'users') as any;
@@ -590,26 +597,28 @@ export default function UserManagement() {
     }
 
     // Sort
-    result.sort((a, b) => {
-      let comparison = 0;
-      switch (sortField) {
-        case 'createdAt':
-          comparison = new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
-          break;
-        case 'displayName':
-          comparison = (a.displayName || '').localeCompare(b.displayName || '');
-          break;
-        case 'phone':
-          comparison = (a.phone || '').localeCompare(b.phone || '');
-          break;
-        case 'expiryDate':
-          const dateA = a.expiryDate ? new Date(a.expiryDate).getTime() : 0;
-          const dateB = b.expiryDate ? new Date(b.expiryDate).getTime() : 0;
-          comparison = dateA - dateB;
-          break;
-      }
-      return sortOrder === 'asc' ? comparison : -comparison;
-    });
+    if (!searchTerm) {
+      result.sort((a, b) => {
+        let comparison = 0;
+        switch (sortField) {
+          case 'createdAt':
+            comparison = new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+            break;
+          case 'displayName':
+            comparison = (a.displayName || '').localeCompare(b.displayName || '');
+            break;
+          case 'phone':
+            comparison = (a.phone || '').localeCompare(b.phone || '');
+            break;
+          case 'expiryDate':
+            const dateA = a.expiryDate ? new Date(a.expiryDate).getTime() : 0;
+            const dateB = b.expiryDate ? new Date(b.expiryDate).getTime() : 0;
+            comparison = dateA - dateB;
+            break;
+        }
+        return sortOrder === 'asc' ? comparison : -comparison;
+      });
+    }
 
     return result;
   }, [users, searchTerm, filterRole, filterStatus, sortField, sortOrder]);
@@ -1186,8 +1195,8 @@ export default function UserManagement() {
                               <div key={req.id} className="bg-white dark:bg-zinc-950 p-3 rounded-xl border border-zinc-200 dark:border-zinc-800 flex items-center justify-between">
                                 <div className="flex items-center gap-3">
                                   <div className={clsx(
-                                    "w-8 h-8 rounded-lg flex items-center justify-center shrink-0",
-                                    req.type === 'movie' ? "bg-blue-500/10 text-blue-500" : "bg-purple-500/10 text-purple-500"
+                                    "w-8 h-8 rounded-lg flex items-center justify-center shrink-0 text-white",
+                                    req.type === 'movie' ? "bg-blue-500/90" : "bg-purple-500/90"
                                   )}>
                                     {req.type === 'movie' ? <Film className="w-4 h-4" /> : <Tv className="w-4 h-4" />}
                                   </div>

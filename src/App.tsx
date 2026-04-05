@@ -9,6 +9,7 @@ import { ProtectedRoute } from './components/ProtectedRoute';
 import { Loader2 } from 'lucide-react';
 import { SystemNotificationWrapper } from './components/SystemNotificationWrapper';
 import { MediaModal } from './components/MediaModal';
+import { useModalBehavior } from './hooks/useModalBehavior';
 
 // Pages
 const Login = lazy(() => import('./pages/Login'));
@@ -55,6 +56,8 @@ function MediaModalController({ isOpen, onClose }: { isOpen: boolean; onClose: (
 
 export default function App() {
   const [isMediaModalOpen, setIsMediaModalOpen] = useState(false);
+
+  useModalBehavior(isMediaModalOpen, () => setIsMediaModalOpen(false));
 
   return (
     <ThemeProvider>

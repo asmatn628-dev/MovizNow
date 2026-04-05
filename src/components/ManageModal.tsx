@@ -2,6 +2,8 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Plus, Trash2, GripVertical, Save, Loader2, Search, Edit2, Check } from 'lucide-react';
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
+import { smartSearch } from '../utils/searchUtils';
+import { useModalBehavior } from '../hooks/useModalBehavior';
 
 interface Item {
   id: string;
@@ -29,6 +31,8 @@ const ManageModal: React.FC<Props> = ({ isOpen, title, onClose, type, items: ini
   const [searchTerm, setSearchTerm] = useState('');
   const [saving, setSaving] = useState(false);
 
+  useModalBehavior(isOpen, onClose);
+
   useEffect(() => {
     if (isOpen) {
       setItems([...initialItems].sort((a, b) => (a.order ?? 0) - (b.order ?? 0)));
@@ -40,7 +44,7 @@ const ManageModal: React.FC<Props> = ({ isOpen, title, onClose, type, items: ini
 
   const filteredItems = useMemo(() => {
     if (!searchTerm) return items;
-    return items.filter(item => item.name.toLowerCase().includes(searchTerm.toLowerCase()));
+    return smartSearch(items, searchTerm, ['name']);
   }, [items, searchTerm]);
 
   const handleAddItem = () => {

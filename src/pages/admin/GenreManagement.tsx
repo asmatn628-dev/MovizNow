@@ -6,6 +6,7 @@ import { Plus, Edit2, Trash2, X, Check, Search, GripVertical } from 'lucide-reac
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
 import ConfirmModal from '../../components/ConfirmModal';
 import { handleFirestoreError, OperationType } from '../../utils/firestoreErrorHandler';
+import { useModalBehavior } from '../../hooks/useModalBehavior';
 
 export default function GenreManagement() {
   const [genres, setGenres] = useState<Genre[]>([]);
@@ -16,25 +17,36 @@ export default function GenreManagement() {
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
+  useModalBehavior(!!deleteId, () => setDeleteId(null));
+
   useEffect(() => {
-    const fetchGenres = async () => {
-      try {
-        const snapshot = await getDocs(collection(db, 'genres'));
-        const data = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() } as Genre));
-        setGenres(data.sort((a, b) => {
-          if (a.order !== undefined && b.order !== undefined) return a.order - b.order;
-          if (a.order !== undefined) return -1;
-          if (b.order !== undefined) return 1;
-          return a.name.localeCompare(b.name);
-        }));
-        setLoading(false);
-      } catch (error) {
-        console.error("Genres fetch error:", error);
-        setLoading(false);
+    // Load from cache initially
+    const cachedGenres = localStorage.getItem('genres_cache');
+    if (cachedGenres) {
+      setGenres(JSON.parse(cachedGenres));
+      setLoading(false);
+    }
+
+    const unsub = onSnapshot(collection(db, 'genres'), (snapshot) => {
+      const data = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() } as Genre));
+      const sortedData = data.sort((a, b) => {
+        if (a.order !== undefined && b.order !== undefined) return a.order - b.order;
+        if (a.order !== undefined) return -1;
+        if (b.order !== undefined) return 1;
+        return a.name.localeCompare(b.name);
+      });
+      setGenres(sortedData);
+      localStorage.setItem('genres_cache', JSON.stringify(sortedData));
+      setLoading(false);
+    }, (error) => {
+      console.error("Genres snapshot error:", error);
+      setLoading(false);
+      if (navigator.onLine) {
         handleFirestoreError(error, OperationType.LIST, 'genres');
       }
-    };
-    fetchGenres();
+    });
+
+    return () => unsub();
   }, []);
 
   const handleAdd = async (e: React.FormEvent) => {

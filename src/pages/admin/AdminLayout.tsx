@@ -6,6 +6,7 @@ import { clsx } from 'clsx';
 import ConfirmModal from '../../components/ConfirmModal';
 import { collection, onSnapshot, query, where, getDocs } from 'firebase/firestore';
 import { db } from '../../firebase';
+import { useModalBehavior } from '../../hooks/useModalBehavior';
 
 export default function AdminLayout() {
   const { logout, profile } = useAuth();
@@ -15,6 +16,9 @@ export default function AdminLayout() {
   const [isLogoutModalOpen, setIsLogoutModalOpen] = useState(false);
   const [reportedLinksCount, setReportedLinksCount] = useState(0);
   const [pendingOrdersCount, setPendingOrdersCount] = useState(0);
+
+  useModalBehavior(isLogoutModalOpen, () => setIsLogoutModalOpen(false));
+  useModalBehavior(isMobileMenuOpen, () => setIsMobileMenuOpen(false));
 
   useEffect(() => {
     if (profile?.role !== 'admin' && profile?.role !== 'owner' && profile?.role !== 'content_manager' && profile?.role !== 'manager') return;

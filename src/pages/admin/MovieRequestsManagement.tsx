@@ -8,6 +8,7 @@ import { handleFirestoreError, OperationType } from '../../utils/firestoreErrorH
 import { format } from 'date-fns';
 import ConfirmModal from '../../components/ConfirmModal';
 import CommentModal from '../../components/CommentModal';
+import { useModalBehavior } from '../../hooks/useModalBehavior';
 
 interface MovieRequest {
   id: string;
@@ -41,6 +42,10 @@ export default function MovieRequestsManagement() {
   const [selectedRequestId, setSelectedRequestId] = useState<string | null>(null);
   const [isSelecting, setIsSelecting] = useState<string | null>(null);
   const [requestToComment, setRequestToComment] = useState<MovieRequest | null>(null);
+
+  useModalBehavior(isDeleteModalOpen, () => setIsDeleteModalOpen(false));
+  useModalBehavior(isPickerOpen, () => setIsPickerOpen(false));
+  useModalBehavior(!!requestToComment, () => setRequestToComment(null));
 
   useEffect(() => {
     const q = query(collection(db, 'movie_requests'), orderBy(sortBy === 'count' ? 'requestCount' : 'createdAt', sortOrder));
@@ -241,8 +246,8 @@ export default function MovieRequestsManagement() {
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-3">
                         <div className={clsx(
-                          "w-10 h-10 rounded-xl flex items-center justify-center shrink-0",
-                          request.type === 'movie' ? "bg-blue-500/10 text-blue-500" : "bg-purple-500/10 text-purple-500"
+                          "w-10 h-10 rounded-xl flex items-center justify-center shrink-0 text-white",
+                          request.type === 'movie' ? "bg-blue-500/90" : "bg-purple-500/90"
                         )}>
                           {request.type === 'movie' ? <Film className="w-5 h-5" /> : <Tv className="w-5 h-5" />}
                         </div>
@@ -403,7 +408,15 @@ export default function MovieRequestsManagement() {
                     <img src={item.posterUrl} className="w-10 h-14 object-cover rounded-lg" referrerPolicy="no-referrer" />
                     <div className="flex-1">
                       <p className="font-bold text-sm text-zinc-100">{item.title}</p>
-                      <p className="text-[10px] text-zinc-500 uppercase font-bold">{item.type} • {item.year}</p>
+                      <p className="text-[10px] uppercase font-bold flex items-center gap-1.5">
+                        <span className={clsx(
+                          "px-1.5 py-0.5 rounded text-white",
+                          item.type === 'movie' ? "bg-blue-500/90" : "bg-purple-500/90"
+                        )}>
+                          {item.type}
+                        </span>
+                        <span className="text-zinc-500 tracking-wider">• {item.year}</span>
+                      </p>
                     </div>
                     {isSelecting === item.id && (
                       <div className="animate-spin rounded-full h-4 w-4 border-2 border-emerald-500 border-t-transparent"></div>

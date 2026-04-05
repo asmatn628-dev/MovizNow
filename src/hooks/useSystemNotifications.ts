@@ -6,7 +6,7 @@ import {
   onSnapshot,
   limit,
 } from "firebase/firestore";
-import { db } from "../firebase";
+import { db, requestNotificationPermission } from "../firebase";
 import { AppNotification, UserProfile } from "../types";
 
 export function useSystemNotifications(profile: UserProfile | null) {
@@ -22,17 +22,9 @@ export function useSystemNotifications(profile: UserProfile | null) {
       return;
     }
 
-    // Request permission for system notifications
-    if (Notification.permission === "default") {
-      Notification.requestPermission();
-    }
-
-    // Register service worker for reliable notifications (especially on mobile)
-    if ("serviceWorker" in navigator) {
-      // Versioning the SW registration to force an update if needed
-      navigator.serviceWorker
-        .register("/firebase-messaging-sw.js?v=4")
-        .catch((err) => console.error("SW registration failed:", err));
+    // Request permission and get FCM token
+    if (Notification.permission === "default" || Notification.permission === "granted") {
+      requestNotificationPermission().catch(console.error);
     }
 
     const q = query(
@@ -72,69 +64,7 @@ export function useSystemNotifications(profile: UserProfile | null) {
         new Date(notification.createdAt) > new Date(profile.createdAt)
       ) {
         lastNotificationId.current = notification.id;
-
-        if (Notification.permission === "granted") {
-          try {
-            if ("serviceWorker" in navigator) {
-              navigator.serviceWorker
-                .getRegistrations()
-                .then((registrations) => {
-                  const myReg = registrations.find(
-                    (reg) =>
-                      reg.active &&
-                      reg.active.scriptURL.includes("firebase-messaging-sw.js"),
-                  );
-
-                  if (myReg) {
-                    myReg.showNotification(notification.title, {
-                      body: notification.body,
-                      icon: notification.posterUrl || "/favicon.ico",
-                      image: notification.posterUrl,
-                      tag: notification.id,
-                      data: {
-                        url: notification.contentId
-                          ? `/movie/${notification.contentId}`
-                          : "/",
-                      },
-                    } as any);
-                  } else {
-                    // Fallback to standard Notification if SW not found or not active yet
-                    const sysNotif = new Notification(notification.title, {
-                      body: notification.body,
-                      icon: notification.posterUrl || "/favicon.ico",
-                      image: notification.posterUrl,
-                      tag: notification.id,
-                    } as any);
-
-                    sysNotif.onclick = () => {
-                      window.focus();
-                      if (notification.contentId) {
-                        window.location.href = `/movie/${notification.contentId}`;
-                      }
-                      sysNotif.close();
-                    };
-                  }
-                });
-            } else {
-              const sysNotif = new Notification(notification.title, {
-                body: notification.body,
-                icon: notification.posterUrl || "/favicon.ico",
-                image: notification.posterUrl,
-                tag: notification.id,
-              } as any);
-
-              sysNotif.onclick = () => {
-                window.focus();
-                if (notification.contentId) {
-                  window.location.href = `/movie/${notification.contentId}`;
-                }
-                sysNotif.close();
-              };
-            }
-          } catch (error) {
-            console.error("Error showing system notification:", error);
-          }
-        }
+        // FCM handles system notifications now. We just update the local state/UI if needed.
       }
     });
 

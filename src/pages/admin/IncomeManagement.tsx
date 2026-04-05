@@ -7,6 +7,7 @@ import { format } from 'date-fns';
 import ConfirmModal from '../../components/ConfirmModal';
 import AlertModal from '../../components/AlertModal';
 import { handleFirestoreError, OperationType } from '../../utils/firestoreErrorHandler';
+import { useModalBehavior } from '../../hooks/useModalBehavior';
 
 export default function IncomeManagement() {
   const [incomes, setIncomes] = useState<Income[]>([]);
@@ -19,6 +20,10 @@ export default function IncomeManagement() {
 
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [alertConfig, setAlertConfig] = useState<{ isOpen: boolean; title: string; message: string }>({ isOpen: false, title: '', message: '' });
+
+  useModalBehavior(isAdding, () => setIsAdding(false));
+  useModalBehavior(!!deleteId, () => setDeleteId(null));
+  useModalBehavior(alertConfig.isOpen, () => setAlertConfig(prev => ({ ...prev, isOpen: false })));
 
   useEffect(() => {
     const fetchIncome = async () => {

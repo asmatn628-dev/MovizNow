@@ -6,6 +6,7 @@ import { Settings, X, Check, Search } from 'lucide-react';
 import AlertModal from '../../components/AlertModal';
 import { handleFirestoreError, OperationType } from '../../utils/firestoreErrorHandler';
 import { smartSearch } from '../../utils/searchUtils';
+import { useModalBehavior } from '../../hooks/useModalBehavior';
 
 export default function TemporaryUsers() {
   const [users, setUsers] = useState<UserProfile[]>([]);
@@ -16,6 +17,9 @@ export default function TemporaryUsers() {
   const [contentSearchTerm, setContentSearchTerm] = useState('');
   const [alertConfig, setAlertConfig] = useState<{ isOpen: boolean; title: string; message: string }>({ isOpen: false, title: '', message: '' });
   const [loading, setLoading] = useState(true);
+
+  useModalBehavior(!!selectedUser, () => setSelectedUser(null));
+  useModalBehavior(alertConfig.isOpen, () => setAlertConfig(prev => ({ ...prev, isOpen: false })));
 
   useEffect(() => {
     const fetchUsers = async () => {

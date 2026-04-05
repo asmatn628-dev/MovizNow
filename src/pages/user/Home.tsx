@@ -14,6 +14,7 @@ import { formatContentTitle } from '../../utils/contentUtils';
 import { smartSearch } from '../../utils/searchUtils';
 import { LazyLoadImage } from 'react-lazy-load-image-component';
 import ContentCard from '../../components/ContentCard';
+import { useModalBehavior } from '../../hooks/useModalBehavior';
 
 import { NotificationMenu } from '../../components/NotificationMenu';
 
@@ -63,6 +64,9 @@ export default function Home({ onOpenMediaModal }: { onOpenMediaModal: () => voi
   const [showWhatsappPrompt, setShowWhatsappPrompt] = useState(false);
   const [whatsappNumber, setWhatsappNumber] = useState('');
   const [hasDismissedSession, setHasDismissedSession] = useState(false);
+
+  useModalBehavior(isLogoutModalOpen, () => setIsLogoutModalOpen(false));
+  useModalBehavior(showWhatsappPrompt, () => setShowWhatsappPrompt(false));
 
   const clearFilters = () => {
     setSort('default');
@@ -245,27 +249,29 @@ export default function Home({ onOpenMediaModal }: { onOpenMediaModal: () => voi
       });
     }
 
-    result.sort((a, b) => {
-      // For temporary and selected_content users, prioritize assigned content
-      if (profile?.role === 'temporary' || profile?.role === 'selected_content') {
-        const aAssigned = profile.assignedContent?.some(id => id === a.id || id.startsWith(`${a.id}:`)) ? 1 : 0;
-        const bAssigned = profile.assignedContent?.some(id => id === b.id || id.startsWith(`${b.id}:`)) ? 1 : 0;
-        if (aAssigned !== bAssigned) return bAssigned - aAssigned;
-      }
+    if (!search) {
+      result.sort((a, b) => {
+        // For temporary and selected_content users, prioritize assigned content
+        if (profile?.role === 'temporary' || profile?.role === 'selected_content') {
+          const aAssigned = profile.assignedContent?.some(id => id === a.id || id.startsWith(`${a.id}:`)) ? 1 : 0;
+          const bAssigned = profile.assignedContent?.some(id => id === b.id || id.startsWith(`${b.id}:`)) ? 1 : 0;
+          if (aAssigned !== bAssigned) return bAssigned - aAssigned;
+        }
 
-      if (sort === 'default') {
-        if (a.order !== undefined && b.order !== undefined) return a.order - b.order;
-        if (a.order === undefined && b.order !== undefined) return -1;
-        if (a.order !== undefined && b.order === undefined) return 1;
-        return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
-      } else if (sort === 'newest') {
-        return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
-      } else if (sort === 'year') {
-        return b.year - a.year;
-      } else {
-        return a.title.localeCompare(b.title);
-      }
-    });
+        if (sort === 'default') {
+          if (a.order !== undefined && b.order !== undefined) return a.order - b.order;
+          if (a.order === undefined && b.order !== undefined) return -1;
+          if (a.order !== undefined && b.order === undefined) return 1;
+          return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+        } else if (sort === 'newest') {
+          return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+        } else if (sort === 'year') {
+          return b.year - a.year;
+        } else {
+          return a.title.localeCompare(b.title);
+        }
+      });
+    }
 
     return result;
   }, [contentList, search, sort, selectedType, selectedGenre, selectedLanguage, selectedQuality, selectedYear, profile]);
@@ -671,7 +677,7 @@ export default function Home({ onOpenMediaModal }: { onOpenMediaModal: () => voi
                       </div>
                     )}
                     <div className="flex-1 min-w-0">
-                      <div className="text-sm font-medium text-zinc-200 truncate">{suggestion.title}</div>
+                      <div className="text-sm font-medium text-zinc-900 dark:text-zinc-200 truncate">{suggestion.title}</div>
                       <div className="text-xs text-zinc-500 capitalize mt-0.5">
                         {suggestion.type} • {suggestion.year}
                       </div>

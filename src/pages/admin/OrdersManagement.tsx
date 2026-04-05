@@ -6,6 +6,7 @@ import { Check, X, Clock, Search, Filter, Eye, Loader2, Trash2 } from 'lucide-re
 import { format } from 'date-fns';
 import { clsx } from 'clsx';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useModalBehavior } from '../../hooks/useModalBehavior';
 
 const CACHE_KEY = 'admin_orders_cache';
 
@@ -19,6 +20,8 @@ export default function OrdersManagement() {
   const [search, setSearch] = useState('');
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [processingId, setProcessingId] = useState<string | null>(null);
+
+  useModalBehavior(!!selectedOrder, () => setSelectedOrder(null));
 
   useEffect(() => {
     const q = query(collection(db, 'orders'), orderBy('createdAt', 'desc'));

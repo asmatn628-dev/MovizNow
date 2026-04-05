@@ -40,48 +40,70 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     };
   }, []);
 
-  // Sync offline actions when coming back online
+  // Sync offline/pending actions periodically
   useEffect(() => {
     if (isOnline && user) {
-      const syncOfflineActions = async () => {
+      const syncPendingActions = async () => {
         const pendingFavorites = JSON.parse(localStorage.getItem('pending_favorites') || '[]');
         const pendingWatchLater = JSON.parse(localStorage.getItem('pending_watch_later') || '[]');
 
         if (pendingFavorites.length > 0 || pendingWatchLater.length > 0) {
           const userRef = doc(db, 'users', user.uid);
-          const docSnap = await getDoc(userRef);
-          if (docSnap.exists()) {
-            const currentProfile = docSnap.data() as UserProfile;
-            let newFavorites = [...(currentProfile.favorites || [])];
-            let newWatchLater = [...(currentProfile.watchLater || [])];
+          try {
+            const docSnap = await getDoc(userRef);
+            if (docSnap.exists()) {
+              const currentProfile = docSnap.data() as UserProfile;
+              let newFavorites = [...(currentProfile.favorites || [])];
+              let newWatchLater = [...(currentProfile.watchLater || [])];
 
-            pendingFavorites.forEach((id: string) => {
-              if (newFavorites.includes(id)) {
-                newFavorites = newFavorites.filter(fid => fid !== id);
-              } else {
-                newFavorites.push(id);
-              }
-            });
+              pendingFavorites.forEach((id: string) => {
+                if (newFavorites.includes(id)) {
+                  newFavorites = newFavorites.filter(fid => fid !== id);
+                } else {
+                  newFavorites.push(id);
+                }
+              });
 
-            pendingWatchLater.forEach((id: string) => {
-              if (newWatchLater.includes(id)) {
-                newWatchLater = newWatchLater.filter(wid => wid !== id);
-              } else {
-                newWatchLater.push(id);
-              }
-            });
+              pendingWatchLater.forEach((id: string) => {
+                if (newWatchLater.includes(id)) {
+                  newWatchLater = newWatchLater.filter(wid => wid !== id);
+                } else {
+                  newWatchLater.push(id);
+                }
+              });
 
-            await updateDoc(userRef, {
-              favorites: newFavorites,
-              watchLater: newWatchLater
-            });
+              await updateDoc(userRef, {
+                favorites: newFavorites,
+                watchLater: newWatchLater
+              });
 
-            localStorage.removeItem('pending_favorites');
-            localStorage.removeItem('pending_watch_later');
+              localStorage.removeItem('pending_favorites');
+              localStorage.removeItem('pending_watch_later');
+            }
+          } catch (error) {
+            console.error("Background sync failed:", error);
           }
         }
       };
-      syncOfflineActions().catch(console.error);
+      
+      // Sync immediately when coming online
+      syncPendingActions();
+      
+      // Also sync periodically (every 30 seconds)
+      const syncInterval = setInterval(syncPendingActions, 30000);
+      
+      // Sync on visibility change (tab switch)
+      const handleVisibilityChange = () => {
+        if (document.visibilityState === 'hidden') {
+          syncPendingActions();
+        }
+      };
+      document.addEventListener('visibilitychange', handleVisibilityChange);
+      
+      return () => {
+        clearInterval(syncInterval);
+        document.removeEventListener('visibilitychange', handleVisibilityChange);
+      };
     }
   }, [isOnline, user]);
 

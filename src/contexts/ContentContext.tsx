@@ -95,9 +95,8 @@ export function ContentProvider({ children }: { children: React.ReactNode }) {
           }
         });
       } else {
-        // Regular User: Load from search_index
-        try {
-          const indexDoc = await getDoc(doc(db, 'metadata', 'search_index'));
+        // Regular User: Load from search_index in real-time
+        unsubContent = onSnapshot(doc(db, 'metadata', 'search_index'), async (indexDoc) => {
           if (indexDoc.exists()) {
             const data = indexDoc.data().data as string[];
             const parsedContent: Content[] = data.map(item => {
@@ -122,37 +121,45 @@ export function ContentProvider({ children }: { children: React.ReactNode }) {
             });
             localStorage.setItem('content_cache', JSON.stringify(parsedContent));
             setContentList(parsedContent);
+            setLoading(false);
           } else {
             // Fallback if search_index doesn't exist
-            const q = query(collection(db, 'content'), where('status', '==', 'published'), orderBy('createdAt', 'desc'), limit(50));
-            const snapshot = await getDocs(q);
-            const rawContent = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() } as Content));
-            
-            const sanitizedContent = rawContent.map(c => ({
-              ...c,
-              movieLinks: undefined,
-              fullSeasonZip: undefined,
-              fullSeasonMkv: undefined,
-              seasons: undefined
-            }));
-            
-            localStorage.setItem('content_cache', JSON.stringify(sanitizedContent));
-            setContentList(rawContent);
+            try {
+              const q = query(collection(db, 'content'), where('status', '==', 'published'), orderBy('createdAt', 'desc'), limit(50));
+              const snapshot = await getDocs(q);
+              const rawContent = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() } as Content));
+              
+              const sanitizedContent = rawContent.map(c => ({
+                ...c,
+                movieLinks: undefined,
+                fullSeasonZip: undefined,
+                fullSeasonMkv: undefined,
+                seasons: undefined
+              }));
+              
+              localStorage.setItem('content_cache', JSON.stringify(sanitizedContent));
+              setContentList(rawContent);
+            } catch (error) {
+              console.error("Error fetching fallback content", error);
+            }
+            setLoading(false);
           }
-        } catch (error) {
-          console.error("Error fetching search_index", error);
-        }
-        setLoading(false);
+        }, (error) => {
+          console.error("Search index snapshot error:", error);
+          setLoading(false);
+        });
       }
     });
 
-    const fetchStaticData = async () => {
+    let unsubGenres: () => void;
+    let unsubLanguages: () => void;
+    let unsubQualities: () => void;
+
+    const setupStaticDataListeners = () => {
       if (!navigator.onLine) return;
-      try {
-        
-        // Fetch Genres
-        const genresSnap = await getDocs(collection(db, 'genres'));
-        const genresData = genresSnap.docs.map(d => ({ id: d.id, ...d.data() } as Genre));
+
+      unsubGenres = onSnapshot(collection(db, 'genres'), (snapshot) => {
+        const genresData = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Genre));
         genresData.sort((a, b) => {
           if (a.order !== undefined && b.order !== undefined) return a.order - b.order;
           if (a.order !== undefined) return -1;
@@ -161,10 +168,10 @@ export function ContentProvider({ children }: { children: React.ReactNode }) {
         });
         localStorage.setItem('genres_cache', JSON.stringify(genresData));
         setGenres(genresData);
+      });
 
-        // Fetch Languages
-        const langsSnap = await getDocs(collection(db, 'languages'));
-        const langsData = langsSnap.docs.map(d => ({ id: d.id, ...d.data() } as Language));
+      unsubLanguages = onSnapshot(collection(db, 'languages'), (snapshot) => {
+        const langsData = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Language));
         langsData.sort((a, b) => {
           if (a.order !== undefined && b.order !== undefined) return a.order - b.order;
           if (a.order !== undefined) return -1;
@@ -173,10 +180,10 @@ export function ContentProvider({ children }: { children: React.ReactNode }) {
         });
         localStorage.setItem('languages_cache', JSON.stringify(langsData));
         setLanguages(langsData);
+      });
 
-        // Fetch Qualities
-        const qualitiesSnap = await getDocs(collection(db, 'qualities'));
-        const qualitiesData = qualitiesSnap.docs.map(d => ({ id: d.id, ...d.data() } as Quality));
+      unsubQualities = onSnapshot(collection(db, 'qualities'), (snapshot) => {
+        const qualitiesData = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Quality));
         qualitiesData.sort((a, b) => {
           if (a.order !== undefined && b.order !== undefined) return a.order - b.order;
           if (a.order !== undefined) return -1;
@@ -185,17 +192,17 @@ export function ContentProvider({ children }: { children: React.ReactNode }) {
         });
         localStorage.setItem('qualities_cache', JSON.stringify(qualitiesData));
         setQualities(qualitiesData);
-
-      } catch (error) {
-        console.error("Error fetching static data:", error);
-      }
+      });
     };
 
-    fetchStaticData();
+    setupStaticDataListeners();
 
     return () => { 
       unsubAuth();
       if (unsubContent) unsubContent();
+      if (unsubGenres) unsubGenres();
+      if (unsubLanguages) unsubLanguages();
+      if (unsubQualities) unsubQualities();
     };
   }, []);
 
