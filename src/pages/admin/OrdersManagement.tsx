@@ -82,21 +82,24 @@ export default function OrdersManagement() {
       setOrders(ordersData);
       setLoading(false);
 
-      // Auto-delete pending orders older than 7 days
+      // Auto-delete pending orders older than 7 days and cancelled orders older than 24 hours
       const now = new Date();
       const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+      const twentyFourHoursAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
       
-      const oldPendingOrders = ordersData.filter(order => {
-        if (order.status !== 'pending') return false;
+      const ordersToDelete = ordersData.filter(order => {
         const createdAt = (order.createdAt as any)?.seconds 
           ? new Date((order.createdAt as any).seconds * 1000) 
           : new Date(order.createdAt);
-        return createdAt < sevenDaysAgo;
+        
+        if (order.status === 'pending' && createdAt < sevenDaysAgo) return true;
+        if (order.status === 'cancelled' && createdAt < twentyFourHoursAgo) return true;
+        return false;
       });
 
-      if (oldPendingOrders.length > 0) {
-        console.log(`Auto-deleting ${oldPendingOrders.length} old pending orders`);
-        for (const order of oldPendingOrders) {
+      if (ordersToDelete.length > 0) {
+        console.log(`Auto-deleting ${ordersToDelete.length} old orders`);
+        for (const order of ordersToDelete) {
           try {
             await deleteDoc(doc(db, 'orders', order.id));
           } catch (err) {
