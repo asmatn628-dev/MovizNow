@@ -185,11 +185,11 @@ const ContentCard = React.memo(({
       </Link>
 
       {/* Action Buttons */}
-      <div className="absolute bottom-[88px] right-2 flex flex-col gap-2 z-30 opacity-0 group-hover:opacity-100 transition-opacity">
+      <div className="absolute bottom-[88px] right-2 flex flex-col gap-2 z-30 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none group-hover:pointer-events-auto">
         {(allTrailers.length > 0) && (
           <button
             onClick={handleWatchTrailer}
-            className="p-2 rounded-full backdrop-blur-md transition-all hover:scale-110 shadow-lg bg-red-600 text-white"
+            className="p-2 rounded-full backdrop-blur-md transition-all hover:scale-110 shadow-lg bg-red-600 text-white pointer-events-auto"
             title="Watch Trailer"
           >
             <Play className="w-4 h-4 fill-current" />
@@ -200,7 +200,7 @@ const ContentCard = React.memo(({
             <Link
               to="/cart"
               onClick={(e) => e.stopPropagation()}
-              className="p-2 rounded-full backdrop-blur-md transition-all hover:scale-110 shadow-lg bg-emerald-500 text-white"
+              className="p-2 rounded-full backdrop-blur-md transition-all hover:scale-110 shadow-lg bg-emerald-500 text-white pointer-events-auto"
               title="View Cart"
             >
               <ShoppingCart className="w-4 h-4 fill-current" />
@@ -208,7 +208,7 @@ const ContentCard = React.memo(({
           ) : (
             <button
               onClick={handleAddToCart}
-              className="p-2 rounded-full backdrop-blur-md transition-all hover:scale-110 shadow-lg bg-black/50 text-zinc-900 dark:text-white hover:bg-emerald-500"
+              className="p-2 rounded-full backdrop-blur-md transition-all hover:scale-110 shadow-lg bg-black/50 text-zinc-900 dark:text-white hover:bg-emerald-500 pointer-events-auto"
               title="Add to Cart"
             >
               <ShoppingCart className="w-4 h-4" />
@@ -219,7 +219,7 @@ const ContentCard = React.memo(({
           <Link
             to="/top-up"
             onClick={(e) => e.stopPropagation()}
-            className="p-2 rounded-full backdrop-blur-md transition-all hover:scale-110 shadow-lg bg-black/50 text-zinc-900 dark:text-white hover:bg-emerald-500"
+            className="p-2 rounded-full backdrop-blur-md transition-all hover:scale-110 shadow-lg bg-black/50 text-zinc-900 dark:text-white hover:bg-emerald-500 pointer-events-auto"
             title="Top Up Membership"
           >
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
@@ -232,7 +232,7 @@ const ContentCard = React.memo(({
             onToggleFavorite(content.id);
           }}
           className={clsx(
-            "p-2 rounded-full backdrop-blur-md transition-all hover:scale-110 shadow-lg",
+            "p-2 rounded-full backdrop-blur-md transition-all hover:scale-110 shadow-lg pointer-events-auto",
             isFavorite ? "bg-emerald-500 text-white" : "bg-black/50 text-zinc-900 dark:text-white hover:bg-emerald-500"
           )}
           title={isFavorite ? "Remove from Favorites" : "Add to Favorites"}
@@ -246,7 +246,7 @@ const ContentCard = React.memo(({
             onToggleWatchLater(content.id);
           }}
           className={clsx(
-            "p-2 rounded-full backdrop-blur-md transition-all hover:scale-110 shadow-lg",
+            "p-2 rounded-full backdrop-blur-md transition-all hover:scale-110 shadow-lg pointer-events-auto",
             isWatchLater ? "bg-emerald-500 text-white" : "bg-black/50 text-zinc-900 dark:text-white hover:bg-emerald-500"
           )}
           title={isWatchLater ? "Remove from Watch Later" : "Add to Watch Later"}

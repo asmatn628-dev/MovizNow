@@ -7,6 +7,7 @@ import { format } from 'date-fns';
 import { clsx } from 'clsx';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useModalBehavior } from '../../hooks/useModalBehavior';
+import ConfirmModal from '../../components/ConfirmModal';
 
 const CACHE_KEY = 'admin_orders_cache';
 
@@ -20,8 +21,54 @@ export default function OrdersManagement() {
   const [search, setSearch] = useState('');
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [processingId, setProcessingId] = useState<string | null>(null);
+  const [selectedUserPhone, setSelectedUserPhone] = useState<string | null>(null);
+  const [userPhones, setUserPhones] = useState<Record<string, string>>({});
+  const [confirmModal, setConfirmModal] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    onConfirm: () => void;
+    confirmText?: string;
+  }>({
+    isOpen: false,
+    title: '',
+    message: '',
+    onConfirm: () => {},
+  });
 
-  useModalBehavior(!!selectedOrder, () => setSelectedOrder(null));
+  useModalBehavior(!!selectedOrder, () => {
+    setSelectedOrder(null);
+    setSelectedUserPhone(null);
+  });
+
+  useEffect(() => {
+    if (orders.length > 0) {
+      const fetchUserPhones = async () => {
+        const newPhones: Record<string, string> = { ...userPhones };
+        const missingUserIds = Array.from(new Set(orders.map(o => o.userId))).filter(id => !newPhones[id]);
+        
+        for (const userId of missingUserIds) {
+          try {
+            const userRef = doc(db, 'users', userId);
+            const userSnap = await getDoc(userRef);
+            if (userSnap.exists()) {
+              newPhones[userId] = userSnap.data().phone || '';
+            }
+          } catch (error) {
+            console.error(`Error fetching phone for user ${userId}:`, error);
+          }
+        }
+        setUserPhones(newPhones);
+      };
+      fetchUserPhones();
+    }
+  }, [orders]);
+
+  useEffect(() => {
+    if (selectedOrder) {
+      setSelectedUserPhone(userPhones[selectedOrder.userId] || null);
+    }
+  }, [selectedOrder, userPhones]);
 
   useEffect(() => {
     const q = query(collection(db, 'orders'), orderBy('createdAt', 'desc'));
@@ -35,21 +82,24 @@ export default function OrdersManagement() {
       setOrders(ordersData);
       setLoading(false);
 
-      // Auto-delete pending orders older than 7 days
+      // Auto-delete pending orders older than 7 days and cancelled orders older than 24 hours
       const now = new Date();
       const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+      const twentyFourHoursAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
       
-      const oldPendingOrders = ordersData.filter(order => {
-        if (order.status !== 'pending') return false;
+      const ordersToDelete = ordersData.filter(order => {
         const createdAt = (order.createdAt as any)?.seconds 
           ? new Date((order.createdAt as any).seconds * 1000) 
           : new Date(order.createdAt);
-        return createdAt < sevenDaysAgo;
+        
+        if (order.status === 'pending' && createdAt < sevenDaysAgo) return true;
+        if (order.status === 'cancelled' && createdAt < twentyFourHoursAgo) return true;
+        return false;
       });
 
-      if (oldPendingOrders.length > 0) {
-        console.log(`Auto-deleting ${oldPendingOrders.length} old pending orders`);
-        for (const order of oldPendingOrders) {
+      if (ordersToDelete.length > 0) {
+        console.log(`Auto-deleting ${ordersToDelete.length} old orders`);
+        for (const order of ordersToDelete) {
           try {
             await deleteDoc(doc(db, 'orders', order.id));
           } catch (err) {
@@ -63,14 +113,13 @@ export default function OrdersManagement() {
   }, []);
 
   const handleApprove = async (order: Order) => {
-    if (!window.confirm('Are you sure you want to approve this order?')) return;
     setProcessingId(order.id);
     try {
       const userRef = doc(db, 'users', order.userId);
       const userSnap = await getDoc(userRef);
       
       if (!userSnap.exists()) {
-        alert('User not found');
+        console.error('User not found');
         setProcessingId(null);
         return;
       }
@@ -117,14 +166,12 @@ export default function OrdersManagement() {
 
     } catch (error) {
       console.error('Error approving order:', error);
-      alert('Failed to approve order');
     } finally {
       setProcessingId(null);
     }
   };
 
   const handleDecline = async (orderId: string) => {
-    if (!window.confirm('Are you sure you want to decline this order?')) return;
     setProcessingId(orderId);
     try {
       await updateDoc(doc(db, 'orders', orderId), {
@@ -132,20 +179,17 @@ export default function OrdersManagement() {
       });
     } catch (error) {
       console.error('Error declining order:', error);
-      alert('Failed to decline order');
     } finally {
       setProcessingId(null);
     }
   };
 
   const handleDelete = async (orderId: string) => {
-    if (!window.confirm('Are you sure you want to delete this order permanently? This will remove it from all records.')) return;
     setProcessingId(orderId);
     try {
       await deleteDoc(doc(db, 'orders', orderId));
     } catch (error) {
       console.error('Error deleting order:', error);
-      alert('Failed to delete order');
     } finally {
       setProcessingId(null);
     }
@@ -241,7 +285,7 @@ export default function OrdersManagement() {
                     </td>
                     <td className="px-6 py-4">
                       <div className="font-medium text-zinc-900 dark:text-white">{order.userName}</div>
-                      <div className="text-xs text-zinc-500">{order.userEmail}</div>
+                      <div className="text-xs text-zinc-500">{userPhones[order.userId] || order.userEmail}</div>
                       <div className="text-[10px] uppercase tracking-wider mt-1 text-emerald-500">{order.userRole}</div>
                     </td>
                     <td className="px-6 py-4">
@@ -277,7 +321,16 @@ export default function OrdersManagement() {
                         {order.status === 'pending' && (
                           <>
                             <button
-                              onClick={(e) => { e.stopPropagation(); handleApprove(order); }}
+                              onClick={(e) => { 
+                                e.stopPropagation(); 
+                                setConfirmModal({
+                                  isOpen: true,
+                                  title: 'Approve Order',
+                                  message: 'Are you sure you want to approve this order?',
+                                  onConfirm: () => handleApprove(order),
+                                  confirmText: 'Approve'
+                                });
+                              }}
                               disabled={processingId === order.id}
                               className="p-2 bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500/20 rounded-lg transition-colors disabled:opacity-50"
                               title="Approve"
@@ -285,7 +338,16 @@ export default function OrdersManagement() {
                               {processingId === order.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
                             </button>
                             <button
-                              onClick={(e) => { e.stopPropagation(); handleDecline(order.id); }}
+                              onClick={(e) => { 
+                                e.stopPropagation(); 
+                                setConfirmModal({
+                                  isOpen: true,
+                                  title: 'Decline Order',
+                                  message: 'Are you sure you want to decline this order?',
+                                  onConfirm: () => handleDecline(order.id),
+                                  confirmText: 'Decline'
+                                });
+                              }}
                               disabled={processingId === order.id}
                               className="p-2 bg-red-500/10 text-red-500 hover:bg-red-500/20 rounded-lg transition-colors disabled:opacity-50"
                               title="Decline"
@@ -295,7 +357,16 @@ export default function OrdersManagement() {
                           </>
                         )}
                         <button
-                          onClick={(e) => { e.stopPropagation(); handleDelete(order.id); }}
+                          onClick={(e) => { 
+                            e.stopPropagation(); 
+                            setConfirmModal({
+                              isOpen: true,
+                              title: 'Delete Order',
+                              message: 'Are you sure you want to delete this order permanently? This will remove it from all records.',
+                              onConfirm: () => handleDelete(order.id),
+                              confirmText: 'Delete'
+                            });
+                          }}
                           disabled={processingId === order.id}
                           className="p-2 bg-red-500/10 text-red-500 hover:bg-red-500/20 rounded-lg transition-colors disabled:opacity-50"
                           title="Delete Permanently"
@@ -366,6 +437,22 @@ export default function OrdersManagement() {
                   <div className="space-y-2 text-sm">
                     <p><span className="text-zinc-500 inline-block w-20">Name:</span> {selectedOrder.userName}</p>
                     <p><span className="text-zinc-500 inline-block w-20">Email:</span> {selectedOrder.userEmail}</p>
+                    <p><span className="text-zinc-500 inline-block w-20">Phone:</span> {selectedUserPhone || 'N/A'} {selectedUserPhone && (
+                      <a 
+                        href={`https://wa.me/${selectedUserPhone.replace(/\D/g, '')}?text=${encodeURIComponent(
+                          selectedOrder.status === 'pending' 
+                            ? `Ap ke Order ka Shukriya!\nAp ke Order ${selectedOrder.id} ki total payment ${selectedOrder.amount} hai. Order ke Approval ke liye Payment Screenshot bhej dain.\nBank: Easypaisa, Jazzcash, NayaPay, SadaPay \nAccount Number: 03416286423\nAccount Title: Asmat Ullah`
+                            : selectedOrder.status === 'approved'
+                            ? `Thanks for your Payment, Your order ${selectedOrder.id} has been approved.\n🍿 Enjoy watching on MovizNow!`
+                            : ""
+                        )}`} 
+                        target="_blank" 
+                        rel="noreferrer"
+                        className="ml-2 text-emerald-500 hover:text-emerald-600 text-xs font-medium underline"
+                      >
+                        WhatsApp
+                      </a>
+                    )}</p>
                     <p><span className="text-zinc-500 inline-block w-20">Role:</span> <span className="uppercase text-xs text-emerald-500">{selectedOrder.userRole}</span></p>
                     <p><span className="text-zinc-500 inline-block w-20">User ID:</span> <span className="font-mono text-xs">{selectedOrder.userId}</span></p>
                   </div>
@@ -400,8 +487,16 @@ export default function OrdersManagement() {
                 <div className="flex gap-3 mt-6 pt-6 border-t border-zinc-200 dark:border-zinc-800">
                   <button
                     onClick={() => {
-                      handleDecline(selectedOrder.id);
-                      setSelectedOrder(null);
+                      setConfirmModal({
+                        isOpen: true,
+                        title: 'Decline Order',
+                        message: 'Are you sure you want to decline this order?',
+                        onConfirm: () => {
+                          handleDecline(selectedOrder.id);
+                          setSelectedOrder(null);
+                        },
+                        confirmText: 'Decline'
+                      });
                     }}
                     disabled={processingId === selectedOrder.id}
                     className="flex-1 py-2.5 rounded-xl font-medium bg-red-500/10 text-red-500 hover:bg-red-500/20 transition-colors disabled:opacity-50"
@@ -410,8 +505,16 @@ export default function OrdersManagement() {
                   </button>
                   <button
                     onClick={() => {
-                      handleApprove(selectedOrder);
-                      setSelectedOrder(null);
+                      setConfirmModal({
+                        isOpen: true,
+                        title: 'Approve Order',
+                        message: 'Are you sure you want to approve this order?',
+                        onConfirm: () => {
+                          handleApprove(selectedOrder);
+                          setSelectedOrder(null);
+                        },
+                        confirmText: 'Approve'
+                      });
                     }}
                     disabled={processingId === selectedOrder.id}
                     className="flex-1 py-2.5 rounded-xl font-medium bg-emerald-500 text-white hover:bg-emerald-600 transition-colors disabled:opacity-50"
@@ -423,8 +526,16 @@ export default function OrdersManagement() {
                 <div className="mt-6 pt-6 border-t border-zinc-200 dark:border-zinc-800">
                   <button
                     onClick={() => {
-                      handleDelete(selectedOrder.id);
-                      setSelectedOrder(null);
+                      setConfirmModal({
+                        isOpen: true,
+                        title: 'Delete Order',
+                        message: 'Are you sure you want to delete this order permanently? This will remove it from all records.',
+                        onConfirm: () => {
+                          handleDelete(selectedOrder.id);
+                          setSelectedOrder(null);
+                        },
+                        confirmText: 'Delete'
+                      });
                     }}
                     disabled={processingId === selectedOrder.id}
                     className="w-full py-2.5 rounded-xl font-medium bg-red-500/10 text-red-500 hover:bg-red-500/20 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
@@ -438,6 +549,14 @@ export default function OrdersManagement() {
           </div>
         )}
       </AnimatePresence>
+      <ConfirmModal
+        isOpen={confirmModal.isOpen}
+        title={confirmModal.title}
+        message={confirmModal.message}
+        onConfirm={confirmModal.onConfirm}
+        onCancel={() => setConfirmModal({ ...confirmModal, isOpen: false })}
+        confirmText={confirmModal.confirmText}
+      />
     </motion.div>
   );
 }
