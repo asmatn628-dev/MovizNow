@@ -72,7 +72,7 @@ export const requestNotificationPermission = async () => {
       }
     }
   } catch (error) {
-    console.error('Error getting notification permission:', error);
+    console.warn('Error getting notification permission:', error);
   }
   return null;
 };

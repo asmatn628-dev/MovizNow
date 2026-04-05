@@ -368,6 +368,9 @@ async function startServer() {
       
       // Check if messaging is available (requires service account)
       try {
+        if (admin.apps.length === 0) {
+          throw new Error("Firebase Admin not initialized");
+        }
         await admin.messaging().subscribeToTopic(token, "all_users");
         res.json({ success: true });
       } catch (fcmError: any) {

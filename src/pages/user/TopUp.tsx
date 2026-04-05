@@ -1,9 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { ArrowLeft, Copy, Check, Send, Loader2, Wallet, Smartphone, CreditCard, Banknote } from 'lucide-react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { db } from '../../firebase';
-import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
+import { doc, setDoc, serverTimestamp, query, where, orderBy, limit, collection, getDocs } from 'firebase/firestore';
 import { motion } from 'framer-motion';
 import PreviousOrders from '../../components/PreviousOrders';
 
@@ -16,6 +16,33 @@ export default function TopUp() {
   const [months, setMonths] = useState(1);
   const [copied, setCopied] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [confirmed, setConfirmed] = useState(false);
+  const [orderId, setOrderId] = useState<string | null>(null);
+  const [pendingMembershipOrder, setPendingMembershipOrder] = useState<any>(null);
+  const [isCheckingPendingOrder, setIsCheckingPendingOrder] = useState(true);
+
+  useEffect(() => {
+    const checkPendingOrder = async () => {
+      if (!profile?.uid) {
+        setIsCheckingPendingOrder(false);
+        return;
+      }
+      const q = query(
+        collection(db, 'orders'),
+        where('userId', '==', profile.uid),
+        where('status', '==', 'pending'),
+        where('type', '==', 'membership')
+      );
+      const snapshot = await getDocs(q);
+      if (!snapshot.empty) {
+        setPendingMembershipOrder(snapshot.docs[0].data());
+        setOrderId(snapshot.docs[0].id);
+        setConfirmed(true);
+      }
+      setIsCheckingPendingOrder(false);
+    };
+    checkPendingOrder();
+  }, [profile?.uid]);
 
   const isExtend = location.state?.isExtend;
   const isTrial = profile?.role === 'trial';
@@ -29,13 +56,13 @@ export default function TopUp() {
     setTimeout(() => setCopied(false), 2000);
   };
 
-  const handleSendNow = async () => {
-    if (!profile) return;
+  const handleConfirm = async (): Promise<string | null> => {
+    if (!profile) return null;
     setLoading(true);
     try {
-      const orderId = Math.floor(10000000 + Math.random() * 90000000).toString();
+      const newOrderId = Math.floor(10000000 + Math.random() * 90000000).toString();
 
-      await setDoc(doc(db, 'orders', orderId), {
+      await setDoc(doc(db, 'orders', newOrderId), {
         userId: profile.uid,
         userName: profile.displayName || 'Unknown',
         userEmail: profile.email,
@@ -46,18 +73,43 @@ export default function TopUp() {
         status: 'pending',
         createdAt: serverTimestamp(),
       });
-
-      const message = `${actionText} Membership\nOrder ID: ${orderId}\nMonths: ${months}\nAmount: Rs ${months * 200}`;
-      const whatsappUrl = `https://wa.me/923363284466?text=${encodeURIComponent(message)}`;
-      
-      window.open(whatsappUrl, '_blank');
-      navigate('/');
+      setOrderId(newOrderId);
+      setConfirmed(true);
+      return newOrderId;
     } catch (error) {
       console.error('Error creating order:', error);
       alert('Failed to create order. Please try again.');
+      return null;
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleSendPaymentScreenshot = async () => {
+    if (!profile) return;
+    
+    let currentOrderId = orderId;
+    if (!confirmed) {
+        currentOrderId = await handleConfirm();
+        if (!currentOrderId) return;
+    }
+    
+    // Fetch the last membership order
+    const q = query(
+      collection(db, 'orders'),
+      where('userId', '==', profile.uid),
+      where('type', '==', 'membership'),
+      orderBy('createdAt', 'desc'),
+      limit(1)
+    );
+    const snapshot = await getDocs(q);
+    const lastOrder = snapshot.docs[0]?.data();
+
+    const message = `Membership Top Up\nOrder ID: ${currentOrderId}\nMonths: ${lastOrder?.months || months}\nAmount: Rs ${lastOrder?.amount || months * 200}`;
+    const whatsappUrl = `https://wa.me/923363284466?text=${encodeURIComponent(message)}`;
+    
+    window.open(whatsappUrl, '_blank');
+    navigate('/');
   };
 
   return (
@@ -74,31 +126,43 @@ export default function TopUp() {
 
         <h1 className="text-2xl font-bold mb-6">Top Up Membership</h1>
 
-        <div className="bg-zinc-50 dark:bg-zinc-900 rounded-xl p-6 mb-6">
-          <h2 className="text-lg font-semibold mb-4">Membership Details</h2>
-          <div className="flex items-center justify-between mb-4">
-            <span>Duration (Months)</span>
-            <div className="flex items-center gap-4">
-              <button 
-                onClick={() => setMonths(Math.max(1, months - 1))}
-                className="w-8 h-8 rounded-full bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center hover:bg-zinc-300 dark:hover:bg-zinc-700"
-              >
-                -
-              </button>
-              <span className="text-xl font-bold">{months}</span>
-              <button 
-                onClick={() => setMonths(months + 1)}
-                className="w-8 h-8 rounded-full bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center hover:bg-zinc-300 dark:hover:bg-zinc-700"
-              >
-                +
-              </button>
+        {isCheckingPendingOrder ? (
+          <div className="flex justify-center items-center h-40">
+            <Loader2 className="w-8 h-8 animate-spin text-emerald-500" />
+          </div>
+        ) : pendingMembershipOrder ? (
+          <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 p-4 rounded-xl mb-6">
+            <p className="text-yellow-800 dark:text-yellow-200 text-sm">
+              You have already a Pending Membership Order. Send Payment Screenshot OR Cancel it for New Order
+            </p>
+          </div>
+        ) : (
+          <div className="bg-zinc-50 dark:bg-zinc-900 rounded-xl p-6 mb-6">
+            <h2 className="text-lg font-semibold mb-4">Membership Details</h2>
+            <div className="flex items-center justify-between mb-4">
+              <span>Duration (Months)</span>
+              <div className="flex items-center gap-4">
+                <button 
+                  onClick={() => setMonths(Math.max(1, months - 1))}
+                  className="w-8 h-8 rounded-full bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center hover:bg-zinc-300 dark:hover:bg-zinc-700"
+                >
+                  -
+                </button>
+                <span className="text-xl font-bold">{months}</span>
+                <button 
+                  onClick={() => setMonths(months + 1)}
+                  className="w-8 h-8 rounded-full bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center hover:bg-zinc-300 dark:hover:bg-zinc-700"
+                >
+                  +
+                </button>
+              </div>
+            </div>
+            <div className="flex justify-between items-center border-t border-zinc-200 dark:border-zinc-800 pt-4 mt-4">
+              <span className="text-zinc-500 dark:text-zinc-400">Total Amount</span>
+              <span className="text-2xl font-bold text-red-500">Rs {months * 200}</span>
             </div>
           </div>
-          <div className="flex justify-between items-center border-t border-zinc-200 dark:border-zinc-800 pt-4 mt-4">
-            <span className="text-zinc-500 dark:text-zinc-400">Total Amount</span>
-            <span className="text-2xl font-bold text-red-500">Rs {months * 200}</span>
-          </div>
-        </div>
+        )}
 
         <div className="bg-zinc-50 dark:bg-zinc-900 rounded-xl p-6 mb-6 shadow-2xl border border-zinc-200 dark:border-zinc-800/50">
           <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
@@ -114,17 +178,25 @@ export default function TopUp() {
 
         <div className="text-center mb-6">
           <p className="text-zinc-500 dark:text-zinc-400 text-sm">
-            After Payment Send Screenshot for Confirmation
+            After Payment Send Screenshot for Approval
           </p>
         </div>
 
         <button
-          onClick={handleSendNow}
+          onClick={handleConfirm}
+          disabled={loading || confirmed || !!pendingMembershipOrder}
+          className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 rounded-xl flex items-center justify-center gap-2 transition-all active:scale-95 disabled:opacity-50 border border-white/20 shadow-lg mb-4"
+        >
+          {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : confirmed ? 'Confirmed' : 'Confirm Order'}
+        </button>
+
+        <button
+          onClick={handleSendPaymentScreenshot}
           disabled={loading}
           className="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-4 rounded-xl flex items-center justify-center gap-2 transition-all active:scale-95 disabled:opacity-50 border border-white/20 shadow-lg"
         >
           {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Send className="w-5 h-5" />}
-          {loading ? 'Processing...' : 'Send Now'}
+          {loading ? 'Processing...' : 'Send Payment Screenshot'}
         </button>
 
         <PreviousOrders />
