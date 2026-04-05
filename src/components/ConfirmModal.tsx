@@ -1,5 +1,5 @@
 import React from 'react';
-import { AlertTriangle, X } from 'lucide-react';
+import { AlertTriangle, X, Loader2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useModalBehavior } from '../hooks/useModalBehavior';
 
@@ -11,6 +11,7 @@ interface ConfirmModalProps {
   onCancel: () => void;
   confirmText?: string;
   cancelText?: string;
+  loading?: boolean;
 }
 
 export default function ConfirmModal({
@@ -20,7 +21,8 @@ export default function ConfirmModal({
   onConfirm,
   onCancel,
   confirmText = 'Confirm',
-  cancelText = 'Cancel'
+  cancelText = 'Cancel',
+  loading = false
 }: ConfirmModalProps) {
   useModalBehavior(isOpen, onCancel);
 
@@ -58,17 +60,19 @@ export default function ConfirmModal({
               <div className="flex justify-end gap-3">
                 <button
                   onClick={onCancel}
-                  className="px-4 py-2 rounded-xl font-medium text-zinc-600 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-all active:scale-95 border border-transparent hover:border-zinc-200 dark:hover:border-zinc-700"
+                  disabled={loading}
+                  className="px-4 py-2 rounded-xl font-medium text-zinc-600 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-all active:scale-95 border border-transparent hover:border-zinc-200 dark:hover:border-zinc-700 disabled:opacity-50"
                 >
                   {cancelText}
                 </button>
                 <button
                   onClick={() => {
                     onConfirm();
-                    onCancel();
                   }}
-                  className="px-4 py-2 rounded-xl font-medium bg-red-500 hover:bg-red-600 text-white transition-all active:scale-95 border border-white/20 shadow-lg"
+                  disabled={loading}
+                  className="px-4 py-2 rounded-xl font-medium bg-red-500 hover:bg-red-600 text-white transition-all active:scale-95 border border-white/20 shadow-lg disabled:opacity-50 flex items-center gap-2"
                 >
+                  {loading && <Loader2 className="w-4 h-4 animate-spin" />}
                   {confirmText}
                 </button>
               </div>

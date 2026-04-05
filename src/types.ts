@@ -171,7 +171,7 @@ export interface Order {
   userRole: Role;
   type: 'membership' | 'content';
   amount: number;
-  status: 'pending' | 'approved' | 'declined';
+  status: 'pending' | 'approved' | 'declined' | 'cancelled';
   createdAt: string;
   months?: number; // For membership
   items?: CartItem[]; // For content
