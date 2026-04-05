@@ -115,6 +115,7 @@ export interface Trailer {
   id: string;
   url: string;
   title: string;
+  youtubeTitle?: string; // Added youtubeTitle
   seasonNumber?: number;
 }
 
@@ -125,6 +126,9 @@ export interface Content {
   description: string;
   posterUrl: string;
   trailerUrl: string;
+  trailerTitle?: string; // Added trailerTitle
+  trailerYoutubeTitle?: string; // Added trailerYoutubeTitle
+  trailerSeasonNumber?: number; // Added trailerSeasonNumber
   trailers?: string; // JSON stringified Trailer[]
   genreIds: string[];
   languageIds: string[];

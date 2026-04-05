@@ -11,8 +11,13 @@ export function useModalBehavior(isOpen: boolean, onClose: () => void) {
   useEffect(() => {
     if (!isOpen) return;
 
-    const originalOverflow = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
+    const modalCount = parseInt(document.body.getAttribute('data-modal-count') || '0');
+    
+    if (modalCount === 0) {
+      document.body.setAttribute('data-original-overflow', document.body.style.overflow || '');
+      document.body.style.overflow = 'hidden';
+    }
+    document.body.setAttribute('data-modal-count', (modalCount + 1).toString());
 
     const modalId = modalIdRef.current;
 
@@ -26,7 +31,16 @@ export function useModalBehavior(isOpen: boolean, onClose: () => void) {
     window.addEventListener('popstate', handlePopState);
 
     return () => {
-      document.body.style.overflow = originalOverflow;
+      const currentCount = parseInt(document.body.getAttribute('data-modal-count') || '0');
+      const newCount = Math.max(0, currentCount - 1);
+      document.body.setAttribute('data-modal-count', newCount.toString());
+      
+      if (newCount === 0) {
+        const originalOverflow = document.body.getAttribute('data-original-overflow');
+        document.body.style.overflow = originalOverflow || '';
+        document.body.removeAttribute('data-original-overflow');
+      }
+      
       window.removeEventListener('popstate', handlePopState);
       
       if (window.history.state?.modalId === modalId) {

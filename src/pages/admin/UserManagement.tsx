@@ -2,11 +2,12 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { db } from '../../firebase';
 import { collection, doc, updateDoc, onSnapshot, query, where, getDocs, writeBatch, deleteDoc, setDoc } from 'firebase/firestore';
 import { UserProfile, Role, Status, AnalyticsEvent } from '../../types';
-import { Edit2, MessageCircle, X, Check, Search, ArrowUp, ArrowDown, Clock, MousePointerClick, Film, Trash2, Tv, Plus, Loader2, ArrowRight, UserPlus, Calendar, Heart, Bookmark } from 'lucide-react';
+import { Edit2, MessageCircle, X, Check, Search, ArrowUp, ArrowDown, Clock, MousePointerClick, Film, Trash2, Tv, Plus, Loader2, ArrowRight, UserPlus, Calendar, Heart, Bookmark, Save } from 'lucide-react';
 import { format, formatDistanceToNow } from 'date-fns';
 import clsx from 'clsx';
 import AlertModal from '../../components/AlertModal';
 import ConfirmModal from '../../components/ConfirmModal';
+import { Button } from '../../components/Button';
 import { handleFirestoreError, OperationType } from '../../utils/firestoreErrorHandler';
 import { formatDateToMonthDDYYYY } from '../../utils/contentUtils';
 import { useAuth } from '../../contexts/AuthContext';
@@ -58,6 +59,7 @@ export default function UserManagement() {
   const [searchPendingError, setSearchPendingError] = useState<string | null>(null);
   const [newUserForm, setNewUserForm] = useState({ email: '', phone: '', role: 'user' as Role, expiryDate: '' });
   const [managers, setManagers] = useState<Record<string, string>>({});
+  const [processing, setProcessing] = useState<Record<string, boolean>>({});
 
   useModalBehavior(alertConfig.isOpen, () => setAlertConfig(prev => ({ ...prev, isOpen: false })));
   useModalBehavior(!!deleteConfirm, () => setDeleteConfirm(null));
@@ -66,6 +68,17 @@ export default function UserManagement() {
   useModalBehavior(!!selectedUser, () => setSelectedUser(null));
 
   useEffect(() => {
+    const cacheKey = `cached_users_${profile?.uid}_${managedByFilter || 'all'}`;
+    const cached = localStorage.getItem(cacheKey);
+    if (cached) {
+      try {
+        setUsers(JSON.parse(cached));
+        setLoading(false);
+      } catch (e) {
+        console.error("Error parsing cached users:", e);
+      }
+    }
+
     let q = collection(db, 'users') as any;
     if (profile?.role === 'user_manager' || profile?.role === 'manager') {
       q = query(collection(db, 'users'), where('managedBy', '==', profile.uid));
@@ -132,6 +145,7 @@ export default function UserManagement() {
       }
 
       setUsers(data);
+      localStorage.setItem(cacheKey, JSON.stringify(data));
       setLoading(false);
     }, (error: any) => {
       console.error("Users snapshot error:", error);
@@ -280,6 +294,7 @@ export default function UserManagement() {
 
   const handleSave = async () => {
     if (!editingId || !selectedUser || selectedUser.role === 'owner') return;
+    setProcessing(prev => ({ ...prev, save: true }));
     try {
       const updateData: any = {
         displayName: editForm.displayName,
@@ -304,10 +319,6 @@ export default function UserManagement() {
       const currentEditingId = editingId;
       const previousRole = selectedUser.role;
       const newRole = editForm.role;
-
-      setEditingId(null);
-      setIsEditingOverlay(false);
-      setSelectedUser(null);
 
       await updateDoc(doc(db, 'users', currentEditingId), updateData);
 
@@ -341,30 +352,40 @@ export default function UserManagement() {
         await Promise.all(updatePromises);
       }
 
+      setEditingId(null);
+      setIsEditingOverlay(false);
+      setSelectedUser(null);
     } catch (error) {
       console.error('Error updating user:', error);
       setAlertConfig({ isOpen: true, title: 'Error', message: 'Failed to update user' });
+    } finally {
+      setProcessing(prev => ({ ...prev, save: false }));
     }
   };
 
-  const handleDelete = () => {
+  const handleDelete = async () => {
     if (!deleteConfirm) return;
+    setProcessing(prev => ({ ...prev, delete: true }));
     const userToDelete = users.find(u => u.uid === deleteConfirm);
     if (userToDelete?.role === 'owner') {
       setDeleteConfirm(null);
+      setProcessing(prev => ({ ...prev, delete: false }));
       return;
     }
     const currentDeleteConfirm = deleteConfirm;
     setDeleteConfirm(null);
     
-    updateDoc(doc(db, 'users', currentDeleteConfirm), {
-      status: 'suspended' // Soft delete by suspending
-    }).then(() => {
+    try {
+      await updateDoc(doc(db, 'users', currentDeleteConfirm), {
+        status: 'suspended' // Soft delete by suspending
+      });
       setAlertConfig({ isOpen: true, title: 'Success', message: 'User suspended successfully' });
-    }).catch(error => {
+    } catch (error) {
       console.error('Error suspending user:', error);
       setAlertConfig({ isOpen: true, title: 'Error', message: 'Failed to suspend user' });
-    });
+    } finally {
+      setProcessing(prev => ({ ...prev, delete: false }));
+    }
   };
 
   const sendWhatsAppReminder = (user: UserProfile) => {
@@ -555,24 +576,29 @@ export default function UserManagement() {
     );
   };
 
-  const handleBulkStatusChange = (status: 'active' | 'pending' | 'suspended' | 'expired') => {
+  const handleBulkStatusChange = async (status: 'active' | 'pending' | 'suspended' | 'expired') => {
     if (!window.confirm(`Are you sure you want to change the status of ${selectedUsers.length} users to ${status}?`)) return;
     
+    setProcessing(prev => ({ ...prev, bulk: true }));
     const currentSelected = [...selectedUsers];
     setSelectedUsers([]);
     
-    const batch = writeBatch(db);
-    currentSelected.forEach(uid => {
-      const user = users.find(u => u.uid === uid);
-      if (user?.role !== 'owner') {
-        const userRef = doc(db, 'users', uid);
-        batch.update(userRef, { status });
-      }
-    });
-    batch.commit().catch(error => {
+    try {
+      const batch = writeBatch(db);
+      currentSelected.forEach(uid => {
+        const user = users.find(u => u.uid === uid);
+        if (user?.role !== 'owner') {
+          const userRef = doc(db, 'users', uid);
+          batch.update(userRef, { status });
+        }
+      });
+      await batch.commit();
+    } catch (error) {
       console.error('Error updating users:', error);
       setAlertConfig({ isOpen: true, title: 'Error', message: 'Failed to update users' });
-    });
+    } finally {
+      setProcessing(prev => ({ ...prev, bulk: false }));
+    }
   };
 
   const SortIcon = ({ field }: { field: SortField }) => {
@@ -628,6 +654,7 @@ export default function UserManagement() {
       setSearchPendingError('Please enter an email or phone number.');
       return;
     }
+    setProcessing(prev => ({ ...prev, searchPending: true }));
     setSearchPendingError(null);
     setSearchedPendingUser(null);
 
@@ -660,11 +687,14 @@ export default function UserManagement() {
     } catch (error) {
       console.error("Error searching user:", error);
       setSearchPendingError('An error occurred while searching.');
+    } finally {
+      setProcessing(prev => ({ ...prev, searchPending: false }));
     }
   };
 
   const handleClaimPendingUser = async () => {
     if (!searchedPendingUser) return;
+    setProcessing(prev => ({ ...prev, claim: true }));
     try {
       const updateData: any = {
         role: newUserForm.role,
@@ -682,6 +712,8 @@ export default function UserManagement() {
     } catch (error) {
       console.error("Error claiming user:", error);
       setAlertConfig({ isOpen: true, title: 'Error', message: 'Failed to update user.' });
+    } finally {
+      setProcessing(prev => ({ ...prev, claim: false }));
     }
   };
 
@@ -691,6 +723,7 @@ export default function UserManagement() {
       return;
     }
 
+    setProcessing(prev => ({ ...prev, addUser: true }));
     try {
       const newUserId = `pending_${Date.now()}`;
       const newUserData: any = {
@@ -719,6 +752,8 @@ export default function UserManagement() {
     } catch (error) {
       console.error('Error adding user:', error);
       setAlertConfig({ isOpen: true, title: 'Error', message: 'Failed to add user.' });
+    } finally {
+      setProcessing(prev => ({ ...prev, addUser: false }));
     }
   };
 
@@ -740,13 +775,13 @@ export default function UserManagement() {
           )}
         </div>
         { (profile?.role === 'user_manager' || profile?.role === 'manager') && (
-          <button
+          <Button
             onClick={() => setIsAddUserModalOpen(true)}
-            className="flex items-center gap-2 bg-emerald-500 hover:bg-emerald-600 text-white px-4 py-2 rounded-xl font-bold transition-colors"
+            variant="emerald"
+            icon={<UserPlus className="w-5 h-5" />}
           >
-            <UserPlus className="w-5 h-5" />
             Add User
-          </button>
+          </Button>
         )}
       </div>
 
@@ -947,10 +982,11 @@ export default function UserManagement() {
                           e.stopPropagation();
                           sendWhatsAppReminder(user);
                         }}
-                        className="p-2 text-emerald-500 hover:bg-emerald-500/10 rounded-lg transition-colors"
+                        className="p-2 text-emerald-500 hover:bg-emerald-500/10 rounded-lg transition-colors disabled:opacity-50"
                         title="Send WhatsApp Reminder"
+                        disabled={processing[`reminder_${user.uid}`]}
                       >
-                        <MessageCircle className="w-5 h-5" />
+                        {processing[`reminder_${user.uid}`] ? <Loader2 className="w-5 h-5 animate-spin" /> : <MessageCircle className="w-5 h-5" />}
                       </button>
                       {user.role !== 'owner' && user.uid !== profile?.uid && (
                         <>
@@ -1143,13 +1179,14 @@ export default function UserManagement() {
                     <div className="border-t border-zinc-200 dark:border-zinc-800 pt-6">
                       <div className="flex items-center justify-between mb-4">
                         <h4 className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Assigned Content</h4>
-                        <button 
+                        <Button 
                           onClick={() => setIsContentPickerOpen(true)}
-                          className="text-xs font-bold text-emerald-500 hover:text-emerald-400 transition-colors flex items-center gap-1"
+                          variant="ghost"
+                          className="text-xs font-bold text-emerald-500 hover:text-emerald-400 transition-colors flex items-center gap-1 h-auto py-1 px-2"
+                          icon={<Plus className="w-3 h-3" />}
                         >
-                          <Plus className="w-3 h-3" />
                           Manage
-                        </button>
+                        </Button>
                       </div>
                       
                       <div className="flex flex-wrap gap-2">
@@ -1332,42 +1369,48 @@ export default function UserManagement() {
             <div className="p-4 md:p-6 border-t border-zinc-200 dark:border-zinc-800 flex gap-4 shrink-0">
               {isEditingOverlay ? (
                 <>
-                  <button
+                  <Button
                     onClick={() => { setIsEditingOverlay(false); setSelectedUser(null); }}
-                    className="flex-1 bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-300 dark:hover:bg-zinc-700 text-zinc-900 dark:text-white py-3 rounded-xl font-bold transition-colors"
+                    variant="secondary"
+                    className="flex-1 py-3"
                   >
                     Cancel
-                  </button>
-                  <button
+                  </Button>
+                  <Button
                     onClick={handleSave}
-                    className="flex-1 bg-emerald-500 hover:bg-emerald-600 text-white py-3 rounded-xl font-bold transition-colors flex items-center justify-center gap-2"
+                    variant="emerald"
+                    className="flex-1 py-3"
+                    loading={processing.save}
+                    icon={<Check className="w-5 h-5" />}
                   >
-                    <Check className="w-5 h-5" />
                     Save
-                  </button>
+                  </Button>
                 </>
               ) : (
                 <>
-                  <button
+                  <Button
                     onClick={() => {
                       sendWhatsAppReminder(selectedUser);
                       setSelectedUser(null);
                     }}
-                    className="flex-1 bg-emerald-500 hover:bg-emerald-600 text-white py-3 rounded-xl font-bold transition-colors flex items-center justify-center gap-2"
+                    variant="emerald"
+                    className="flex-1 py-3"
+                    loading={processing[`reminder_${selectedUser.uid}`]}
+                    icon={<MessageCircle className="w-5 h-5" />}
                   >
-                    <MessageCircle className="w-5 h-5" />
                     Send Reminder
-                  </button>
+                  </Button>
                   {selectedUser.role !== 'owner' && (
-                    <button
+                    <Button
                       onClick={() => {
                         handleEdit(selectedUser);
                       }}
-                      className="flex-1 bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-300 dark:hover:bg-zinc-700 text-zinc-900 dark:text-white py-3 rounded-xl font-bold transition-colors flex items-center justify-center gap-2"
+                      variant="secondary"
+                      className="flex-1 py-3"
+                      icon={<Edit2 className="w-5 h-5" />}
                     >
-                      <Edit2 className="w-5 h-5" />
                       Edit User
-                    </button>
+                    </Button>
                   )}
                 </>
               )}
@@ -1476,18 +1519,21 @@ export default function UserManagement() {
             </div>
 
             <div className="p-6 border-t border-zinc-200 dark:border-zinc-800 flex justify-end gap-4">
-              <button
+              <Button
                 onClick={() => setIsContentPickerOpen(false)}
-                className="px-6 py-2 rounded-xl font-medium text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:text-white hover:bg-zinc-200 dark:hover:bg-zinc-800 transition-colors"
+                variant="secondary"
+                className="px-6"
               >
                 Cancel
-              </button>
-              <button
+              </Button>
+              <Button
                 onClick={handleSaveAccess}
-                className="bg-emerald-500 hover:bg-emerald-600 text-white px-6 py-2 rounded-xl font-medium transition-colors"
+                variant="emerald"
+                className="px-6"
+                loading={processing.saveAccess}
               >
                 Save Changes
-              </button>
+              </Button>
             </div>
           </div>
         </div>
@@ -1534,6 +1580,14 @@ export default function UserManagement() {
                         className="flex-1 bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-2 focus:outline-none focus:border-emerald-500"
                         onKeyDown={(e) => e.key === 'Enter' && handleSearchPendingUser()}
                       />
+                      <Button
+                        onClick={handleSearchPendingUser}
+                        variant="emerald"
+                        loading={processing.searchPending}
+                        icon={<Search className="w-4 h-4" />}
+                      >
+                        Search
+                      </Button>
                     </div>
                     {searchPendingError && (
                       <p className="text-red-500 text-sm mt-2">{searchPendingError}</p>
@@ -1619,29 +1673,34 @@ export default function UserManagement() {
             </div>
 
             <div className="p-4 md:p-6 border-t border-zinc-200 dark:border-zinc-800 flex gap-4 shrink-0">
-              <button
+              <Button
                 onClick={() => { setIsAddUserModalOpen(false); setSearchedPendingUser(null); setSearchPendingQuery(''); setSearchPendingError(null); }}
-                className="flex-1 bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-300 dark:hover:bg-zinc-700 text-zinc-900 dark:text-white py-3 rounded-xl font-bold transition-colors"
+                variant="secondary"
+                className="flex-1 py-3"
               >
                 Cancel
-              </button>
+              </Button>
               {(profile?.role === 'user_manager' || profile?.role === 'manager' || profile?.role === 'owner') && !searchedPendingUser ? (
-                <button
+                <Button
                   onClick={handleSearchPendingUser}
-                  className="flex-1 bg-emerald-500 hover:bg-emerald-600 text-white py-3 rounded-xl font-bold transition-colors flex items-center justify-center gap-2"
+                  variant="emerald"
+                  className="flex-1 py-3"
+                  loading={processing.searchPending}
+                  icon={<Search className="w-5 h-5" />}
                 >
-                  <Search className="w-5 h-5" />
                   Search
-                </button>
+                </Button>
               ) : (
                 (!profile || (profile.role !== 'user_manager' && profile.role !== 'manager') || searchedPendingUser) && (
-                  <button
+                  <Button
                     onClick={searchedPendingUser ? handleClaimPendingUser : handleAddUser}
-                    className="flex-1 bg-emerald-500 hover:bg-emerald-600 text-white py-3 rounded-xl font-bold transition-colors flex items-center justify-center gap-2"
+                    variant="emerald"
+                    className="flex-1 py-3"
+                    loading={searchedPendingUser ? processing.claim : processing.addUser}
+                    icon={<Check className="w-5 h-5" />}
                   >
-                    <Check className="w-5 h-5" />
                     {searchedPendingUser ? 'Claim & Update' : 'Add User'}
-                  </button>
+                  </Button>
                 )
               )}
             </div>

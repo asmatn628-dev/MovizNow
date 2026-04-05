@@ -9,16 +9,18 @@ import {
 } from "firebase/firestore";
 import { db } from "../../firebase";
 import { AppNotification } from "../../types";
-import { Bell, Trash2, Search, Calendar } from "lucide-react";
+import { Bell, Trash2, Search, Calendar, Loader2 } from "lucide-react";
 import { format, isToday } from "date-fns";
 import ConfirmModal from "../../components/ConfirmModal";
 import { useModalBehavior } from "../../hooks/useModalBehavior";
+import Button from "../../components/Button";
 
 export default function Notifications() {
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [processing, setProcessing] = useState<Record<string, boolean>>({});
 
   useModalBehavior(!!deleteId, () => setDeleteId(null));
 
@@ -40,11 +42,14 @@ export default function Notifications() {
 
   const handleDelete = async () => {
     if (!deleteId) return;
+    setProcessing(prev => ({ ...prev, delete: true }));
     try {
       await deleteDoc(doc(db, "notifications", deleteId));
       setDeleteId(null);
     } catch (error) {
       console.error("Error deleting notification:", error);
+    } finally {
+      setProcessing(prev => ({ ...prev, delete: false }));
     }
   };
 
@@ -158,10 +163,11 @@ export default function Notifications() {
                 <div className="shrink-0 self-end sm:self-center mt-4 sm:mt-0">
                   <button
                     onClick={() => setDeleteId(notification.id)}
-                    className="p-2 text-red-500 hover:bg-red-500/10 rounded-lg transition-colors"
+                    className="p-2 text-red-500 hover:bg-red-500/10 rounded-lg transition-colors disabled:opacity-50"
                     title="Delete Notification"
+                    disabled={processing.delete}
                   >
-                    <Trash2 className="w-5 h-5" />
+                    {processing.delete && deleteId === notification.id ? <Loader2 className="w-5 h-5 animate-spin" /> : <Trash2 className="w-5 h-5" />}
                   </button>
                 </div>
               </div>
@@ -176,6 +182,7 @@ export default function Notifications() {
         message="Are you sure you want to delete this notification? This will remove it from users' notification history."
         onConfirm={handleDelete}
         onCancel={() => setDeleteId(null)}
+        loading={processing.delete}
       />
     </div>
   );

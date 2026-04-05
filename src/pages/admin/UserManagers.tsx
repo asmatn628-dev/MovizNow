@@ -2,24 +2,37 @@ import React, { useState, useEffect } from 'react';
 import { db } from '../../firebase';
 import { collection, onSnapshot, query, where, doc, updateDoc, getDocs } from 'firebase/firestore';
 import { UserProfile, Role } from '../../types';
-import { Users, ChevronRight, Search, X } from 'lucide-react';
+import { Users, ChevronRight, Search, X, Loader2 } from 'lucide-react';
 import { format } from 'date-fns';
 import { useNavigate } from 'react-router-dom';
 import { smartSearch } from '../../utils/searchUtils';
 import ConfirmModal from '../../components/ConfirmModal';
 import { useModalBehavior } from '../../hooks/useModalBehavior';
+import Button from '../../components/Button';
 
 export default function UserManagers() {
   const [managers, setManagers] = useState<UserProfile[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [managerToRemove, setManagerToRemove] = useState<string | null>(null);
+  const [processing, setProcessing] = useState<Record<string, boolean>>({});
 
   useModalBehavior(!!managerToRemove, () => setManagerToRemove(null));
 
   const navigate = useNavigate();
 
   useEffect(() => {
+    // Load from cache first
+    const cached = localStorage.getItem('cached_user_managers');
+    if (cached) {
+      try {
+        setManagers(JSON.parse(cached));
+        setLoading(false);
+      } catch (e) {
+        console.error("Error parsing cached managers:", e);
+      }
+    }
+
     const q1 = query(collection(db, 'users'), where('isUserManager', '==', true));
     const q2 = query(collection(db, 'users'), where('role', 'in', ['user_manager', 'manager']));
 
@@ -34,7 +47,9 @@ export default function UserManagers() {
         combined.set(doc.id, { uid: doc.id, ...doc.data() } as UserProfile);
       });
       
-      setManagers(Array.from(combined.values()));
+      const managersList = Array.from(combined.values());
+      setManagers(managersList);
+      localStorage.setItem('cached_user_managers', JSON.stringify(managersList));
       setLoading(false);
     };
 
@@ -65,6 +80,7 @@ export default function UserManagers() {
 
   const handleRemoveManager = async () => {
     if (!managerToRemove) return;
+    setProcessing(prev => ({ ...prev, remove: true }));
     try {
       await updateDoc(doc(db, 'users', managerToRemove), { isUserManager: false });
       setManagers(prev => prev.filter(m => m.uid !== managerToRemove));
@@ -72,6 +88,8 @@ export default function UserManagers() {
     } catch (error) {
       console.error('Error removing manager:', error);
       setManagerToRemove(null);
+    } finally {
+      setProcessing(prev => ({ ...prev, remove: false }));
     }
   };
 
@@ -133,12 +151,13 @@ export default function UserManagers() {
                       e.stopPropagation();
                       setManagerToRemove(manager.uid);
                     }}
-                    className="p-2 text-zinc-500 dark:text-zinc-400 dark:text-zinc-500 hover:text-red-500 hover:bg-red-500/10 rounded-lg transition-colors"
+                    className="p-2 text-zinc-500 dark:text-zinc-400 hover:text-red-500 hover:bg-red-500/10 rounded-lg transition-colors disabled:opacity-50"
                     title="Remove from User Managers"
+                    disabled={processing.remove}
                   >
-                    <X className="w-4 h-4" />
+                    {processing.remove && managerToRemove === manager.uid ? <Loader2 className="w-4 h-4 animate-spin" /> : <X className="w-4 h-4" />}
                   </button>
-                  <ChevronRight className="w-5 h-5 text-zinc-500 dark:text-zinc-400 dark:text-zinc-600 group-hover:text-emerald-500 transition-colors" />
+                  <ChevronRight className="w-5 h-5 text-zinc-500 dark:text-zinc-400 group-hover:text-emerald-500 transition-colors" />
                 </div>
               </div>
               
@@ -175,6 +194,7 @@ export default function UserManagers() {
         confirmText="Remove"
         onConfirm={handleRemoveManager}
         onCancel={() => setManagerToRemove(null)}
+        loading={processing.remove}
       />
     </div>
   );

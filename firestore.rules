@@ -123,7 +123,7 @@ service cloud.firestore {
       allow read: if isAdmin();
       allow create: if (isAuthenticated() && isValidFCMToken(request.resource.data) && request.resource.data.userId == request.auth.uid) ||
                        (!isAuthenticated() && isValidFCMToken(request.resource.data) && request.resource.data.userId == 'anonymous');
-      allow update: if (isAuthenticated() && isValidFCMToken(request.resource.data) && request.resource.data.userId == request.auth.uid && resource.data.userId == request.auth.uid) ||
+      allow update: if (isAuthenticated() && isValidFCMToken(request.resource.data) && request.resource.data.userId == request.auth.uid && (resource.data.userId == request.auth.uid || resource.data.userId == 'anonymous')) ||
                        (!isAuthenticated() && isValidFCMToken(request.resource.data) && request.resource.data.userId == 'anonymous' && resource.data.userId == 'anonymous');
       allow delete: if isAdmin();
     }

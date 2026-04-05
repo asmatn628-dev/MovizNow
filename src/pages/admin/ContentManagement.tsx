@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { useSearchParams, Link, useLocation } from 'react-router-dom';
+import { useSearchParams, Link, useLocation, useNavigate } from 'react-router-dom';
 import { db } from '../../firebase';
 import { collection, addDoc, deleteDoc, doc, updateDoc, onSnapshot, writeBatch, getDocs } from 'firebase/firestore';
 import { useAuth } from '../../contexts/AuthContext';
@@ -238,6 +238,8 @@ export default function ContentManagement() {
   const [posterUrl, setPosterUrl] = useState('');
   const [trailerUrl, setTrailerUrl] = useState('');
   const [trailerTitle, setTrailerTitle] = useState('');
+  const [trailerYoutubeTitle, setTrailerYoutubeTitle] = useState('');
+  const [trailerSeasonNumber, setTrailerSeasonNumber] = useState<number | undefined>(undefined);
   const [trailers, setTrailers] = useState<Trailer[]>([]);
   const [sampleUrl, setSampleUrl] = useState('');
   const [imdbLink, setImdbLink] = useState('');
@@ -280,6 +282,7 @@ export default function ContentManagement() {
   const [isGenreDropdownOpen, setIsGenreDropdownOpen] = useState(false);
   const [isLanguageDropdownOpen, setIsLanguageDropdownOpen] = useState(false);
   const [searchParams, setSearchParams] = useSearchParams();
+  const navigate = useNavigate();
   const [isMasterFetchModalOpen, setIsMasterFetchModalOpen] = useState(false);
   const [isLinkCheckerOpen, setIsLinkCheckerOpen] = useState(false);
   const [isAdjustContentsModalOpen, setIsAdjustContentsModalOpen] = useState(false);
@@ -302,12 +305,8 @@ export default function ContentManagement() {
   useModalBehavior(notificationModal.isOpen, () => setNotificationModal({ isOpen: false, content: null, status: 'idle' }));
   useModalBehavior(shareAnywayConfig.isOpen, () => setShareAnywayConfig({ isOpen: false, content: null }));
   useModalBehavior(isAutoFillModalOpen, () => setIsAutoFillModalOpen(false));
-  useModalBehavior(isMasterFetchModalOpen, () => setIsMasterFetchModalOpen(false));
-  useModalBehavior(isLinkCheckerOpen, () => setIsLinkCheckerOpen(false));
-  useModalBehavior(isAdjustContentsModalOpen, () => setIsAdjustContentsModalOpen(false));
-  useModalBehavior(manageModal.isOpen, () => setManageModal({ isOpen: false, type: null }));
-  useModalBehavior(alertConfig.isOpen, () => setAlertConfig({ ...alertConfig, isOpen: false }));
-  useModalBehavior(!!deleteId, () => setDeleteId(null));
+  // isMasterFetchModalOpen, isLinkCheckerOpen, isAdjustContentsModalOpen, manageModal, alertConfig, deleteId 
+  // are handled internally by their respective components (MediaModal, LinkCheckerModal, etc.)
 
   const prefilledDataApplied = useRef(false);
 
@@ -344,8 +343,10 @@ export default function ContentManagement() {
       setIsModalOpen(true);
       prefilledDataApplied.current = true;
       
-      // Clear state so it doesn't re-open on refresh
-      window.history.replaceState({}, document.title);
+      // Clear state so it doesn't re-open on refresh, preserving history state for modals
+      // We use replaceState directly to preserve the modalId pushed by useModalBehavior
+      const currentState = window.history.state || {};
+      window.history.replaceState({ ...currentState, usr: {} }, document.title);
     }
   }, [location.state, genres]); // Added genres as dependency to ensure applyAIFetchedData can match genres
 
@@ -416,29 +417,48 @@ export default function ContentManagement() {
   };
 
   useEffect(() => {
-    if (trailerUrl && trailerUrl.includes('youtube.com/watch')) {
-      fetch(`https://www.youtube.com/oembed?url=${trailerUrl}&format=json`)
-        .then(res => res.json())
-        .then(data => {
+    const fetchTitle = async (url: string, setter: (title: string) => void) => {
+      if (!url) return;
+      
+      let videoUrl = '';
+      if (url.includes('youtube.com/watch')) {
+        videoUrl = url;
+      } else if (url.includes('youtu.be/')) {
+        const videoId = url.split('youtu.be/')[1].split('?')[0];
+        videoUrl = `https://www.youtube.com/watch?v=${videoId}`;
+      }
+
+      if (videoUrl) {
+        try {
+          const res = await fetch(`https://www.youtube.com/oembed?url=${videoUrl}&format=json`);
+          const data = await res.json();
           if (data && data.title) {
-            setTrailerTitle(data.title);
+            setter(data.title);
           }
-        })
-        .catch(err => console.error("Error fetching YouTube title:", err));
-    } else if (trailerUrl && trailerUrl.includes('youtu.be/')) {
-      const videoId = trailerUrl.split('youtu.be/')[1].split('?')[0];
-      fetch(`https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v=${videoId}&format=json`)
-        .then(res => res.json())
-        .then(data => {
-          if (data && data.title) {
-            setTrailerTitle(data.title);
-          }
-        })
-        .catch(err => console.error("Error fetching YouTube title:", err));
-    } else {
-      setTrailerTitle('');
-    }
-  }, [trailerUrl]);
+        } catch (err) {
+          console.error("Error fetching YouTube title:", err);
+        }
+      }
+    };
+
+    // Main trailer
+    fetchTitle(trailerUrl, setTrailerYoutubeTitle);
+
+    // Additional trailers
+    trailers.forEach((trailer, idx) => {
+      if (trailer.url && !trailer.youtubeTitle) {
+        fetchTitle(trailer.url, (newTitle) => {
+          setTrailers(prev => {
+            const next = [...prev];
+            if (next[idx]) {
+              next[idx] = { ...next[idx], youtubeTitle: newTitle };
+            }
+            return next;
+          });
+        });
+      }
+    });
+  }, [trailerUrl, trailers]);
 
   useEffect(() => {
     const editId = searchParams.get('edit');
@@ -463,6 +483,8 @@ export default function ContentManagement() {
     setPosterUrl('');
     setTrailerUrl('');
     setTrailerTitle('');
+    setTrailerYoutubeTitle('');
+    setTrailerSeasonNumber(undefined);
     setTrailers([]);
     setSampleUrl('');
     setImdbLink('');
@@ -512,7 +534,10 @@ export default function ContentManagement() {
     setTitle(content.title);
     setDescription(content.description);
     setPosterUrl(content.posterUrl);
-    setTrailerUrl(content.trailerUrl);
+    setTrailerUrl(content.trailerUrl || '');
+    setTrailerTitle(content.trailerTitle || '');
+    setTrailerYoutubeTitle(content.trailerYoutubeTitle || '');
+    setTrailerSeasonNumber(content.trailerSeasonNumber);
     setTrailers(content.trailers ? JSON.parse(content.trailers) : []);
     setSampleUrl(content.sampleUrl || '');
     setImdbLink(content.imdbLink || '');
@@ -611,19 +636,22 @@ export default function ContentManagement() {
         description,
         posterUrl,
         trailerUrl,
+        trailerTitle: trailerTitle || '',
+        trailerYoutubeTitle: trailerYoutubeTitle || '',
+        trailerSeasonNumber: trailerSeasonNumber || null,
         trailers: JSON.stringify(trailers),
-        sampleUrl,
-        imdbLink,
-        imdbRating,
+        sampleUrl: sampleUrl || '',
+        imdbLink: imdbLink || '',
+        imdbRating: imdbRating || '',
         genreIds: selectedGenres,
         languageIds: selectedLanguages,
         qualityId: selectedQuality,
-        subtitles,
+        subtitles: !!subtitles,
         cast: cast.split(',').map(c => c.trim()).filter(Boolean),
-        country,
-        year,
-        releaseDate,
-        runtime,
+        country: country || '',
+        year: Number(year) || new Date().getFullYear(),
+        releaseDate: releaseDate || '',
+        runtime: runtime || '',
         updatedAt: new Date().toISOString(),
       };
 
@@ -2285,7 +2313,7 @@ export default function ContentManagement() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 z-50 overflow-y-auto"
+            className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 z-50"
           >
             <motion.div 
               initial={{ opacity: 0, scale: 0.95, y: 20 }}
@@ -2447,20 +2475,43 @@ export default function ContentManagement() {
                       </button>
                     </div>
                     
-                    {/* Main Trailer (Backward Compatibility) */}
+                    {/* Trailer 1 (Main Trailer) */}
                     <div className="space-y-2">
-                      <label className="block text-[10px] font-medium text-zinc-400 uppercase tracking-wider">Main Trailer</label>
+                      <div className="flex flex-col">
+                        <label className="block text-[10px] font-medium text-zinc-400 uppercase tracking-wider">
+                          Trailer 1
+                        </label>
+                        {trailerYoutubeTitle && (
+                          <span className="text-[10px] text-emerald-600 break-words leading-tight">{trailerYoutubeTitle}</span>
+                        )}
+                      </div>
                       <div className="flex flex-col gap-2 bg-zinc-50 dark:bg-zinc-900/50 p-3 rounded-xl border border-zinc-200 dark:border-zinc-800">
-                        <div className="text-[10px] text-zinc-500 mb-1">
-                          {trailerTitle ? trailerTitle : "Main Trailer URL"}
-                        </div>
+                        <input 
+                          type="text" 
+                          placeholder="Trailer Title (e.g. Season 1 Trailer, Teaser)"
+                          value={trailerTitle}
+                          onChange={(e) => setTrailerTitle(e.target.value)}
+                          className="w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-emerald-500" 
+                        />
                         <input 
                           type="url" 
                           value={trailerUrl} 
                           onChange={(e) => setTrailerUrl(e.target.value)} 
-                          placeholder="https://www.youtube.com/watch?v=..."
+                          placeholder="YouTube URL"
                           className="w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-emerald-500" 
                         />
+                        {type === 'series' && (
+                          <div className="flex items-center gap-2">
+                            <label className="text-[10px] text-zinc-500">Season (Optional):</label>
+                            <input 
+                              type="number" 
+                              placeholder="Season #"
+                              value={trailerSeasonNumber || ''}
+                              onChange={(e) => setTrailerSeasonNumber(parseInt(e.target.value) || undefined)}
+                              className="w-16 bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg px-2 py-1 text-xs focus:outline-none focus:border-emerald-500" 
+                            />
+                          </div>
+                        )}
                       </div>
                     </div>
 
@@ -2468,7 +2519,14 @@ export default function ContentManagement() {
                     {trailers.map((trailer, idx) => (
                       <div key={trailer.id} className="space-y-2">
                         <div className="flex items-center justify-between">
-                          <label className="block text-[10px] font-medium text-zinc-400 uppercase tracking-wider">Trailer {idx + 1}</label>
+                          <div className="flex flex-col">
+                            <label className="block text-[10px] font-medium text-zinc-400 uppercase tracking-wider">
+                              Trailer {idx + 2}
+                            </label>
+                            {trailer.youtubeTitle && (
+                              <span className="text-[10px] text-emerald-600 break-words leading-tight">{trailer.youtubeTitle}</span>
+                            )}
+                          </div>
                           <button
                             type="button"
                             onClick={() => setTrailers(prev => prev.filter((_, i) => i !== idx))}
