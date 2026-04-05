@@ -1,10 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { collection, query, where, getDocs, orderBy, updateDoc, doc } from 'firebase/firestore';
+import { collection, query, where, getDocs, orderBy } from 'firebase/firestore';
 import { db } from '../firebase';
 import { useAuth } from '../contexts/AuthContext';
-import { ChevronDown, ChevronUp, Package, Clock, CheckCircle, XCircle, Send, X } from 'lucide-react';
+import { ChevronDown, ChevronUp, Package, Clock, CheckCircle, XCircle } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import ConfirmModal from './ConfirmModal';
 
 export default function PreviousOrders() {
   const { profile } = useAuth();
@@ -15,18 +14,6 @@ export default function PreviousOrders() {
   });
   const [loading, setLoading] = useState(orders.length === 0);
   const [expandedId, setExpandedId] = useState<string | null>(null);
-  const [confirmModal, setConfirmModal] = useState<{
-    isOpen: boolean;
-    title: string;
-    message: string;
-    onConfirm: () => void;
-    confirmText?: string;
-  }>({
-    isOpen: false,
-    title: '',
-    message: '',
-    onConfirm: () => {},
-  });
 
   useEffect(() => {
     const fetchOrders = async () => {
@@ -52,23 +39,6 @@ export default function PreviousOrders() {
     };
     fetchOrders();
   }, [profile?.uid, CACHE_KEY]);
-
-  const handleCancelOrder = async (orderId: string) => {
-    try {
-      await updateDoc(doc(db, 'orders', orderId), {
-        status: 'cancelled'
-      });
-      setOrders(prevOrders => {
-        const updated = prevOrders.map(o => o.id === orderId ? { ...o, status: 'cancelled' } : o);
-        localStorage.setItem(CACHE_KEY, JSON.stringify(updated));
-        return updated;
-      });
-      setConfirmModal(prev => ({ ...prev, isOpen: false }));
-    } catch (error) {
-      console.error('Error cancelling order:', error);
-      alert('Failed to cancel order');
-    }
-  };
 
   if (loading) {
     return <div className="text-zinc-500 text-sm animate-pulse">Loading previous orders...</div>;
@@ -96,42 +66,9 @@ export default function PreviousOrders() {
                 <span className="text-sm font-medium">Rs {order.amount}</span>
               </div>
               <div className="flex items-center gap-3">
-                {order.status === 'pending' && (
-                  <div className="flex items-center gap-2">
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        const message = `${order.type === 'membership' ? 'Membership Top Up' : 'Add Content'}\nOrder ID: ${order.id}\nAmount: Rs ${order.amount}`;
-                        const whatsappUrl = `https://wa.me/923363284466?text=${encodeURIComponent(message)}`;
-                        window.open(whatsappUrl, '_blank');
-                      }}
-                      className="text-blue-500 hover:text-blue-600 p-1"
-                      title="Send Screenshot"
-                    >
-                      <Send className="w-4 h-4" />
-                    </button>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setConfirmModal({
-                          isOpen: true,
-                          title: 'Cancel Order',
-                          message: 'Are you sure you want to cancel this pending order?',
-                          onConfirm: () => handleCancelOrder(order.id),
-                          confirmText: 'Cancel Order'
-                        });
-                      }}
-                      className="text-red-500 hover:text-red-600 p-1"
-                      title="Cancel Order"
-                    >
-                      <X className="w-4 h-4" />
-                    </button>
-                    <span className="flex items-center gap-1 text-xs text-yellow-500 bg-yellow-500/10 px-2 py-1 rounded-full"><Clock className="w-3 h-3" /> Pending</span>
-                  </div>
-                )}
+                {order.status === 'pending' && <span className="flex items-center gap-1 text-xs text-yellow-500 bg-yellow-500/10 px-2 py-1 rounded-full"><Clock className="w-3 h-3" /> Pending</span>}
                 {order.status === 'approved' && <span className="flex items-center gap-1 text-xs text-emerald-500 bg-emerald-500/10 px-2 py-1 rounded-full"><CheckCircle className="w-3 h-3" /> Approved</span>}
                 {order.status === 'declined' && <span className="flex items-center gap-1 text-xs text-red-500 bg-red-500/10 px-2 py-1 rounded-full"><XCircle className="w-3 h-3" /> Declined</span>}
-                {order.status === 'cancelled' && <span className="flex items-center gap-1 text-xs text-zinc-500 bg-zinc-500/10 px-2 py-1 rounded-full"><XCircle className="w-3 h-3" /> Cancelled</span>}
                 {expandedId === order.id ? <ChevronUp className="w-4 h-4 text-zinc-500" /> : <ChevronDown className="w-4 h-4 text-zinc-500" />}
               </div>
             </button>
@@ -164,14 +101,6 @@ export default function PreviousOrders() {
           </div>
         ))}
       </div>
-      <ConfirmModal
-        isOpen={confirmModal.isOpen}
-        title={confirmModal.title}
-        message={confirmModal.message}
-        onConfirm={confirmModal.onConfirm}
-        onCancel={() => setConfirmModal({ ...confirmModal, isOpen: false })}
-        confirmText={confirmModal.confirmText}
-      />
     </div>
   );
 }

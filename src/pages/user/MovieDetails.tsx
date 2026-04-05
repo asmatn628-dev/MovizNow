@@ -1677,59 +1677,44 @@ export default function MovieDetails() {
         )}
       </AnimatePresence>
       {/* Trailer Selection Modal */}
-      <AnimatePresence>
-        {isTrailerSelectionOpen && (
-          <motion.div 
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.2 }}
-            className="fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center z-[100] p-4"
-            onClick={() => setIsTrailerSelectionOpen(false)}
+      {isTrailerSelectionOpen && (
+        <div 
+          className="fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center z-[100] p-4"
+          onClick={() => setIsTrailerSelectionOpen(false)}
+        >
+          <div 
+            className="bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-6 max-w-md w-full relative shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
           >
-            <motion.div 
-              initial={{ scale: 0.9, opacity: 0, y: 20 }}
-              animate={{ scale: 1, opacity: 1, y: 0 }}
-              exit={{ scale: 0.9, opacity: 0, y: 20 }}
-              transition={{ type: "spring", damping: 25, stiffness: 300 }}
-              className="bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-6 max-w-md w-full relative shadow-2xl"
-              onClick={(e) => e.stopPropagation()}
+            <button
+              onClick={() => setIsTrailerSelectionOpen(false)}
+              className="absolute top-4 right-4 text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:text-white transition-colors"
             >
-              <button
-                onClick={() => setIsTrailerSelectionOpen(false)}
-                className="absolute top-4 right-4 text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:text-white transition-colors"
-              >
-                <X className="w-6 h-6" />
-              </button>
-              <h3 className="text-xl font-bold mb-4 text-zinc-900 dark:text-white">Select Trailer</h3>
-              <div className="flex flex-col gap-3">
-                {allTrailers.map((trailer, idx) => {
-                  const label = trailer.title || (trailer.seasonNumber ? `Season ${trailer.seasonNumber} Trailer` : (trailer.youtubeTitle || `Trailer ${idx + 1}`));
-                  return (
-                    <button
-                      key={trailer.id}
-                      onClick={() => {
-                        setActiveTrailerUrl(trailer.url);
-                        setIsTrailerSelectionOpen(false);
-                        // Use a small timeout to ensure state updates are processed
-                        setTimeout(() => setIsTrailerPopupOpen(true), 50);
-                      }}
-                      className={`w-full font-bold py-3 px-4 rounded-xl transition-colors flex items-center justify-between border ${
-                        getYouTubeEmbedUrl(trailer.url)
-                          ? 'bg-red-500/10 hover:bg-red-500/20 text-red-500 border-red-500/20'
-                          : 'bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-500 border-emerald-500/20'
-                      }`}
-                    >
-                      <span>{label}</span>
-                      <Play className="w-4 h-4" />
-                    </button>
-                  );
-                })}
-              </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+              <X className="w-6 h-6" />
+            </button>
+            <h3 className="text-xl font-bold mb-4 text-zinc-900 dark:text-white">Select Trailer</h3>
+            <div className="flex flex-col gap-3">
+              {allTrailers.map((trailer, idx) => {
+                const label = trailer.title || (trailer.seasonNumber ? `Season ${trailer.seasonNumber} Trailer` : (trailer.youtubeTitle || `Trailer ${idx + 1}`));
+                return (
+                  <button
+                    key={trailer.id}
+                    onClick={() => {
+                      setActiveTrailerUrl(trailer.url);
+                      setIsTrailerPopupOpen(true);
+                      setIsTrailerSelectionOpen(false);
+                    }}
+                    className="w-full font-bold py-3 px-4 rounded-xl transition-colors flex items-center justify-between border bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-500 border-emerald-500/20"
+                  >
+                    <span>{label}</span>
+                    <Play className="w-4 h-4" />
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Trailer Popup */}
       <AnimatePresence>
