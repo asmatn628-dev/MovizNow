@@ -10,7 +10,7 @@ import { Film, Search, Filter, MessageCircle, Clock, Heart, LogOut, User, Users,
 import { clsx } from 'clsx';
 import { format } from 'date-fns';
 import ConfirmModal from '../../components/ConfirmModal';
-import { formatContentTitle } from '../../utils/contentUtils';
+import { formatContentTitle, getContrastColor } from '../../utils/contentUtils';
 import { smartSearch } from '../../utils/searchUtils';
 import { LazyLoadImage } from 'react-lazy-load-image-component';
 import ContentCard from '../../components/ContentCard';
@@ -600,8 +600,11 @@ export default function Home({ onOpenMediaModal }: { onOpenMediaModal: () => voi
                           </span>
                           {qualityObj && (
                             <span 
-                              className="px-1 py-0.5 rounded text-[6px] font-bold text-black shadow-sm"
-                              style={{ backgroundColor: qualityObj.color || '#34d399' }}
+                              className="px-1 py-0.5 rounded text-[6px] font-bold shadow-sm"
+                              style={{ 
+                                backgroundColor: qualityObj.color || '#34d399',
+                                color: getContrastColor(qualityObj.color || '#34d399')
+                              }}
                             >
                               {qualityObj.name}
                             </span>

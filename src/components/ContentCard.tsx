@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { LazyLoadImage } from 'react-lazy-load-image-component';
 import { Heart, Clock, ShoppingCart, Play, X } from 'lucide-react';
 import { Content, Quality, Language, Genre } from '../types';
-import { formatContentTitle } from '../utils/contentUtils';
+import { formatContentTitle, getContrastColor } from '../utils/contentUtils';
 import { clsx } from 'clsx';
 import { useCart } from '../contexts/CartContext';
 
@@ -149,18 +149,19 @@ const ContentCard = React.memo(({
         </div>
 
         <div className={clsx(
-          "absolute top-2 right-2 px-2 py-1 rounded text-[10px] font-bold uppercase tracking-wider z-10",
-          "bg-white text-black",
-          content.type === 'movie' ? 'dark:bg-blue-500/90' : 'dark:bg-purple-500/90',
-          "dark:text-white"
+          "absolute top-2 right-2 px-2 py-1 rounded text-[10px] font-bold uppercase tracking-wider text-white z-10",
+          content.type === 'movie' ? 'bg-blue-500/90' : 'bg-purple-500/90'
         )}>
           {content.type}
         </div>
         
         {qualityObj && (
           <div 
-            className="absolute top-9 right-2 px-2 py-1 rounded text-[10px] font-bold uppercase tracking-wider text-black shadow-lg z-10"
-            style={{ backgroundColor: qualityObj.color || '#10b981' }}
+            className="absolute top-9 right-2 px-2 py-1 rounded text-[10px] font-bold uppercase tracking-wider shadow-lg z-10"
+            style={{ 
+              backgroundColor: qualityObj.color || '#10b981',
+              color: getContrastColor(qualityObj.color || '#10b981')
+            }}
           >
             {qualityObj.name}
           </div>

@@ -12,7 +12,7 @@ import { logEvent } from '../../services/analytics';
 import AlertModal from '../../components/AlertModal';
 import ConfirmModal from '../../components/ConfirmModal';
 import { motion, AnimatePresence } from 'motion/react';
-import { formatContentTitle, formatReleaseDate, formatRuntime } from '../../utils/contentUtils';
+import { formatContentTitle, formatReleaseDate, formatRuntime, getContrastColor } from '../../utils/contentUtils';
 import { generateTinyUrl } from '../../utils/tinyurl';
 import { MediaModal } from '../../components/MediaModal';
 import ContentCard from '../../components/ContentCard';
@@ -988,8 +988,11 @@ export default function MovieDetails() {
                   if (!qualityObj) return null;
                   return (
                     <span 
-                      className="px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider text-black shadow-lg"
-                      style={{ backgroundColor: qualityObj.color || '#10b981' }}
+                      className="px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider shadow-lg"
+                      style={{ 
+                        backgroundColor: qualityObj.color || '#10b981',
+                        color: getContrastColor(qualityObj.color || '#10b981')
+                      }}
                     >
                       {qualityObj.name}
                     </span>
@@ -1291,8 +1294,11 @@ export default function MovieDetails() {
                         if (!qualityObj) return null;
                         return (
                           <span 
-                            className="flex items-center gap-2 px-3 py-1.5 rounded-lg font-bold text-black shadow-lg"
-                            style={{ backgroundColor: qualityObj.color || '#10b981' }}
+                            className="flex items-center gap-2 px-3 py-1.5 rounded-lg font-bold shadow-lg"
+                            style={{ 
+                              backgroundColor: qualityObj.color || '#10b981',
+                              color: getContrastColor(qualityObj.color || '#10b981')
+                            }}
                           >
                             Quality: {qualityObj.name}
                           </span>
