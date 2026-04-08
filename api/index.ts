@@ -11,8 +11,14 @@ const __dirname = path.dirname(__filename);
 
 // Initialize Firebase Admin
 if (!admin.apps.length) {
+  let credential;
+  if (process.env.FIREBASE_SERVICE_ACCOUNT_JSON) {
+    credential = admin.credential.cert(JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_JSON));
+  } else {
+    credential = admin.credential.applicationDefault();
+  }
   admin.initializeApp({
-    credential: admin.credential.applicationDefault(),
+    credential,
     projectId: firebaseConfig.projectId
   });
 }

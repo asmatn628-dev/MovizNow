@@ -17,6 +17,9 @@ if (typeof importScripts === 'function') {
   messaging.onBackgroundMessage((payload) => {
     console.log('[firebase-messaging-sw.js] Received background message ', payload);
     
+    // Add this log to verify the handler is actually running
+    console.log('[firebase-messaging-sw.js] Payload data:', payload.data);
+    
     if (payload.data) {
       const notificationTitle = payload.data.title || 'New Notification';
       const notificationOptions = {
