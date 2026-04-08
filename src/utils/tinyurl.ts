@@ -1,4 +1,4 @@
-export const generateTinyUrl = async (url: string, useAlias: boolean = true): Promise<string> => {
+export const generateTinyUrl = async (url: string, useAlias: boolean = true, aliasPrefix: string = '3363284466'): Promise<string> => {
   if (!url || typeof url !== 'string') return url;
   
   // If it's HTML content, don't try to shorten it
@@ -25,7 +25,7 @@ export const generateTinyUrl = async (url: string, useAlias: boolean = true): Pr
       const firstChar = alphabet[Math.floor(Math.random() * alphabet.length)];
       // Generate 3 random alphanumeric characters
       const randomChars = Math.random().toString(36).substring(2, 5);
-      const alias = `03363284466${firstChar}${randomChars}`;
+      const alias = `${aliasPrefix}${firstChar}${randomChars}`;
       aliasParam = `&alias=${alias}`;
     }
     

@@ -2,12 +2,14 @@ import React, { useState, useEffect } from 'react';
 import { collection, query, where, getDocs, orderBy, updateDoc, doc } from 'firebase/firestore';
 import { db } from '../firebase';
 import { useAuth } from '../contexts/AuthContext';
+import { useSettings } from '../contexts/SettingsContext';
 import { ChevronDown, ChevronUp, Package, Clock, CheckCircle, XCircle, Send, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import ConfirmModal from './ConfirmModal';
 
 export default function PreviousOrders() {
   const { profile } = useAuth();
+  const { settings } = useSettings();
   const CACHE_KEY = `user_orders_cache_${profile?.uid}`;
   const [orders, setOrders] = useState<any[]>(() => {
     const cached = localStorage.getItem(CACHE_KEY);
@@ -102,7 +104,7 @@ export default function PreviousOrders() {
                       onClick={(e) => {
                         e.stopPropagation();
                         const message = `${order.type === 'membership' ? 'Membership Top Up' : 'Add Content'}\nOrder ID: ${order.id}\nAmount: Rs ${order.amount}`;
-                        const whatsappUrl = `https://wa.me/923363284466?text=${encodeURIComponent(message)}`;
+                        const whatsappUrl = `https://wa.me/92${settings?.supportNumber || '3363284466'}?text=${encodeURIComponent(message)}`;
                         window.open(whatsappUrl, '_blank');
                       }}
                       className="text-blue-500 hover:text-blue-600 p-1"

@@ -182,7 +182,7 @@ export const LinkCheckerModal: React.FC<Props> = ({
 
     setLoading(true);
     try {
-      const concurrency = 10;
+      const concurrency = 20;
       const allResults: LinkCheckResult[] = [];
       const queue = [...urls];
       let activeCount = 0;
@@ -205,23 +205,17 @@ export const LinkCheckerModal: React.FC<Props> = ({
           }
 
           // Update results incrementally for better UX
-          if (onlyUrls?.length) {
-            setResults((prev) => {
+          setResults((prev) => {
+            let merged: LinkCheckResult[];
+            if (onlyUrls?.length) {
               const keep = prev.filter((r) => !onlyUrls.includes(r.url));
-              const merged = [...keep, ...allResults];
-              return merged.map((r) => ({
-                ...r,
-                mismatchWarnings: buildMismatchWarnings(r, merged, languages, qualities),
-                confidenceScore: Math.max(0, 100 - (buildMismatchWarnings(r, merged, languages, qualities).length * 18)),
-              }));
-            });
-          } else {
-            setResults(allResults.map(r => ({
-              ...r,
-              mismatchWarnings: buildMismatchWarnings(r, allResults, languages, qualities),
-              confidenceScore: Math.max(0, 100 - (buildMismatchWarnings(r, allResults, languages, qualities).length * 18)),
-            })));
-          }
+              merged = [...keep, ...allResults];
+            } else {
+              merged = [...allResults];
+            }
+            // Skip mismatchWarnings calculation during incremental updates to improve performance
+            return merged;
+          });
         } catch (e) {
           console.error(`Error checking link ${u}:`, e);
         } finally {
@@ -233,8 +227,28 @@ export const LinkCheckerModal: React.FC<Props> = ({
       const workers = Array.from({ length: Math.min(concurrency, urls.length) }, () => processNext());
       await Promise.all(workers);
       
+      // Calculate mismatchWarnings at the end to avoid O(N^3) complexity during incremental updates
+      const finalResults = allResults.map(r => ({
+        ...r,
+        mismatchWarnings: buildMismatchWarnings(r, allResults, languages, qualities),
+        confidenceScore: Math.max(0, 100 - (buildMismatchWarnings(r, allResults, languages, qualities).length * 18)),
+      }));
+
+      setResults(prev => {
+        if (onlyUrls?.length) {
+          const keep = prev.filter((r) => !onlyUrls.includes(r.url));
+          const merged = [...keep, ...finalResults];
+          return merged.map(r => ({
+            ...r,
+            mismatchWarnings: buildMismatchWarnings(r, merged, languages, qualities),
+            confidenceScore: Math.max(0, 100 - (buildMismatchWarnings(r, merged, languages, qualities).length * 18)),
+          }));
+        }
+        return finalResults;
+      });
+
       if (onResults) {
-        onResults(allResults);
+        onResults(finalResults);
       }
     } catch (e: any) {
       setError(e?.message || "Unknown error while checking links.");

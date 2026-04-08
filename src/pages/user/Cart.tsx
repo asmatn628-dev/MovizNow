@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useCart } from '../../contexts/CartContext';
 import { useAuth } from '../../contexts/AuthContext';
+import { useSettings } from '../../contexts/SettingsContext';
 import { ArrowLeft, Trash2, Copy, Check, Send, Loader2, Wallet, Smartphone, CreditCard, Banknote } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { db } from '../../firebase';
@@ -13,6 +14,7 @@ import PaymentMethods from '../../components/PaymentMethods';
 export default function Cart() {
   const { cart, removeFromCart, totalPrice, clearCart } = useCart();
   const { profile } = useAuth();
+  const { settings } = useSettings();
   const navigate = useNavigate();
   const [copied, setCopied] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -26,7 +28,7 @@ export default function Cart() {
   }, [profile, navigate]);
 
   const handleCopy = () => {
-    navigator.clipboard.writeText('03416286423');
+    navigator.clipboard.writeText(settings?.accountNumber || '03416286423');
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
@@ -86,7 +88,7 @@ export default function Cart() {
       const lastOrder = snapshot.docs[0]?.data();
 
       const message = `Add Content\nOrder ID: ${currentOrderId}\nItems: ${lastOrder?.items?.length || 0}\nTotal Amount: Rs ${lastOrder?.amount || totalPrice}`;
-      const whatsappUrl = `https://wa.me/923363284466?text=${encodeURIComponent(message)}`;
+      const whatsappUrl = `https://wa.me/92${settings?.supportNumber || '3363284466'}?text=${encodeURIComponent(message)}`;
       
       clearCart();
       window.open(whatsappUrl, '_blank');

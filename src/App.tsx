@@ -5,6 +5,7 @@ import { ThemeProvider } from './contexts/ThemeContext';
 import { ContentProvider } from './contexts/ContentContext';
 import { PWAProvider } from './contexts/PWAContext';
 import { CartProvider } from './contexts/CartContext';
+import { SettingsProvider } from './contexts/SettingsContext';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import { Loader2 } from 'lucide-react';
 import { SystemNotificationWrapper } from './components/SystemNotificationWrapper';
@@ -38,6 +39,7 @@ import ReportedLinks from './pages/admin/ReportedLinks';
 import Notifications from './pages/admin/Notifications';
 import MovieRequestsManagement from './pages/admin/MovieRequestsManagement';
 import OrdersManagement from './pages/admin/OrdersManagement';
+import AdminSettings from './pages/admin/AdminSettings';
 const InstallApp = lazy(() => import('./pages/InstallApp'));
 
 const LoadingFallback = () => (
@@ -63,11 +65,12 @@ export default function App() {
   return (
     <ThemeProvider>
       <AuthProvider>
-        <ContentProvider>
-          <CartProvider>
-            <PWAProvider>
-              <SystemNotificationWrapper />
-              <BrowserRouter>
+        <SettingsProvider>
+          <ContentProvider>
+            <CartProvider>
+              <PWAProvider>
+                <SystemNotificationWrapper />
+                <BrowserRouter>
                 <MediaModalController isOpen={isMediaModalOpen} onClose={() => setIsMediaModalOpen(false)} />
                 <Suspense fallback={<LoadingFallback />}>
                   <Routes>
@@ -103,6 +106,7 @@ export default function App() {
                       <Route path="reported-links" element={<ReportedLinks />} />
                       <Route path="notifications" element={<Notifications />} />
                       <Route path="requests" element={<MovieRequestsManagement />} />
+                      <Route path="settings" element={<AdminSettings />} />
                     </Route>
                   </Routes>
                 </Suspense>
@@ -110,6 +114,7 @@ export default function App() {
             </PWAProvider>
           </CartProvider>
         </ContentProvider>
+        </SettingsProvider>
       </AuthProvider>
     </ThemeProvider>
   );

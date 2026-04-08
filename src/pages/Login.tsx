@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
+import { useSettings } from '../contexts/SettingsContext';
 import { Film, Mail, Phone, ArrowLeft, Eye, EyeOff, Lock, User as UserIcon } from 'lucide-react';
 import { LazyLoadImage } from 'react-lazy-load-image-component';
 import { ConfirmationResult } from 'firebase/auth';
@@ -23,6 +24,7 @@ export default function Login() {
     authLoading, 
     error 
   } = useAuth();
+  const { settings } = useSettings();
   const navigate = useNavigate();
   const location = useLocation();
   const [step, setStep] = useState<LoginStep>('social');
@@ -166,7 +168,7 @@ export default function Login() {
       }
     } else {
       // Open WhatsApp to admin
-      const adminPhone = "923000000000"; // Replace with actual admin number if needed
+      const adminPhone = `92${settings?.supportNumber || '3363284466'}`;
       const message = `I forgot my password.\nName: ${registeredUser?.displayName || 'Unknown'}\nPhone: ${registeredUser?.phone || identifier}\nEmail: ${registeredUser?.email || 'N/A'}`;
       window.open(`https://wa.me/${adminPhone}?text=${encodeURIComponent(message)}`, '_blank');
     }
@@ -191,9 +193,9 @@ export default function Login() {
     <div className="min-h-screen bg-white dark:bg-zinc-950 flex flex-col items-center justify-center text-zinc-900 dark:text-white p-4 transition-colors duration-300">
       <div className="max-w-md w-full bg-zinc-50 dark:bg-zinc-900 rounded-2xl p-8 shadow-2xl border border-zinc-200 dark:border-zinc-800 transition-colors duration-300">
         <div className="flex justify-center mb-6">
-          <LazyLoadImage src="/logo.svg?v=2" alt="MovizNow Logo" className="w-24 h-24" />
+          <LazyLoadImage src="/logo.svg?v=2" alt="Logo" className="w-24 h-24" />
         </div>
-        <h1 className="text-3xl font-bold mb-2 text-center">MovizNow</h1>
+        <h1 className="text-3xl font-bold mb-2 text-center">{settings?.headerText || 'MovizNow'}</h1>
         <p className="text-zinc-500 dark:text-zinc-400 mb-8 text-center">Your ultimate movies & series destination</p>
         
         {(error || customError) && !isLoggingIn && (

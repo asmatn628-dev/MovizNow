@@ -13,6 +13,7 @@ import { formatDateToMonthDDYYYY } from '../../utils/contentUtils';
 import { useAuth } from '../../contexts/AuthContext';
 import { smartSearch } from '../../utils/searchUtils';
 import { useModalBehavior } from '../../hooks/useModalBehavior';
+import { useSettings } from '../../contexts/SettingsContext';
 
 import { useLocation, useNavigate } from 'react-router-dom';
 
@@ -39,6 +40,7 @@ const standardizePhone = (phone: string) => {
 
 export default function UserManagement() {
   const { profile, findUsersByEmailOrPhone } = useAuth();
+  const { settings } = useSettings();
   const location = useLocation();
   const navigate = useNavigate();
   const searchParams = new URLSearchParams(location.search);
@@ -49,11 +51,19 @@ export default function UserManagement() {
   const [editForm, setEditForm] = useState<Partial<UserProfile>>({});
   const [alertConfig, setAlertConfig] = useState<{ isOpen: boolean; title: string; message: string }>({ isOpen: false, title: '', message: '' });
   
-  const [searchTerm, setSearchTerm] = useState('');
-  const [sortField, setSortField] = useState<SortField>('createdAt');
-  const [sortOrder, setSortOrder] = useState<SortOrder>('desc');
-  const [filterRole, setFilterRole] = useState<Role | 'all'>('all');
-  const [filterStatus, setFilterStatus] = useState<Status | 'all'>('all');
+  const [searchTerm, setSearchTerm] = useState(() => sessionStorage.getItem('user_mgmt_search') || '');
+  const [sortField, setSortField] = useState<SortField>(() => (sessionStorage.getItem('user_mgmt_sort_field') as any) || 'createdAt');
+  const [sortOrder, setSortOrder] = useState<SortOrder>(() => (sessionStorage.getItem('user_mgmt_sort_order') as any) || 'desc');
+  const [filterRole, setFilterRole] = useState<Role | 'all'>(() => (sessionStorage.getItem('user_mgmt_role') as any) || 'all');
+  const [filterStatus, setFilterStatus] = useState<Status | 'all'>(() => (sessionStorage.getItem('user_mgmt_status') as any) || 'all');
+
+  useEffect(() => {
+    sessionStorage.setItem('user_mgmt_search', searchTerm);
+    sessionStorage.setItem('user_mgmt_sort_field', sortField);
+    sessionStorage.setItem('user_mgmt_sort_order', sortOrder);
+    sessionStorage.setItem('user_mgmt_role', filterRole);
+    sessionStorage.setItem('user_mgmt_status', filterStatus);
+  }, [searchTerm, sortField, sortOrder, filterRole, filterStatus]);
   const [selectedUsers, setSelectedUsers] = useState<string[]>([]);
 
   const [selectedUser, setSelectedUser] = useState<UserProfile | null>(null);
@@ -80,7 +90,7 @@ export default function UserManagement() {
 
   const handleSearchUser = async () => {
     if (!newUserForm.phone && !newUserForm.email) {
-      setAlertConfig({ isOpen: true, title: 'Error', message: 'Please provide a WhatsApp Number or Email.' });
+      setAlertConfig({ isOpen: true, title: 'Error', message: 'Please provide a WhatsApp / Phone Number or Email.' });
       return;
     }
 
@@ -385,7 +395,7 @@ export default function UserManagement() {
       if (standardizedPhone && standardizedPhone !== selectedUser.phone) {
         const existingPhones = await findUsersByEmailOrPhone(standardizedPhone);
         if (existingPhones.some(u => u.uid !== editingId)) {
-          setAlertConfig({ isOpen: true, title: 'Error', message: 'WhatsApp Number is already in use by another account.' });
+          setAlertConfig({ isOpen: true, title: 'Error', message: 'WhatsApp / Phone Number is already in use by another account.' });
           setProcessing(prev => ({ ...prev, save: false }));
           return;
         }
@@ -535,7 +545,7 @@ export default function UserManagement() {
 
   const sendWhatsAppReminder = (user: UserProfile) => {
     if (!user.phone) {
-      setAlertConfig({ isOpen: true, title: 'Missing WhatsApp Number', message: 'User does not have a WhatsApp number set.' });
+      setAlertConfig({ isOpen: true, title: 'Missing WhatsApp / Phone Number', message: 'User does not have a WhatsApp / Phone number set.' });
       return;
     }
     
@@ -545,7 +555,7 @@ export default function UserManagement() {
     
     // Check if today is the joining date
     const isJoiningDate = user.createdAt && new Date(user.createdAt).toDateString() === now.toDateString();
-    const welcomeText = isJoiningDate ? 'Welcome to MovizNow App. ' : '';
+    const welcomeText = isJoiningDate ? `Welcome to ${settings?.headerText || 'MovizNow'} App. ` : '';
     const membershipType = user.role === 'trial' ? 'Trial' : 'membership';
     
     if (user.expiryDate) {
@@ -555,12 +565,12 @@ export default function UserManagement() {
       const expiryStr = formatDateToMonthDDYYYY(user.expiryDate);
 
       if (diffDays > 3) {
-        message = `Hello ${name},\n\n${welcomeText}Your ${membershipType} for MovizNow app will expire on ${expiryStr}.\n\nThank You`;
+        message = `Hello ${name},\n\n${welcomeText}Your ${membershipType} for ${settings?.headerText || 'MovizNow'} app will expire on ${expiryStr}.\n\nThank You`;
       } else {
-        message = `Hello ${name},\n\n${welcomeText}Your ${membershipType} for MovizNow app is expiring very soon on ${expiryStr}. Please renew to continue enjoying our services.\n\nThank You`;
+        message = `Hello ${name},\n\n${welcomeText}Your ${membershipType} for ${settings?.headerText || 'MovizNow'} app is expiring very soon on ${expiryStr}. Please renew to continue enjoying our services.\n\nThank You`;
       }
     } else {
-      message = `Hello ${name},\n\n${welcomeText}This is a friendly reminder regarding your MovizNow ${membershipType}.\n\nThank You`;
+      message = `Hello ${name},\n\n${welcomeText}This is a friendly reminder regarding your ${settings?.headerText || 'MovizNow'} ${membershipType}.\n\nThank You`;
     }
 
     const encodedMessage = encodeURIComponent(message);
@@ -796,7 +806,7 @@ export default function UserManagement() {
 
   const handleAddUser = async () => {
     if (!foundUser && !newUserForm.phone) {
-      setAlertConfig({ isOpen: true, title: 'Error', message: 'Please provide a WhatsApp Number.' });
+      setAlertConfig({ isOpen: true, title: 'Error', message: 'Please provide a WhatsApp / Phone Number.' });
       return;
     }
 
@@ -1164,7 +1174,7 @@ export default function UserManagement() {
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-zinc-500 dark:text-zinc-400 mb-1">WhatsApp Number</label>
+                    <label className="block text-sm font-medium text-zinc-500 dark:text-zinc-400 mb-1">WhatsApp / Phone Number</label>
                     <input
                       type="text"
                       value={editForm.phone || ''}
@@ -1233,7 +1243,7 @@ export default function UserManagement() {
                     <div>
                       <h3 className="text-lg font-bold text-zinc-900 dark:text-white">{selectedUser.displayName || 'No Name'}</h3>
                       <p className="text-zinc-500 dark:text-zinc-400 text-sm">{selectedUser.email?.endsWith('@moviznow.com') ? 'No Email' : selectedUser.email}</p>
-                      <p className="text-zinc-500 dark:text-zinc-400 text-sm">{selectedUser.phone || 'No WhatsApp Number'}</p>
+                      <p className="text-zinc-500 dark:text-zinc-400 text-sm">{selectedUser.phone || 'No WhatsApp / Phone Number'}</p>
                     </div>
                   </div>
 
@@ -1703,7 +1713,7 @@ export default function UserManagement() {
                   ) : (
                     <>
                       <div>
-                        <label className="block text-sm font-medium text-zinc-500 dark:text-zinc-400 mb-1">WhatsApp Number *</label>
+                        <label className="block text-sm font-medium text-zinc-500 dark:text-zinc-400 mb-1">WhatsApp / Phone Number *</label>
                         <input
                           type="text"
                           value={newUserForm.phone}
@@ -1782,7 +1792,7 @@ export default function UserManagement() {
               ) : (
                 <>
                   <div>
-                    <label className="block text-sm font-medium text-zinc-500 dark:text-zinc-400 mb-1">WhatsApp Number</label>
+                    <label className="block text-sm font-medium text-zinc-500 dark:text-zinc-400 mb-1">WhatsApp / Phone Number</label>
                     <input
                       type="text"
                       value={newUserForm.phone}

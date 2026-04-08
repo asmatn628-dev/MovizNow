@@ -21,14 +21,16 @@ import { UserProfileMenu } from '../../components/UserProfileMenu';
 import { AdminButtons } from '../../components/AdminButtons';
 
 import { ThemeToggle } from '../../components/ThemeToggle';
+import { useSettings } from '../../contexts/SettingsContext';
 
 export default function Home({ onOpenMediaModal }: { onOpenMediaModal: () => void }) {
   const { profile, logout, toggleFavorite, toggleWatchLater } = useAuth();
   const { contentList, genres, languages, qualities, loading, isOffline } = useContent();
   const { cart } = useCart();
+  const { settings } = useSettings();
   const navigate = useNavigate();
   
-  const [search, setSearch] = useState('');
+  const [search, setSearch] = useState(() => sessionStorage.getItem('home_search') || '');
   const [showSuggestions, setShowSuggestions] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const suggestionsRef = useRef<HTMLDivElement>(null);
@@ -39,6 +41,10 @@ export default function Home({ onOpenMediaModal }: { onOpenMediaModal: () => voi
     if (!search.trim()) return [];
     return smartSearch(contentList, search).slice(0, 5);
   }, [search, contentList]);
+
+  useEffect(() => {
+    sessionStorage.setItem('home_search', search);
+  }, [search]);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -54,14 +60,24 @@ export default function Home({ onOpenMediaModal }: { onOpenMediaModal: () => voi
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
-  const [sort, setSort] = useState<'default' | 'newest' | 'year' | 'az'>('default');
-  const [selectedGenre, setSelectedGenre] = useState<string>('');
-  const [selectedLanguage, setSelectedLanguage] = useState<string>('');
-  const [selectedType, setSelectedType] = useState<string>('');
-  const [selectedQuality, setSelectedQuality] = useState<string>('');
-  const [selectedYear, setSelectedYear] = useState<string>('');
-  const [currentPage, setCurrentPage] = useState(1);
-  const ITEMS_PER_PAGE = 20;
+  const [sort, setSort] = useState<'default' | 'newest' | 'year' | 'az'>(() => (sessionStorage.getItem('home_sort') as any) || 'default');
+  const [selectedGenre, setSelectedGenre] = useState<string>(() => sessionStorage.getItem('home_genre') || '');
+  const [selectedLanguage, setSelectedLanguage] = useState<string>(() => sessionStorage.getItem('home_language') || '');
+  const [selectedType, setSelectedType] = useState<string>(() => sessionStorage.getItem('home_type') || '');
+  const [selectedQuality, setSelectedQuality] = useState<string>(() => sessionStorage.getItem('home_quality') || '');
+  const [selectedYear, setSelectedYear] = useState<string>(() => sessionStorage.getItem('home_year') || '');
+  const [currentPage, setCurrentPage] = useState(() => parseInt(sessionStorage.getItem('home_page') || '1', 10));
+
+  useEffect(() => {
+    sessionStorage.setItem('home_sort', sort);
+    sessionStorage.setItem('home_genre', selectedGenre);
+    sessionStorage.setItem('home_language', selectedLanguage);
+    sessionStorage.setItem('home_type', selectedType);
+    sessionStorage.setItem('home_quality', selectedQuality);
+    sessionStorage.setItem('home_year', selectedYear);
+    sessionStorage.setItem('home_page', currentPage.toString());
+  }, [sort, selectedGenre, selectedLanguage, selectedType, selectedQuality, selectedYear, currentPage]);
+  const ITEMS_PER_PAGE = settings?.itemsPerPage || 20;
   const [isLogoutModalOpen, setIsLogoutModalOpen] = useState(false);
   const [showWhatsappPrompt, setShowWhatsappPrompt] = useState(false);
   const [whatsappNumber, setWhatsappNumber] = useState('');
@@ -284,10 +300,22 @@ export default function Home({ onOpenMediaModal }: { onOpenMediaModal: () => voi
     return filteredAndSortedContent.slice(start, start + ITEMS_PER_PAGE);
   }, [filteredAndSortedContent, currentPage]);
 
+  const isInitialMount = useRef(true);
   // Reset to page 1 when filters change
   useEffect(() => {
+    if (isInitialMount.current) {
+      isInitialMount.current = false;
+      return;
+    }
     setCurrentPage(1);
   }, [search, sort, selectedType, selectedGenre, selectedLanguage, selectedQuality, selectedYear]);
+
+  // Ensure current page is within bounds
+  useEffect(() => {
+    if (totalPages > 0 && currentPage > totalPages) {
+      setCurrentPage(totalPages);
+    }
+  }, [totalPages, currentPage]);
 
   return (
     <div className="min-h-screen bg-white dark:bg-zinc-950 text-zinc-900 dark:text-white flex flex-col transition-colors duration-300">
@@ -295,8 +323,8 @@ export default function Home({ onOpenMediaModal }: { onOpenMediaModal: () => voi
       <header className="sticky top-0 z-40 bg-white dark:bg-zinc-950 border-b border-zinc-200 dark:border-zinc-800 transition-colors duration-300">
         <div className="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between">
           <Link to="/" className="text-2xl font-bold text-emerald-500 flex items-center gap-3">
-            <LazyLoadImage src="/logo.svg?v=2" alt="MovizNow Logo" className="w-8 h-8" />
-            <span className="tracking-tight">MovizNow</span>
+            <LazyLoadImage src="/logo.svg?v=2" alt="Logo" className="w-8 h-8" />
+            <span className="tracking-tight">{settings?.headerText || 'MovizNow'}</span>
           </Link>
 
           <div className="flex items-center gap-2">
@@ -327,7 +355,7 @@ export default function Home({ onOpenMediaModal }: { onOpenMediaModal: () => voi
                   <ShoppingCart className="w-3 h-3 sm:w-5 sm:h-5" /> Cart
                 </Link>
               )}
-              <a href="https://wa.me/923363284466" target="_blank" rel="noreferrer" className="flex items-center justify-center gap-1.5 sm:gap-2 bg-yellow-500/10 border border-yellow-500 text-yellow-600 dark:text-yellow-500 px-3 sm:px-6 py-2 sm:py-3 rounded-lg sm:rounded-xl text-xs sm:text-base font-bold hover:bg-yellow-500/20 transition-all active:scale-95">
+              <a href={`https://wa.me/92${settings?.supportNumber || '3363284466'}`} target="_blank" rel="noreferrer" className="flex items-center justify-center gap-1.5 sm:gap-2 bg-yellow-500/10 border border-yellow-500 text-yellow-600 dark:text-yellow-500 px-3 sm:px-6 py-2 sm:py-3 rounded-lg sm:rounded-xl text-xs sm:text-base font-bold hover:bg-yellow-500/20 transition-all active:scale-95">
                 <MessageCircle className="w-3 h-3 sm:w-5 sm:h-5" /> Admin
               </a>
             </div>
@@ -343,7 +371,7 @@ export default function Home({ onOpenMediaModal }: { onOpenMediaModal: () => voi
               <Link to="/top-up" className="flex items-center justify-center gap-1.5 sm:gap-2 bg-red-500 text-white px-3 sm:px-6 py-2 sm:py-3 rounded-lg sm:rounded-xl text-xs sm:text-base font-bold hover:bg-red-600 transition-all active:scale-95 shadow-lg shadow-red-500/20 border border-white/20">
                 Buy Now
               </Link>
-              <a href="https://wa.me/923363284466" target="_blank" rel="noreferrer" className="flex items-center justify-center gap-1.5 sm:gap-2 bg-red-500/10 border border-red-500/30 px-3 sm:px-6 py-2 sm:py-3 rounded-lg sm:rounded-xl text-xs sm:text-base font-bold hover:bg-red-500/20 transition-all active:scale-95">
+              <a href={`https://wa.me/92${settings?.supportNumber || '3363284466'}`} target="_blank" rel="noreferrer" className="flex items-center justify-center gap-1.5 sm:gap-2 bg-red-500/10 border border-red-500/30 px-3 sm:px-6 py-2 sm:py-3 rounded-lg sm:rounded-xl text-xs sm:text-base font-bold hover:bg-red-500/20 transition-all active:scale-95">
                 <MessageCircle className="w-3 h-3 sm:w-5 sm:h-5" /> Admin
               </a>
             </div>
@@ -359,7 +387,7 @@ export default function Home({ onOpenMediaModal }: { onOpenMediaModal: () => voi
               <Link to="/top-up" className="flex items-center justify-center gap-1.5 sm:gap-2 bg-red-500 text-white px-3 sm:px-6 py-2 sm:py-3 rounded-lg sm:rounded-xl text-xs sm:text-base font-bold hover:bg-red-600 transition-all active:scale-95 shadow-lg shadow-red-500/20 border border-white/20">
                 Renew Now
               </Link>
-              <a href="https://wa.me/923363284466" target="_blank" rel="noreferrer" className="flex items-center justify-center gap-1.5 sm:gap-2 bg-red-500/10 border border-red-500/30 px-3 sm:px-6 py-2 sm:py-3 rounded-lg sm:rounded-xl text-xs sm:text-base font-bold hover:bg-red-500/20 transition-all active:scale-95">
+              <a href={`https://wa.me/92${settings?.supportNumber || '3363284466'}`} target="_blank" rel="noreferrer" className="flex items-center justify-center gap-1.5 sm:gap-2 bg-red-500/10 border border-red-500/30 px-3 sm:px-6 py-2 sm:py-3 rounded-lg sm:rounded-xl text-xs sm:text-base font-bold hover:bg-red-500/20 transition-all active:scale-95">
                 <MessageCircle className="w-3 h-3 sm:w-5 sm:h-5" /> Admin
               </a>
             </div>
@@ -380,7 +408,7 @@ export default function Home({ onOpenMediaModal }: { onOpenMediaModal: () => voi
                 className="flex overflow-x-auto gap-3 pb-3 snap-x snap-mandatory hide-scrollbar"
                 style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
               >
-                {recentlyViewed.map(content => {
+                {recentlyViewed.slice(0, settings?.recentViewLimit || 10).map(content => {
                   const qualityObj = qualities.find(q => q.id === content.qualityId);
                   const contentLangs = languages.filter(l => content.languageIds?.includes(l.id)).map(l => l.name).join(', ');
                   const contentGenres = genres.filter(g => content.genreIds?.includes(g.id)).map(g => g.name).join(', ');
@@ -396,7 +424,7 @@ export default function Home({ onOpenMediaModal }: { onOpenMediaModal: () => voi
                     >
                       <div className="aspect-[2/3] relative">
                         <LazyLoadImage
-                          src={content.posterUrl || 'https://images.unsplash.com/photo-1440404653325-ab127d49abc1?auto=format&fit=crop&w=300&q=80'}
+                          src={content.posterUrl || settings?.defaultAppImage || 'https://images.unsplash.com/photo-1440404653325-ab127d49abc1?auto=format&fit=crop&w=300&q=80'}
                           alt={content.title}
                           className="w-full h-full object-cover transition-transform duration-500 group-hover/card:scale-110"
                           wrapperClassName="w-full h-full"
@@ -670,8 +698,8 @@ export default function Home({ onOpenMediaModal }: { onOpenMediaModal: () => voi
       {/* Footer */}
       <footer className="border-t border-zinc-200 dark:border-zinc-800 py-8 text-center text-zinc-500">
         <p>Need help or want to renew membership?</p>
-        <a href="https://wa.me/923363284466" target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 text-emerald-500 hover:text-emerald-400 mt-2 font-medium">
-          <MessageCircle className="w-4 h-4" /> WhatsApp: 03363284466
+        <a href={`https://wa.me/92${settings?.supportNumber || '3363284466'}`} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 text-emerald-500 hover:text-emerald-400 mt-2 font-medium">
+          <MessageCircle className="w-4 h-4" /> WhatsApp: 0{settings?.supportNumber || '3363284466'}
         </a>
       </footer>
 
@@ -692,7 +720,7 @@ export default function Home({ onOpenMediaModal }: { onOpenMediaModal: () => voi
                 <MessageCircle className="w-8 h-8 text-emerald-500" />
               </div>
             </div>
-            <h3 className="text-xl font-bold mb-2 text-center">Add WhatsApp Number</h3>
+            <h3 className="text-xl font-bold mb-2 text-center">Add WhatsApp / Phone Number</h3>
             <p className="text-zinc-500 dark:text-zinc-400 mb-6 text-center text-sm">
               Please provide your WhatsApp number so we can contact you regarding your membership and updates.
             </p>

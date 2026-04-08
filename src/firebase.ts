@@ -81,24 +81,24 @@ if (messaging) {
   onMessage(messaging, (payload) => {
     console.log('Message received. ', payload);
     // Show system notification even when app is in foreground
-    if (Notification.permission === 'granted' && payload.notification) {
+    if (Notification.permission === 'granted' && payload.data) {
       navigator.serviceWorker.getRegistrations().then((registrations) => {
         const myReg = registrations.find(
           (reg) => reg.active && reg.active.scriptURL.includes("firebase-messaging-sw.js")
         );
         if (myReg) {
-          myReg.showNotification(payload.notification.title || 'New Notification', {
-            body: payload.notification.body,
-            icon: payload.notification.image || '/logo.svg',
-            image: payload.notification.image,
-            data: payload.data,
+          myReg.showNotification(payload.data.title || 'New Notification', {
+            body: payload.data.body,
+            icon: payload.data.imageUrl || '/launcher.svg',
+            image: payload.data.imageUrl,
+            data: { url: payload.data.url },
           } as any);
         } else {
-          new Notification(payload.notification.title || 'New Notification', {
-            body: payload.notification.body,
-            icon: payload.notification.image || '/logo.svg',
-            image: payload.notification.image,
-            data: payload.data,
+          new Notification(payload.data.title || 'New Notification', {
+            body: payload.data.body,
+            icon: payload.data.imageUrl || '/launcher.svg',
+            image: payload.data.imageUrl,
+            data: { url: payload.data.url },
           } as any);
         }
       });

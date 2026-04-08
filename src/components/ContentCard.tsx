@@ -6,6 +6,7 @@ import { Content, Quality, Language, Genre } from '../types';
 import { formatContentTitle, getContrastColor } from '../utils/contentUtils';
 import { clsx } from 'clsx';
 import { useCart } from '../contexts/CartContext';
+import { useSettings } from '../contexts/SettingsContext';
 
 interface ContentCardProps {
   content: Content;
@@ -29,6 +30,7 @@ const ContentCard = React.memo(({
   selectedYear
 }: ContentCardProps) => {
   const { addToCart, cart } = useCart();
+  const { settings } = useSettings();
   const [isTrailerSelectionOpen, setIsTrailerSelectionOpen] = React.useState(false);
   const [selectedTrailerUrl, setSelectedTrailerUrl] = React.useState<string | null>(null);
 
@@ -104,7 +106,7 @@ const ContentCard = React.memo(({
         contentId: content.id,
         title: content.title,
         type: 'movie',
-        price: 50
+        price: settings?.movieFee || 50
       });
     } else {
       let firstSeason = matchingSeason ? matchingSeason.seasonNumber : 1;
@@ -118,7 +120,7 @@ const ContentCard = React.memo(({
         type: 'season',
         seasonNumber: firstSeason,
         seasonId: matchingSeason ? matchingSeason.id : (seasons[0]?.id || `s${firstSeason}`),
-        price: 100
+        price: settings?.seasonFee || 100
       });
     }
   };
@@ -134,7 +136,7 @@ const ContentCard = React.memo(({
     <div className="group relative flex flex-col bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl overflow-hidden transition-all hover:scale-[1.02] hover:border-emerald-500/50 shadow-lg">
       <Link to={`/movie/${content.id}`} className="relative aspect-[2/3] w-full bg-zinc-100 dark:bg-zinc-800 block">
         <LazyLoadImage
-          src={content.posterUrl || 'https://picsum.photos/seed/movie/400/600'}
+          src={content.posterUrl || settings?.defaultAppImage || 'https://picsum.photos/seed/movie/400/600'}
           alt={content.title}
           className="w-full h-full object-cover"
           referrerPolicy="no-referrer"
@@ -184,8 +186,8 @@ const ContentCard = React.memo(({
         )}
       </Link>
 
-      {/* Action Buttons */}
-      <div className="absolute bottom-[88px] right-2 flex flex-col gap-2 z-30 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none group-hover:pointer-events-auto">
+      {/* Action Buttons - Only visible on desktop hover to prevent accidental clicks on mobile */}
+      <div className="absolute bottom-[88px] right-2 flex flex-col gap-2 z-30 opacity-0 lg:group-hover:opacity-100 transition-opacity pointer-events-none lg:group-hover:pointer-events-auto hidden lg:flex">
         {(allTrailers.length > 0) && (
           <button
             onClick={handleWatchTrailer}

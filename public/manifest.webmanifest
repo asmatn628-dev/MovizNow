@@ -27,9 +27,9 @@
       "url": "/",
       "icons": [
         {
-          "src": "/launcher.svg",
-          "sizes": "192x192 512x512",
-          "type": "image/svg+xml",
+          "src": "/pwa-192x192.png",
+          "sizes": "192x192",
+          "type": "image/png",
           "purpose": "any"
         }
       ]
@@ -47,32 +47,6 @@
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any maskable"
-    },
-    {
-      "src": "/launcher.svg",
-      "sizes": "192x192",
-      "type": "image/svg+xml",
-      "purpose": "any"
-    },
-    {
-      "src": "/launcher.svg",
-      "sizes": "512x512",
-      "type": "image/svg+xml",
-      "purpose": "any maskable"
-    }
-  ],
-  "screenshots": [
-    {
-      "src": "/screenshot-desktop.svg",
-      "sizes": "1280x720",
-      "type": "image/svg+xml",
-      "form_factor": "wide"
-    },
-    {
-      "src": "/screenshot-mobile.svg",
-      "sizes": "390x844",
-      "type": "image/svg+xml",
-      "form_factor": "narrow"
     }
   ]
 }

@@ -180,6 +180,32 @@ export interface Order {
   items?: CartItem[]; // For content
 }
 
+export interface BankAccount {
+  id: string;
+  name: string;
+  color: string;
+  labelColor?: string;
+  textColor?: string;
+  iconUrl?: string;
+}
+
+export interface AppSettings {
+  headerText: string;
+  membershipFee: number;
+  movieFee: number;
+  seasonFee: number;
+  paymentDetails: string;
+  itemsPerPage: number;
+  recentViewLimit: number;
+  recommendedLimit: number;
+  defaultAppImage: string;
+  supportNumber: string;
+  accountTitle: string;
+  accountNumber: string;
+  bankAccounts: BankAccount[];
+  adminTabsOrder: string[];
+}
+
 export interface ErrorLinkInfo {
   contentId: string;
   contentTitle: string;

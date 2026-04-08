@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
 import { Outlet, Link, useLocation, useNavigate, Navigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
-import { Film, Users, Tags, Languages, Clock, LogOut, Menu, X, MonitorPlay, BarChart3, DollarSign, AlertTriangle, Bell, MessageCircle } from 'lucide-react';
+import { useSettings } from '../../contexts/SettingsContext';
+import { Film, Users, Tags, Languages, Clock, LogOut, Menu, X, MonitorPlay, BarChart3, DollarSign, AlertTriangle, Bell, MessageCircle, Settings, LayoutDashboard } from 'lucide-react';
 import { clsx } from 'clsx';
 import ConfirmModal from '../../components/ConfirmModal';
 import { collection, onSnapshot, query, where, getDocs } from 'firebase/firestore';
@@ -10,6 +11,7 @@ import { useModalBehavior } from '../../hooks/useModalBehavior';
 
 export default function AdminLayout() {
   const { logout, profile } = useAuth();
+  const { settings } = useSettings();
   const location = useLocation();
   const navigate = useNavigate();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
@@ -45,18 +47,19 @@ export default function AdminLayout() {
   }, [profile]);
 
   const allNavItems = [
-    { path: '/admin/analytics', label: 'Analytics', icon: BarChart3 },
-    { path: '/admin/orders', label: `Orders${pendingOrdersCount > 0 ? ` (${pendingOrdersCount})` : ''}`, icon: DollarSign },
-    { path: '/admin/content', label: 'Movies & Series', icon: Film },
-    { path: '/admin/users', label: 'Membership', icon: Users },
-    { path: '/admin/user-managers', label: 'User Managers', icon: Users },
-    { path: '/admin/temporary-users', label: 'Temporary Users', icon: Clock },
-    { path: '/admin/selected-content', label: 'Selected Content Only', icon: Film },
-    { path: '/admin/income', label: 'Income / Earn', icon: DollarSign },
-    { path: '/admin/error-links', label: 'Error Links', icon: AlertTriangle },
-    { path: '/admin/reported-links', label: `Reported Links${reportedLinksCount > 0 ? ` (${reportedLinksCount})` : ''}`, icon: AlertTriangle },
-    { path: '/admin/notifications', label: 'Notifications', icon: Bell },
-    { path: '/admin/requests', label: 'Movie Requests', icon: MessageCircle },
+    { id: 'Dashboard', path: '/admin', label: 'Dashboard', icon: LayoutDashboard },
+    { id: 'Analytics', path: '/admin/analytics', label: 'Analytics', icon: BarChart3 },
+    { id: 'Orders', path: '/admin/orders', label: `Orders${pendingOrdersCount > 0 ? ` (${pendingOrdersCount})` : ''}`, icon: DollarSign },
+    { id: 'Content', path: '/admin/content', label: 'Movies & Series', icon: Film },
+    { id: 'Users', path: '/admin/users', label: 'Membership', icon: Users },
+    { id: 'UserManagers', path: '/admin/user-managers', label: 'User Managers', icon: Users },
+    { id: 'TemporaryUsers', path: '/admin/temporary-users', label: 'Temporary Users', icon: Clock },
+    { id: 'SelectedContent', path: '/admin/selected-content', label: 'Selected Content Only', icon: Film },
+    { id: 'Income', path: '/admin/income', label: 'Income / Earn', icon: DollarSign },
+    { id: 'ErrorLinks', path: '/admin/error-links', label: 'Error Links', icon: AlertTriangle },
+    { id: 'ReportedLinks', path: '/admin/reported-links', label: `Reported Links${reportedLinksCount > 0 ? ` (${reportedLinksCount})` : ''}`, icon: AlertTriangle },
+    { id: 'Notifications', path: '/admin/notifications', label: 'Notifications', icon: Bell },
+    { id: 'Requests', path: '/admin/requests', label: 'Movie Requests', icon: MessageCircle },
   ];
 
   let navItems = allNavItems;
@@ -67,6 +70,17 @@ export default function AdminLayout() {
   } else if (profile?.role === 'manager') {
     navItems = allNavItems.filter(item => ['/admin/content', '/admin/users'].includes(item.path));
   }
+
+  // Sort nav items based on settings.adminTabsOrder
+  const sortedNavItems = [...navItems].sort((a, b) => {
+    const order = settings?.adminTabsOrder || [];
+    const indexA = order.indexOf(a.id);
+    const indexB = order.indexOf(b.id);
+    if (indexA === -1 && indexB === -1) return 0;
+    if (indexA === -1) return 1;
+    if (indexB === -1) return -1;
+    return indexA - indexB;
+  });
 
   if (profile?.role === 'content_manager' && !['/admin/content'].includes(location.pathname)) {
     return <Navigate to="/admin/content" replace />;
@@ -85,10 +99,10 @@ export default function AdminLayout() {
         <h1 className="text-xl font-bold text-emerald-500 flex items-center gap-3">
           <img src="/logo.svg?v=2" alt="Logo" className="w-6 h-6" />
           <span className="tracking-tight">
-            {profile?.role === 'user_manager' ? 'MovizNow User Manager' : 
-             profile?.role === 'content_manager' ? 'MovizNow Content Manager' : 
-             profile?.role === 'manager' ? 'MovizNow Manager' : 
-             profile?.role === 'owner' ? 'MovizNow Owner' : 'MovizNow Admin'}
+            {profile?.role === 'user_manager' ? `${settings?.headerText || 'MovizNow'} User Manager` : 
+             profile?.role === 'content_manager' ? `${settings?.headerText || 'MovizNow'} Content Manager` : 
+             profile?.role === 'manager' ? `${settings?.headerText || 'MovizNow'} Manager` : 
+             profile?.role === 'owner' ? `${settings?.headerText || 'MovizNow'} Owner` : `${settings?.headerText || 'MovizNow'} Admin`}
           </span>
         </h1>
         {(profile?.role === 'admin' || profile?.role === 'owner') ? (
@@ -116,7 +130,7 @@ export default function AdminLayout() {
         <div className="p-6 hidden md:block">
           <h1 className="text-2xl font-bold text-emerald-500 flex items-center gap-3">
             <img src="/logo.svg?v=2" alt="Logo" className="w-8 h-8" />
-            <span className="tracking-tight">MovizNow</span>
+            <span className="tracking-tight">{settings?.headerText || 'MovizNow'}</span>
           </h1>
           <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-1 uppercase tracking-wider font-semibold">
             {profile?.role === 'user_manager' ? 'User Manager' : 
@@ -135,7 +149,7 @@ export default function AdminLayout() {
             Back to App
           </Link>
           
-          {navItems.map((item) => {
+          {sortedNavItems.map((item) => {
             const Icon = item.icon;
             const isActive = location.pathname === item.path;
             return (
@@ -157,13 +171,28 @@ export default function AdminLayout() {
           })}
         </nav>
 
-        <div className="p-4 border-t border-zinc-200 dark:border-zinc-800 mt-auto">
+        <div className="p-3 border-t border-zinc-200 dark:border-zinc-800 mt-auto flex items-center justify-around">
+          {profile?.role === 'owner' && (
+            <Link
+              to="/admin/settings"
+              onClick={() => setIsMobileMenuOpen(false)}
+              className={clsx(
+                'p-2 rounded-xl transition-colors',
+                location.pathname === '/admin/settings'
+                  ? 'bg-emerald-500/10 text-emerald-500'
+                  : 'text-zinc-500 dark:text-zinc-400 hover:bg-zinc-200 dark:hover:bg-zinc-800 hover:text-zinc-900 dark:text-white'
+              )}
+              title="Settings"
+            >
+              <Settings className="w-5 h-5" />
+            </Link>
+          )}
           <button
             onClick={() => setIsLogoutModalOpen(true)}
-            className="flex items-center gap-3 px-4 py-3 w-full text-left text-zinc-500 dark:text-zinc-400 hover:bg-zinc-200 dark:hover:bg-zinc-800 hover:text-zinc-900 dark:text-white rounded-xl transition-colors font-medium"
+            className="p-2 text-zinc-500 dark:text-zinc-400 hover:bg-red-50 dark:hover:bg-red-900/20 hover:text-red-600 dark:hover:text-red-400 rounded-xl transition-colors"
+            title="Sign Out"
           >
             <LogOut className="w-5 h-5" />
-            Sign Out
           </button>
         </div>
       </aside>

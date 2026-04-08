@@ -64,7 +64,29 @@ export function useSystemNotifications(profile: UserProfile | null) {
         new Date(notification.createdAt) > new Date(profile.createdAt)
       ) {
         lastNotificationId.current = notification.id;
-        // FCM handles system notifications now. We just update the local state/UI if needed.
+        
+        // Fallback: If FCM is not configured (missing VAPID key), show notification manually
+        if (!import.meta.env.VITE_FCM_VAPID_KEY && Notification.permission === 'granted') {
+          navigator.serviceWorker.getRegistrations().then((registrations) => {
+            const myReg = registrations.find(
+              (reg) => reg.active && reg.active.scriptURL.includes("firebase-messaging-sw.js")
+            );
+            if (myReg) {
+              myReg.showNotification(notification.title, {
+                body: notification.body,
+                icon: notification.posterUrl || '/launcher.svg',
+                image: notification.posterUrl,
+                data: { url: notification.type === 'movie' ? `/movie/${notification.contentId}` : `/series/${notification.contentId}` },
+              } as any);
+            } else {
+              new Notification(notification.title, {
+                body: notification.body,
+                icon: notification.posterUrl || '/launcher.svg',
+                image: notification.posterUrl,
+              } as any);
+            }
+          });
+        }
       }
     });
 

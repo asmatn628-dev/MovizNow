@@ -13,7 +13,11 @@ import Button from '../../components/Button';
 export default function UserManagers() {
   const [managers, setManagers] = useState<UserProfile[]>([]);
   const [loading, setLoading] = useState(true);
-  const [searchTerm, setSearchTerm] = useState('');
+  const [searchTerm, setSearchTerm] = useState(() => sessionStorage.getItem('user_managers_search') || '');
+
+  useEffect(() => {
+    sessionStorage.setItem('user_managers_search', searchTerm);
+  }, [searchTerm]);
   const [managerToRemove, setManagerToRemove] = useState<string | null>(null);
   const [processing, setProcessing] = useState<Record<string, boolean>>({});
 

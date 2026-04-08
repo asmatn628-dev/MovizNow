@@ -18,12 +18,14 @@ import { MediaModal } from '../../components/MediaModal';
 import ContentCard from '../../components/ContentCard';
 import { LazyLoadImage } from 'react-lazy-load-image-component';
 import { useModalBehavior } from '../../hooks/useModalBehavior';
+import { useSettings } from '../../contexts/SettingsContext';
 
 export default function MovieDetails() {
   const { id } = useParams<{ id: string }>();
   const { profile, loading: profileLoading, toggleFavorite: authToggleFavorite, toggleWatchLater: authToggleWatchLater } = useAuth();
   const { contentList, genres, languages, qualities, loading: contentLoading, isOffline } = useContent();
   const { cart, addToCart } = useCart();
+  const { settings } = useSettings();
   const content = useMemo(() => {
     console.log('DEBUG: id=', id, 'contentList length=', contentList.length);
     if (contentList.length > 0) {
@@ -181,9 +183,9 @@ export default function MovieDetails() {
     return list;
   }, [mergedContent, seasons]);
 
-  const title = mergedContent ? `${formatContentTitle(mergedContent)} (${mergedContent.year}) - MovizNow` : 'MovizNow';
-  const description = mergedContent?.description || 'Watch the latest movies and series on MovizNow.';
-  const imageUrl = mergedContent?.posterUrl || 'https://Moviz-Now.vercel.app/logo.svg';
+  const title = mergedContent ? `${formatContentTitle(mergedContent)} (${mergedContent.year}) - ${settings?.headerText || 'MovizNow'}` : (settings?.headerText || 'MovizNow');
+  const description = mergedContent?.description || `Watch the latest movies and series on ${settings?.headerText || 'MovizNow'}.`;
+  const imageUrl = mergedContent?.posterUrl || settings?.defaultAppImage || 'https://Moviz-Now.vercel.app/logo.svg';
   const pageUrl = window.location.href;
 
   // Initialize IMDb data from mergedContent
@@ -249,8 +251,8 @@ export default function MovieDetails() {
       return bTime - aTime;
     });
     
-    return scored.slice(0, 10).map(s => s.content);
-  }, [mergedContent, contentList, recentlyViewed]);
+    return scored.slice(0, settings?.recommendedLimit || 10).map(s => s.content);
+  }, [mergedContent, contentList, recentlyViewed, settings?.recommendedLimit]);
 
   useEffect(() => {
     if (!contentLoading) {
@@ -954,7 +956,7 @@ export default function MovieDetails() {
       <div className="relative min-h-[60vh] md:min-h-[70vh] w-full flex flex-col justify-end">
         <div className="absolute inset-0 overflow-hidden">
           <LazyLoadImage
-            src={mergedContent.posterUrl || 'https://picsum.photos/seed/movie/1920/1080'}
+            src={mergedContent.posterUrl || settings?.defaultAppImage || 'https://picsum.photos/seed/movie/1920/1080'}
             alt={mergedContent.title}
             className="w-full h-full object-cover opacity-30"
             referrerPolicy="no-referrer"
@@ -980,7 +982,7 @@ export default function MovieDetails() {
         <div className="relative z-10 flex items-end justify-center p-8 pt-32 pb-4 w-full">
           <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center md:items-end gap-8 text-center md:text-left w-full">
             <LazyLoadImage 
-              src={mergedContent.posterUrl || 'https://picsum.photos/seed/movie/400/600'} 
+              src={mergedContent.posterUrl || settings?.defaultAppImage || 'https://picsum.photos/seed/movie/400/600'} 
               alt={mergedContent.title} 
               className="w-48 md:w-64 rounded-2xl shadow-2xl cursor-pointer hover:scale-105 transition-transform border border-zinc-200 dark:border-zinc-800" 
               referrerPolicy="no-referrer" 
@@ -1138,8 +1140,8 @@ export default function MovieDetails() {
                  'You do not have permission to access links for this content.'}
               </p>
               <div className="flex flex-wrap gap-3">
-                <a href="https://wa.me/923363284466" target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 bg-red-500/20 px-6 py-3 text-sm sm:text-base rounded-xl font-medium hover:bg-red-500/30 transition-colors">
-                  <MessageCircle className="w-5 h-5" /> Contact Admin (03363284466)
+                <a href={`https://wa.me/92${settings?.supportNumber || '3363284466'}`} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 bg-red-500/20 px-6 py-3 text-sm sm:text-base rounded-xl font-medium hover:bg-red-500/30 transition-colors">
+                  <MessageCircle className="w-5 h-5" /> Contact Admin ({settings?.supportNumber || '03363284466'})
                 </a>
                 {((profile?.role === 'selected_content' && !isExpired) || isPending) && mergedContent?.type === 'movie' && (
                   cart.some(item => item.contentId === mergedContent.id) ? (
@@ -1157,13 +1159,13 @@ export default function MovieDetails() {
                           contentId: mergedContent.id,
                           title: mergedContent.title,
                           type: 'movie',
-                          price: 50
+                          price: settings?.movieFee || 50
                         });
                       }}
                       className="inline-flex items-center gap-2 bg-emerald-500/20 text-emerald-500 px-6 py-3 text-sm sm:text-base rounded-xl font-medium hover:bg-emerald-500/30 transition-colors"
                     >
                       <ShoppingCart className="w-5 h-5" />
-                      Add to Cart (Rs 50)
+                      Add to Cart (Rs {settings?.movieFee || 50})
                     </button>
                   )
                 )}
@@ -1407,13 +1409,13 @@ export default function MovieDetails() {
                                             type: 'season',
                                             seasonId: season.id,
                                             seasonNumber: season.seasonNumber,
-                                            price: 100
+                                            price: settings?.seasonFee || 100
                                           });
                                         }}
                                         className="bg-emerald-500/20 text-emerald-500 px-3 py-1 rounded-full text-sm font-bold flex items-center gap-2 hover:bg-emerald-500/30 transition-colors"
                                       >
                                         <ShoppingCart className="w-4 h-4" />
-                                        Add to Cart (Rs 100)
+                                        Add to Cart (Rs {settings?.seasonFee || 100})
                                       </button>
                                     )
                                   )}
@@ -1673,7 +1675,7 @@ export default function MovieDetails() {
                 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
               </button>
               <LazyLoadImage 
-                src={mergedContent.posterUrl || 'https://picsum.photos/seed/movie/400/600'} 
+                src={mergedContent.posterUrl || settings?.defaultAppImage || 'https://picsum.photos/seed/movie/400/600'} 
                 alt={mergedContent.title} 
                 className="max-w-full max-h-[90vh] object-contain rounded-lg shadow-2xl" 
                 referrerPolicy="no-referrer" 
@@ -1809,7 +1811,7 @@ export default function MovieDetails() {
                 <ShoppingCart className="w-5 h-5" /> Cart
               </Link>
             )}
-            <a href="https://wa.me/923363284466" target="_blank" rel="noreferrer" className="flex items-center justify-center gap-2 bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-white px-6 py-3 text-sm sm:text-base rounded-xl font-bold hover:bg-zinc-300 dark:hover:bg-zinc-700 transition-all">
+            <a href={`https://wa.me/92${settings?.supportNumber || '3363284466'}`} target="_blank" rel="noreferrer" className="flex items-center justify-center gap-2 bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-white px-6 py-3 text-sm sm:text-base rounded-xl font-bold hover:bg-zinc-300 dark:hover:bg-zinc-700 transition-all">
               <MessageCircle className="w-5 h-5" /> Admin
             </a>
           </div>

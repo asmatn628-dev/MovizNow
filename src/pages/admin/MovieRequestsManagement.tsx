@@ -28,13 +28,21 @@ export default function MovieRequestsManagement() {
   const { profile } = useAuth();
   const [requests, setRequests] = useState<MovieRequest[]>([]);
   const [allContent, setAllContent] = useState<any[]>([]);
-  const [search, setSearch] = useState('');
+  const [search, setSearch] = useState(() => sessionStorage.getItem('requests_mgmt_search') || '');
   const [contentSearch, setContentSearch] = useState('');
   const [loading, setLoading] = useState(true);
-  const [filterStatus, setFilterStatus] = useState<string>('all');
-  const [filterType, setFilterType] = useState<string>('all');
-  const [sortBy, setSortBy] = useState<'count' | 'date'>('count');
-  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
+  const [filterStatus, setFilterStatus] = useState<string>(() => sessionStorage.getItem('requests_mgmt_status') || 'all');
+  const [filterType, setFilterType] = useState<string>(() => sessionStorage.getItem('requests_mgmt_type') || 'all');
+  const [sortBy, setSortBy] = useState<'count' | 'date'>(() => (sessionStorage.getItem('requests_mgmt_sort_by') as any) || 'count');
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>(() => (sessionStorage.getItem('requests_mgmt_sort_order') as any) || 'desc');
+
+  useEffect(() => {
+    sessionStorage.setItem('requests_mgmt_search', search);
+    sessionStorage.setItem('requests_mgmt_status', filterStatus);
+    sessionStorage.setItem('requests_mgmt_type', filterType);
+    sessionStorage.setItem('requests_mgmt_sort_by', sortBy);
+    sessionStorage.setItem('requests_mgmt_sort_order', sortOrder);
+  }, [search, filterStatus, filterType, sortBy, sortOrder]);
   
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [requestToDelete, setRequestToDelete] = useState<string | null>(null);

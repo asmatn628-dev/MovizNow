@@ -20,6 +20,7 @@ import { smartSearch } from '../../utils/searchUtils';
 import { handleFirestoreError, OperationType } from '../../utils/firestoreErrorHandler';
 import { generateTinyUrl } from '../../utils/tinyurl';
 import { useModalBehavior } from '../../hooks/useModalBehavior';
+import { useSettings } from '../../contexts/SettingsContext';
 
 interface QualityInputsProps {
   links: QualityLinks;
@@ -221,6 +222,7 @@ const QualityInputs: React.FC<QualityInputsProps> = ({ links, onChange, droppabl
 
 export default function ContentManagement() {
   const { profile, user } = useAuth();
+  const { settings } = useSettings();
   const { contentList, genres, languages, qualities, loading: contextLoading } = useContent();
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -266,16 +268,28 @@ export default function ContentManagement() {
   const [expandedEpisodes, setExpandedEpisodes] = useState<Record<string, boolean>>({});
  
   // Search States
-  const [searchTerm, setSearchTerm] = useState('');
-  const [filterType, setFilterType] = useState<'all' | 'movie' | 'series'>('all');
-  const [filterGenre, setFilterGenre] = useState<string>('all');
-  const [filterLanguage, setFilterLanguage] = useState<string>('all');
-  const [filterQuality, setFilterQuality] = useState<string>('all');
-  const [filterYear, setFilterYear] = useState<string>('all');
-  const [filterStatus, setFilterStatus] = useState<'all' | 'published' | 'draft' | 'selected_content'>('all');
-  const [filterAddedBy, setFilterAddedBy] = useState<string>('all');
-  const [filterSort, setFilterSort] = useState<'default' | 'newest' | 'oldest'>('default');
+  const [searchTerm, setSearchTerm] = useState(() => sessionStorage.getItem('content_mgmt_search') || '');
+  const [filterType, setFilterType] = useState<'all' | 'movie' | 'series'>(() => (sessionStorage.getItem('content_mgmt_type') as any) || 'all');
+  const [filterGenre, setFilterGenre] = useState<string>(() => sessionStorage.getItem('content_mgmt_genre') || 'all');
+  const [filterLanguage, setFilterLanguage] = useState<string>(() => sessionStorage.getItem('content_mgmt_language') || 'all');
+  const [filterQuality, setFilterQuality] = useState<string>(() => sessionStorage.getItem('content_mgmt_quality') || 'all');
+  const [filterYear, setFilterYear] = useState<string>(() => sessionStorage.getItem('content_mgmt_year') || 'all');
+  const [filterStatus, setFilterStatus] = useState<'all' | 'published' | 'draft' | 'selected_content'>(() => (sessionStorage.getItem('content_mgmt_status') as any) || 'all');
+  const [filterAddedBy, setFilterAddedBy] = useState<string>(() => sessionStorage.getItem('content_mgmt_added_by') || 'all');
+  const [filterSort, setFilterSort] = useState<'default' | 'newest' | 'oldest'>(() => (sessionStorage.getItem('content_mgmt_sort') as any) || 'default');
   const [selectedContent, setSelectedContent] = useState<string[]>([]);
+
+  useEffect(() => {
+    sessionStorage.setItem('content_mgmt_search', searchTerm);
+    sessionStorage.setItem('content_mgmt_type', filterType);
+    sessionStorage.setItem('content_mgmt_genre', filterGenre);
+    sessionStorage.setItem('content_mgmt_language', filterLanguage);
+    sessionStorage.setItem('content_mgmt_quality', filterQuality);
+    sessionStorage.setItem('content_mgmt_year', filterYear);
+    sessionStorage.setItem('content_mgmt_status', filterStatus);
+    sessionStorage.setItem('content_mgmt_added_by', filterAddedBy);
+    sessionStorage.setItem('content_mgmt_sort', filterSort);
+  }, [searchTerm, filterType, filterGenre, filterLanguage, filterQuality, filterYear, filterStatus, filterAddedBy, filterSort]);
 
   const [genreSearchTerm, setGenreSearchTerm] = useState('');
   const [languageSearchTerm, setLanguageSearchTerm] = useState('');
@@ -1005,11 +1019,6 @@ export default function ContentManagement() {
     if (data.posterUrl) setPosterUrl(data.posterUrl);
     if (data.trailerUrl) {
       setTrailerUrl(data.trailerUrl);
-      if (data.trailerTitle) {
-        // We can store the trailer title in a temporary state or just use it in the UI
-        // Let's add a state for it if not already there
-        setTrailerTitle(data.trailerTitle);
-      }
     }
 
     if (data.genres && Array.isArray(data.genres)) {
@@ -1023,7 +1032,11 @@ export default function ContentManagement() {
           (fetched === 'history' && gName === 'historical') ||
           (fetched === 'historical' && gName === 'history') ||
           (fetched === 'sci-fi' && gName.includes('sci')) ||
-          (fetched === 'science fiction' && gName.includes('sci'))
+          (fetched === 'science fiction' && gName.includes('sci')) ||
+          (fetched === 'romance' && gName === 'romantic') ||
+          (fetched === 'romantic' && gName === 'romance') ||
+          (fetched === 'comedy' && gName === 'comic') ||
+          (fetched === 'comic' && gName === 'comedy')
         );
       }).map(g => g.id);
       if (matchedGenreIds.length > 0) {
@@ -1247,10 +1260,34 @@ export default function ContentManagement() {
         if (tmdbItem) {
             const tmdbType = type === 'series' ? 'tv' : 'movie';
             const details = await fetchTMDBDetails(tmdbItem.id, tmdbType);
-            let imdbRatingData = null;
+            
+            const promises: Promise<any>[] = [];
+            let imdbPromiseIndex = -1;
+            let seasonsPromiseIndex = -1;
+
             if (details.external_ids && details.external_ids.imdb_id) {
-                imdbRatingData = await fetchIMDbRating(details.external_ids.imdb_id);
+                promises.push(fetchIMDbRating(details.external_ids.imdb_id));
+                imdbPromiseIndex = promises.length - 1;
             }
+
+            let parsedSeasons: Season[] = [];
+            let needsDuration = false;
+            if (type === 'series') {
+                try {
+                    parsedSeasons = typeof content.seasons === 'string' ? JSON.parse(content.seasons || '[]') : (content.seasons || []);
+                    needsDuration = parsedSeasons.some(s => s.episodes?.some(e => !e.duration));
+                    if (needsDuration) {
+                        promises.push(fetchSeriesSeasons(tmdbItem.id));
+                        seasonsPromiseIndex = promises.length - 1;
+                    }
+                } catch (e) {
+                    console.error("Error parsing seasons for share:", e);
+                }
+            }
+
+            const results = await Promise.all(promises);
+            const imdbRatingData = imdbPromiseIndex !== -1 ? results[imdbPromiseIndex] : null;
+            const fetchedSeasons = seasonsPromiseIndex !== -1 ? results[seasonsPromiseIndex] : null;
             
             const updatedContent = {
                 ...content,
@@ -1262,11 +1299,7 @@ export default function ContentManagement() {
 
             if (updatedContent.type === 'series') {
                 try {
-                    let parsedSeasons: Season[] = typeof updatedContent.seasons === 'string' ? JSON.parse(updatedContent.seasons || '[]') : updatedContent.seasons;
-                    const needsDuration = parsedSeasons.some(s => s.episodes?.some(e => !e.duration));
-                    
-                    if (needsDuration) {
-                        const fetchedSeasons = await fetchSeriesSeasons(tmdbItem.id);
+                    if (needsDuration && fetchedSeasons) {
                         parsedSeasons = parsedSeasons.map(s => {
                             const fetchedSeason = fetchedSeasons.find((fs: any) => fs.season === s.seasonNumber);
                             if (fetchedSeason) {
@@ -1369,7 +1402,7 @@ export default function ContentManagement() {
       const isBadTinyUrl = link.tinyUrl && link.tinyUrl.toLowerCase().includes('<html');
       
       if (!link.url.includes('pixeldrain.com') && !link.url.includes('pixeldrain.dev') && (!link.tinyUrl || isBadTinyUrl)) {
-        const tinyUrl = await generateTinyUrl(link.url);
+        const tinyUrl = await generateTinyUrl(link.url, true, settings?.supportNumber || '3363284466');
         if (tinyUrl && tinyUrl !== link.url && !tinyUrl.toLowerCase().includes('<html')) {
           hasUpdates = true;
           return { ...link, tinyUrl };
@@ -1385,8 +1418,9 @@ export default function ContentManagement() {
     if (updatedContent.type === 'movie' && updatedContent.movieLinks) {
       const links: QualityLinks = parseLinks(updatedContent.movieLinks);
       
+      const processedLinks = await Promise.all(links.map(processLink));
       for (let i = 0; i < links.length; i++) {
-        links[i] = await processLink(links[i]);
+        links[i] = processedLinks[i];
       }
 
       if (hasUpdates) {
@@ -1436,30 +1470,37 @@ export default function ContentManagement() {
         ? parsedSeasons.filter(s => selectedSeasonNumbers.includes(s.seasonNumber))
         : parsedSeasons;
 
+      const linkPromises: Promise<void>[] = [];
+
       for (let s = 0; s < parsedSeasons.length; s++) {
         const season = parsedSeasons[s];
         
         if (season.zipLinks) {
-          for (let i = 0; i < season.zipLinks.length; i++) {
-            season.zipLinks[i] = await processLink(season.zipLinks[i]);
-          }
+          linkPromises.push((async () => {
+            const processed = await Promise.all(season.zipLinks!.map(processLink));
+            season.zipLinks = processed;
+          })());
         }
         if (season.mkvLinks) {
-          for (let i = 0; i < season.mkvLinks.length; i++) {
-            season.mkvLinks[i] = await processLink(season.mkvLinks[i]);
-          }
+          linkPromises.push((async () => {
+            const processed = await Promise.all(season.mkvLinks!.map(processLink));
+            season.mkvLinks = processed;
+          })());
         }
         if (season.episodes) {
           for (let e = 0; e < season.episodes.length; e++) {
             const ep = season.episodes[e];
             if (ep.links) {
-              for (let i = 0; i < ep.links.length; i++) {
-                ep.links[i] = await processLink(ep.links[i]);
-              }
+              linkPromises.push((async () => {
+                const processed = await Promise.all(ep.links.map(processLink));
+                ep.links = processed;
+              })());
             }
           }
         }
       }
+
+      await Promise.all(linkPromises);
 
       if (hasUpdates) {
         updatedContent.seasons = JSON.stringify(parsedSeasons);
@@ -1536,8 +1577,8 @@ export default function ContentManagement() {
       }
     }
 
-    text += `\n🍿 Enjoy watching on MovizNow!\n`;
-    text += `📞 WhatsApp: 03363284466`;
+    text += `\n🍿 Enjoy watching on ${settings?.headerText || 'MovizNow'}!\n`;
+    text += `📞 WhatsApp: 0${settings?.supportNumber || '3363284466'}`;
     
     if (navigator.share) {
       try {

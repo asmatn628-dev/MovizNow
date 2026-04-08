@@ -16,8 +16,18 @@ if (typeof importScripts === 'function') {
 
   messaging.onBackgroundMessage((payload) => {
     console.log('[firebase-messaging-sw.js] Received background message ', payload);
-    // Firebase automatically shows a notification if the payload contains a 'notification' object.
-    // We don't need to call showNotification manually here unless we are sending data-only messages.
+    
+    if (payload.data) {
+      const notificationTitle = payload.data.title || 'New Notification';
+      const notificationOptions = {
+        body: payload.data.body,
+        icon: payload.data.imageUrl || '/launcher.svg',
+        image: payload.data.imageUrl,
+        data: { url: payload.data.url || '/' }
+      };
+
+      self.registration.showNotification(notificationTitle, notificationOptions);
+    }
   });
 }
 

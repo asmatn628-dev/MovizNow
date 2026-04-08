@@ -8,18 +8,25 @@ import { clsx } from 'clsx';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useModalBehavior } from '../../hooks/useModalBehavior';
 import ConfirmModal from '../../components/ConfirmModal';
+import { useSettings } from '../../contexts/SettingsContext';
 
 const CACHE_KEY = 'admin_orders_cache';
 const PHONES_CACHE_KEY = 'admin_user_phones_cache';
 
 export default function OrdersManagement() {
+  const { settings } = useSettings();
   const [orders, setOrders] = useState<Order[]>(() => {
     const cached = localStorage.getItem(CACHE_KEY);
     return cached ? JSON.parse(cached) : [];
   });
   const [loading, setLoading] = useState(orders.length === 0);
-  const [filter, setFilter] = useState<string>('all');
-  const [search, setSearch] = useState('');
+  const [filter, setFilter] = useState<string>(() => sessionStorage.getItem('orders_mgmt_filter') || 'all');
+  const [search, setSearch] = useState(() => sessionStorage.getItem('orders_mgmt_search') || '');
+
+  useEffect(() => {
+    sessionStorage.setItem('orders_mgmt_filter', filter);
+    sessionStorage.setItem('orders_mgmt_search', search);
+  }, [filter, search]);
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [processingId, setProcessingId] = useState<string | null>(null);
   const [selectedUserPhone, setSelectedUserPhone] = useState<string | null>(null);
@@ -451,9 +458,9 @@ export default function OrdersManagement() {
                       <a 
                         href={`https://wa.me/${selectedUserPhone.replace(/\D/g, '')}?text=${encodeURIComponent(
                           selectedOrder.status === 'pending' 
-                            ? `*Ap ke Order ka Shukriya!*\nAp ke Order ${selectedOrder.id} ki total payment Rs ${selectedOrder.amount} hai. Order ke Approval ke liye Payment kar ke Screenshot bhej dain.\n\n*Payment Details:*\n*Banks :* Easypaisa, Jazzcash, NayaPay, SadaPay \n*Account Number :* 03416286423\n*Account Title :* Asmat Ullah`
+                            ? `*Ap ke Order ka Shukriya!*\nAp ke Order ${selectedOrder.id} ki total payment Rs ${selectedOrder.amount} hai. Order ke Approval ke liye Payment kar ke Screenshot bhej dain.\n\n*Payment Details:*\n${settings?.paymentDetails || `*Banks :* ${settings?.bankAccounts.map(b => b.name).join(', ') || 'Easypaisa, Jazzcash, NayaPay, SadaPay'} \n*Account Number :* ${settings?.accountNumber || '03416286423'}\n*Account Title :* ${settings?.accountTitle || 'Asmat Ullah'}`}`
                             : selectedOrder.status === 'approved'
-                            ? `Thanks for your Payment, Your order ${selectedOrder.id} has been approved.\n🍿 Enjoy watching on MovizNow!`
+                            ? `Thanks for your Payment, Your order ${selectedOrder.id} has been approved.\n🍿 Enjoy watching on ${settings?.headerText || 'MovizNow'}!`
                             : ""
                         )}`} 
                         target="_blank" 

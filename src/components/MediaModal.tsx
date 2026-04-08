@@ -61,21 +61,21 @@ export async function fetchSeriesSeasons(tmdbId: string) {
   const data = await res.json();
   if (!data.seasons) return [];
 
-  const seasons = [];
-  for (const season of data.seasons) {
-    if (season.season_number === 0) continue;
+  const validSeasons = data.seasons.filter((s: any) => s.season_number !== 0);
+  const seasonPromises = validSeasons.map(async (season: any) => {
     const seasonUrl = `${TMDB_BASE}/tv/${tmdbId}/season/${season.season_number}?api_key=${TMDB_API_KEY}`;
     const seasonRes = await fetch(seasonUrl);
     const seasonData = await seasonRes.json();
-    seasons.push({
+    return {
       season: season.season_number,
       name: season.name,
       year: season.air_date ? season.air_date.split('-')[0] : 'N/A',
       episodes: seasonData.episodes || []
-    });
-    await new Promise(resolve => setTimeout(resolve, 100));
-  }
-  return seasons;
+    };
+  });
+
+  const seasons = await Promise.all(seasonPromises);
+  return seasons.sort((a, b) => a.season - b.season);
 }
 
 export async function fetchIMDbRating(imdbID: string) {
@@ -162,13 +162,19 @@ export const MediaModal: React.FC<MediaModalProps> = ({ isOpen, onClose, initial
   async function searchTMDBByTitle(searchTitle: string, searchYear: string) {
     let movieUrl = `${TMDB_BASE}/search/movie?api_key=${TMDB_API_KEY}&query=${encodeURIComponent(searchTitle)}`;
     if (searchYear) movieUrl += `&year=${searchYear}`;
-    let movieRes = await fetch(movieUrl);
-    let movieData = await movieRes.json();
     
     let tvUrl = `${TMDB_BASE}/search/tv?api_key=${TMDB_API_KEY}&query=${encodeURIComponent(searchTitle)}`;
     if (searchYear) tvUrl += `&first_air_date_year=${searchYear}`;
-    let tvRes = await fetch(tvUrl);
-    let tvData = await tvRes.json();
+
+    const [movieRes, tvRes] = await Promise.all([
+      fetch(movieUrl),
+      fetch(tvUrl)
+    ]);
+
+    const [movieData, tvData] = await Promise.all([
+      movieRes.json(),
+      tvRes.json()
+    ]);
 
     const results: any[] = [];
     if (movieData.results) {
@@ -193,21 +199,21 @@ export const MediaModal: React.FC<MediaModalProps> = ({ isOpen, onClose, initial
     const data = await res.json();
     if (!data.seasons) return [];
 
-    const seasons = [];
-    for (const season of data.seasons) {
-      if (season.season_number === 0) continue;
+    const validSeasons = data.seasons.filter((s: any) => s.season_number !== 0);
+    const seasonPromises = validSeasons.map(async (season: any) => {
       const seasonUrl = `${TMDB_BASE}/tv/${tmdbId}/season/${season.season_number}?api_key=${TMDB_API_KEY}`;
       const seasonRes = await fetch(seasonUrl);
       const seasonData = await seasonRes.json();
-      seasons.push({
+      return {
         season: season.season_number,
         name: season.name,
         year: season.air_date ? season.air_date.split('-')[0] : 'N/A',
         episodes: seasonData.episodes || []
-      });
-      await delay(100);
-    }
-    return seasons;
+      };
+    });
+
+    const seasons = await Promise.all(seasonPromises);
+    return seasons.sort((a, b) => a.season - b.season);
   }
 
   async function fetchIMDbRating(imdbID: string) {
@@ -280,15 +286,25 @@ export const MediaModal: React.FC<MediaModalProps> = ({ isOpen, onClose, initial
     setSearchResults(null);
     try {
       const details = await fetchTMDBDetails(tmdbId, type);
-      let imdbRatingData = null;
+      
+      const promises: Promise<any>[] = [];
+      let imdbPromiseIndex = -1;
+      let seasonsPromiseIndex = -1;
+
       if (details.external_ids && details.external_ids.imdb_id) {
-        imdbRatingData = await fetchIMDbRating(details.external_ids.imdb_id);
+        promises.push(fetchIMDbRating(details.external_ids.imdb_id));
+        imdbPromiseIndex = promises.length - 1;
       }
 
-      let seasonsData: any = null;
       if (type === 'tv') {
-        seasonsData = await fetchSeriesSeasons(tmdbId);
+        promises.push(fetchSeriesSeasons(tmdbId));
+        seasonsPromiseIndex = promises.length - 1;
       }
+
+      const results = await Promise.all(promises);
+
+      const imdbRatingData = imdbPromiseIndex !== -1 ? results[imdbPromiseIndex] : null;
+      const seasonsData = seasonsPromiseIndex !== -1 ? results[seasonsPromiseIndex] : null;
 
       const parsedData: any = {
         title: details.title || details.name,
@@ -359,10 +375,6 @@ export const MediaModal: React.FC<MediaModalProps> = ({ isOpen, onClose, initial
     Object.keys(selectedFields).forEach(key => {
       if (selectedFields[key]) {
         dataToApply[key] = fetchedData[key];
-        // If trailerUrl is selected, also include trailerTitle
-        if (key === 'trailerUrl' && fetchedData.trailerTitle) {
-          dataToApply.trailerTitle = fetchedData.trailerTitle;
-        }
       }
     });
 
@@ -370,7 +382,7 @@ export const MediaModal: React.FC<MediaModalProps> = ({ isOpen, onClose, initial
       dataToApply.seasons = fetchedData.seasons.filter((s: any) => selectedSeasons.includes(s.season)).map((s: any) => ({
         id: `s${s.season}`,
         seasonNumber: s.season,
-        title: s.name,
+        title: s.name && !/^Season\s+\d+$/i.test(s.name) ? s.name : '',
         year: s.year && s.year !== 'N/A' ? parseInt(s.year.toString()) : undefined,
         seasonYear: s.year && s.year !== 'N/A' ? parseInt(s.year.toString()) : undefined,
         episodes: s.episodes.map((e: any) => ({

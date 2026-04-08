@@ -391,12 +391,10 @@ async function startServer() {
       const { title, body, imageUrl, url } = req.body;
       
       const message = {
-        notification: {
+        data: {
           title,
           body,
-          ...(imageUrl && { imageUrl })
-        },
-        data: {
+          imageUrl: imageUrl || "",
           url: url || "/"
         },
         topic: "all_users"

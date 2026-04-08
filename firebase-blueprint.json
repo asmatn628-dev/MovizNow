@@ -151,9 +151,25 @@
         "orderId": { "type": "string" }
       },
       "required": ["id", "userId", "type", "totalAmount", "status", "createdAt", "orderId"]
+    },
+    "AppSettings": {
+      "title": "AppSettings",
+      "description": "Global application settings.",
+      "type": "object",
+      "properties": {
+        "headerText": { "type": "string" },
+        "membershipFee": { "type": "number" },
+        "movieFee": { "type": "number" },
+        "seasonFee": { "type": "number" },
+        "paymentDetails": { "type": "string" }
+      }
     }
   },
   "firestore": {
+    "/settings/app_settings": {
+      "schema": { "$ref": "#/entities/AppSettings" },
+      "description": "Stores global app settings."
+    },
     "/orders/{orderId}": {
       "schema": { "$ref": "#/entities/Order" },
       "description": "Stores user orders."

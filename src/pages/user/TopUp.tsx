@@ -9,8 +9,11 @@ import PreviousOrders from '../../components/PreviousOrders';
 
 import PaymentMethods from '../../components/PaymentMethods';
 
+import { useSettings } from '../../contexts/SettingsContext';
+
 export default function TopUp() {
   const { profile } = useAuth();
+  const { settings } = useSettings();
   const navigate = useNavigate();
   const location = useLocation();
   const [months, setMonths] = useState(1);
@@ -51,7 +54,7 @@ export default function TopUp() {
   const actionText = isExtend ? 'Extend' : (isExpired && profile?.role === 'user' ? 'Renew' : 'Get');
 
   const handleCopy = () => {
-    navigator.clipboard.writeText('03416286423');
+    navigator.clipboard.writeText(settings?.accountNumber || '03416286423');
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
@@ -68,7 +71,7 @@ export default function TopUp() {
         userEmail: profile.email,
         userRole: profile.role,
         type: 'membership',
-        amount: months * 200,
+        amount: months * (settings?.membershipFee || 200),
         months,
         status: 'pending',
         createdAt: serverTimestamp(),
@@ -108,8 +111,8 @@ export default function TopUp() {
       const snapshot = await getDocs(q);
       const lastOrder = snapshot.docs[0]?.data();
 
-      const message = `Membership Top Up\nOrder ID: ${currentOrderId}\nMonths: ${lastOrder?.months || months}\nAmount: Rs ${lastOrder?.amount || months * 200}`;
-      const whatsappUrl = `https://wa.me/923363284466?text=${encodeURIComponent(message)}`;
+      const message = `Membership Top Up\nOrder ID: ${currentOrderId}\nMonths: ${lastOrder?.months || months}\nAmount: Rs ${lastOrder?.amount || months * (settings?.membershipFee || 200)}`;
+      const whatsappUrl = `https://wa.me/92${settings?.supportNumber || '3363284466'}?text=${encodeURIComponent(message)}`;
       
       window.open(whatsappUrl, '_blank');
       navigate('/');
@@ -165,7 +168,7 @@ export default function TopUp() {
             </div>
             <div className="flex justify-between items-center border-t border-zinc-200 dark:border-zinc-800 pt-4 mt-4">
               <span className="text-zinc-500 dark:text-zinc-400">Total Amount</span>
-              <span className="text-2xl font-bold text-red-500">Rs {months * 200}</span>
+              <span className="text-2xl font-bold text-red-500">Rs {months * (settings?.membershipFee || 200)}</span>
             </div>
           </div>
         )}
