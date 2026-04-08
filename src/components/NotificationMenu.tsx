@@ -14,9 +14,15 @@ export const NotificationMenu: React.FC<NotificationMenuProps> = () => {
   const { profile } = useAuth();
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [isOpen, setIsOpen] = useState(false);
+  const [localLastCheck, setLocalLastCheck] = useState<Date | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
 
   useModalBehavior(isOpen, () => setIsOpen(false));
+  
+  // Reset localLastCheck when profile updates
+  useEffect(() => {
+    setLocalLastCheck(null);
+  }, [profile?.lastNotificationCheck]);
 
   useEffect(() => {
     if (!profile) return;
@@ -42,13 +48,16 @@ export const NotificationMenu: React.FC<NotificationMenuProps> = () => {
   }, []);
 
   const handleOpen = async () => {
-    setIsOpen(!isOpen);
-    if (!isOpen && profile?.uid) {
+    const willOpen = !isOpen;
+    setIsOpen(willOpen);
+    if (willOpen && profile?.uid) {
+      const now = new Date();
+      setLocalLastCheck(now);
       // Update lastNotificationCheck when opening the menu
       try {
         const userRef = doc(db, 'users', profile.uid);
         await updateDoc(userRef, {
-          lastNotificationCheck: new Date().toISOString()
+          lastNotificationCheck: now.toISOString()
         });
       } catch (error) {
         console.error('Error updating lastNotificationCheck:', error);
@@ -58,10 +67,13 @@ export const NotificationMenu: React.FC<NotificationMenuProps> = () => {
 
   if (!profile) return null;
 
+  const lastCheck = (localLastCheck && (!profile.lastNotificationCheck || localLastCheck > new Date(profile.lastNotificationCheck)))
+    ? localLastCheck
+    : (profile.lastNotificationCheck ? new Date(profile.lastNotificationCheck) : new Date(profile.createdAt));
+
   const unreadCount = notifications.filter(n => {
     const notifDate = new Date(n.createdAt);
     const userCreatedAt = new Date(profile.createdAt);
-    const lastCheck = profile.lastNotificationCheck ? new Date(profile.lastNotificationCheck) : userCreatedAt;
     return notifDate > lastCheck && notifDate > userCreatedAt;
   }).length;
 
@@ -98,9 +110,7 @@ export const NotificationMenu: React.FC<NotificationMenuProps> = () => {
             ) : (
               <div className="divide-y divide-zinc-800/50">
                 {notifications.map(notification => {
-                  const isNew = profile.lastNotificationCheck 
-                    ? new Date(notification.createdAt) > new Date(profile.lastNotificationCheck)
-                    : new Date(notification.createdAt) > new Date(profile.createdAt);
+                  const isNew = new Date(notification.createdAt) > lastCheck;
 
                   return (
                     <Link 
