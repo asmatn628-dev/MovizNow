@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { db } from '../../firebase';
 import { collection, addDoc, deleteDoc, doc, onSnapshot, query, orderBy, getDocs } from 'firebase/firestore';
 import { Income } from '../../types';
-import { Plus, Trash2, DollarSign, Calendar, TrendingUp } from 'lucide-react';
+import { Plus, Trash2, DollarSign, Calendar, TrendingUp, Loader2 } from 'lucide-react';
 import { format } from 'date-fns';
 import ConfirmModal from '../../components/ConfirmModal';
 import AlertModal from '../../components/AlertModal';
@@ -39,9 +39,12 @@ export default function IncomeManagement() {
     fetchIncome();
   }, []);
 
+  const [processing, setProcessing] = useState<Record<string, boolean>>({});
+
   const handleAdd = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!amount || !description || !date) return;
+    setProcessing(prev => ({ ...prev, add: true }));
 
     try {
       await addDoc(collection(db, 'income'), {
@@ -55,19 +58,28 @@ export default function IncomeManagement() {
       setDescription('');
       setDate(new Date().toISOString().split('T')[0]);
       setUserName('');
+      // Refresh incomes
+      const q = query(collection(db, 'income'), orderBy('date', 'desc'));
+      const snapshot = await getDocs(q);
+      setIncomes(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Income)));
     } catch (error) {
       console.error('Error adding income:', error);
       setAlertConfig({ isOpen: true, title: 'Error', message: 'Failed to add income' });
+    } finally {
+      setProcessing(prev => ({ ...prev, add: false }));
     }
   };
 
   const handleDelete = async () => {
     if (!deleteId) return;
+    setProcessing(prev => ({ ...prev, delete: true }));
     try {
       await deleteDoc(doc(db, 'income', deleteId));
-      setDeleteId(null);
+      setIncomes(incomes.filter(i => i.id !== deleteId));
     } catch (error) {
       console.error('Error deleting income:', error);
+    } finally {
+      setProcessing(prev => ({ ...prev, delete: false }));
     }
   };
 
@@ -211,19 +223,22 @@ export default function IncomeManagement() {
                   className="w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-3 focus:outline-none focus:border-emerald-500"
                 />
               </div>
-              <div className="flex gap-4 pt-4">
+              <div className="flex justify-between gap-2 pt-4">
                 <button
                   type="button"
                   onClick={() => setIsAdding(false)}
-                  className="flex-1 bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-300 dark:hover:bg-zinc-700 text-zinc-900 dark:text-white py-3 rounded-xl font-bold transition-colors"
+                  disabled={processing.add}
+                  className="px-5 py-2.5 text-sm bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-300 dark:hover:bg-zinc-700 text-zinc-900 dark:text-white rounded-xl font-bold transition-colors disabled:opacity-50"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="flex-1 bg-emerald-500 hover:bg-emerald-600 text-white py-3 rounded-xl font-bold transition-colors"
+                  disabled={processing.add}
+                  className="px-5 py-2.5 text-sm bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl font-bold transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
                 >
-                  Save Record
+                  {processing.add && <Loader2 className="w-4 h-4 animate-spin" />}
+                  {processing.add ? 'Saving...' : 'Save Record'}
                 </button>
               </div>
             </form>

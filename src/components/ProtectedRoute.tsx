@@ -20,6 +20,11 @@ export function ProtectedRoute({ children, requireAdmin = false }: ProtectedRout
     return <Navigate to="/login" state={{ from: location }} replace />;
   }
 
+  if (profile?.status === 'suspended') {
+    console.log('ProtectedRoute: User is suspended, redirecting to login');
+    return <Navigate to="/login" state={{ from: location, suspended: true }} replace />;
+  }
+
   // If admin is required, we must wait for the profile to check roles
   if (requireAdmin) {
     if (loading || !profile) {

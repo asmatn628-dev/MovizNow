@@ -17,6 +17,8 @@ import ContentCard from '../../components/ContentCard';
 import { useModalBehavior } from '../../hooks/useModalBehavior';
 
 import { NotificationMenu } from '../../components/NotificationMenu';
+import { UserProfileMenu } from '../../components/UserProfileMenu';
+import { AdminButtons } from '../../components/AdminButtons';
 
 import { ThemeToggle } from '../../components/ThemeToggle';
 
@@ -161,7 +163,7 @@ export default function Home({ onOpenMediaModal }: { onOpenMediaModal: () => voi
       if (c.year && !isNaN(Number(c.year))) years.add(Number(c.year));
       if (c.type === 'series' && c.seasons) {
         try {
-          const seasons = JSON.parse(c.seasons);
+          const seasons = Array.isArray(c.seasons) ? c.seasons : JSON.parse(c.seasons || '[]');
           seasons.forEach((s: any) => {
             if (s.year && !isNaN(Number(s.year))) years.add(Number(s.year));
           });
@@ -241,7 +243,7 @@ export default function Home({ onOpenMediaModal }: { onOpenMediaModal: () => voi
         if (c.year?.toString() === selectedYear) return true;
         if (c.type === 'series' && c.seasons) {
           try {
-            const seasons = JSON.parse(c.seasons);
+            const seasons = Array.isArray(c.seasons) ? c.seasons : JSON.parse(c.seasons || '[]');
             return seasons.some((s: any) => s.year?.toString() === selectedYear);
           } catch (e) {}
         }
@@ -297,200 +299,13 @@ export default function Home({ onOpenMediaModal }: { onOpenMediaModal: () => voi
             <span className="tracking-tight">MovizNow</span>
           </Link>
 
-          <div className="flex items-center gap-0">
-            {profile && (
-              <div className="hidden md:flex items-center gap-3 mr-2">
-                <div className="flex flex-col items-end">
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm font-bold text-zinc-900 dark:text-white">{profile.displayName || 'User'} {profile.role === 'owner' ? '(Owner)' : ''}</span>
-                    {profile.role !== 'owner' && (
-                      <div className="flex items-center gap-2">
-                        <span className={clsx("text-[10px] font-medium px-2 py-0.5 rounded-full border", getRoleColor(profile.role))}>
-                          {profile.role === 'selected_content' ? 'Selected Content' : 
-                           profile.role === 'content_manager' ? 'Content Manager' :
-                           profile.role === 'user_manager' ? 'User Manager' :
-                           profile.role === 'manager' ? 'Manager' :
-                           profile.role.charAt(0).toUpperCase() + profile.role.slice(1).replace('_', ' ')}
-                        </span>
-                        <span className={clsx("text-[10px] font-medium capitalize px-2 py-0.5 rounded-full border", getStatusColor(profile.status))}>
-                          {profile.status}
-                        </span>
-                      </div>
-                    )}
-                  </div>
-                  {profile.phone ? (
-                    <span className="text-xs font-medium text-zinc-500 dark:text-zinc-400">{profile.phone}</span>
-                  ) : profile.role !== 'owner' ? (
-                    <button onClick={() => setShowWhatsappPrompt(true)} className="text-[10px] font-medium text-emerald-500 hover:underline mt-0.5 transition-all active:scale-95">
-                      + Add WhatsApp
-                    </button>
-                  ) : null}
-                </div>
-                {profile.role !== 'owner' && (
-                  <>
-                    <div className="h-8 w-px bg-zinc-100 dark:bg-zinc-800"></div>
-                    <div className="flex flex-col items-start">
-                      <span className="text-xs text-zinc-500 dark:text-zinc-400">Expiry Date</span>
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs font-medium text-zinc-600 dark:text-zinc-300">
-                          {profile.expiryDate ? (() => {
-                            const expiry = new Date(profile.expiryDate);
-                            const expiryEnd = new Date(expiry.getTime() + 24 * 60 * 60 * 1000);
-                            const now = new Date();
-                            const diffTime = expiryEnd.getTime() - now.getTime();
-                            const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-                            const isExpiringSoon = diffDays > 0 && diffDays < 3;
-                            const daysText = diffDays > 0 ? `${diffDays} days left` : 'Expired';
-                            return (
-                              <span className={clsx(isExpiringSoon && "text-red-500 font-bold")}>
-                                {format(expiry, 'MMM dd, yyyy')} ({daysText})
-                              </span>
-                            );
-                          })() : 'No Expiry'}
-                        </span>
-                        {(profile.role === 'user' || profile.role === 'trial') && (
-                          <Link 
-                            to="/top-up" 
-                            state={{ isExtend: true }}
-                            className="bg-emerald-500/20 text-emerald-500 hover:bg-emerald-500/30 p-0.5 rounded-full transition-all active:scale-95"
-                            title="Extend Membership"
-                          >
-                            <Plus className="w-3 h-3" />
-                          </Link>
-                        )}
-                      </div>
-                    </div>
-                    <a 
-                      href="https://wa.me/923363284466" 
-                      target="_blank" 
-                      rel="noreferrer" 
-                      className="flex items-center gap-2 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-500 px-3 py-1.5 rounded-lg text-sm font-medium transition-all active:scale-95 ml-2"
-                    >
-                      <MessageCircle className="w-4 h-4" />
-                      Support
-                    </a>
-                  </>
-                )}
-              </div>
-            )}
-            
-            <Link to="/watch-later" className="text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:text-white transition-all active:scale-95 p-1 rounded-full hover:bg-zinc-100 dark:hover:bg-zinc-800" title="Watch Later">
-              <Clock className="w-5 h-5" />
-            </Link>
-            <Link to="/favorites" className="text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:text-white transition-all active:scale-95 p-1 rounded-full hover:bg-zinc-100 dark:hover:bg-zinc-800" title="Favorites">
-              <Heart className="w-5 h-5" />
-            </Link>
-            {((profile?.role === 'selected_content' && profile?.status !== 'expired') || profile?.status === 'pending') && (
-              <Link to="/cart" className="text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:text-white transition-all active:scale-95 p-1 rounded-full hover:bg-zinc-100 dark:hover:bg-zinc-800 relative" title="Cart">
-                <ShoppingCart className="w-5 h-5" />
-                {cart.length > 0 && (
-                  <span className="absolute top-0 right-0 bg-red-500 text-white text-[10px] font-bold w-4 h-4 flex items-center justify-center rounded-full border-2 border-white dark:border-zinc-950">
-                    {cart.length}
-                  </span>
-                )}
-              </Link>
-            )}
-            {profile?.role !== 'manager' && profile?.role !== 'content_manager' && (
-              <Link to="/requests" className="text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:text-white transition-all active:scale-95 p-1 rounded-full hover:bg-zinc-100 dark:hover:bg-zinc-800" title="Movie Requests">
-                <MessageCircle className="w-5 h-5" />
-              </Link>
-            )}
-            <ThemeToggle />
+          <div className="flex items-center gap-2">
+            <AdminButtons profile={profile} />
             {profile && <NotificationMenu />}
-            {(profile?.role === 'admin' || profile?.role === 'owner') && (
-              <Link to="/admin" className="text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:text-white transition-all active:scale-95 p-1 rounded-full hover:bg-zinc-100 dark:hover:bg-zinc-800" title="Admin Panel">
-                <LayoutDashboard className="w-5 h-5" />
-              </Link>
-            )}
-            {(profile?.role === 'manager' || profile?.role === 'content_manager') && (
-              <Link to="/admin/content" className="text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:text-white transition-all active:scale-95 p-1 rounded-full hover:bg-zinc-100 dark:hover:bg-zinc-800" title={profile?.role === 'manager' ? 'Content Management' : 'Content Manager'}>
-                <Film className="w-5 h-5" />
-              </Link>
-            )}
-            {(profile?.role === 'user_manager' || profile?.role === 'manager') && (
-              <Link to="/admin/users" className="text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:text-white transition-all active:scale-95 p-1 rounded-full hover:bg-zinc-100 dark:hover:bg-zinc-800" title={profile?.role === 'manager' ? 'User Management' : 'User Manager'}>
-                <Users className="w-5 h-5" />
-              </Link>
-            )}
-            <button onClick={() => setIsLogoutModalOpen(true)} className="text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:text-white transition-all active:scale-95 p-1 rounded-full hover:bg-zinc-100 dark:hover:bg-zinc-800" title="Sign Out">
-              <LogOut className="w-5 h-5" />
-            </button>
+            <UserProfileMenu onOpenLogoutModal={() => setIsLogoutModalOpen(true)} />
           </div>
         </div>
       </header>
-
-      {/* Mobile User Info Banner */}
-      {profile && (
-        <div className="md:hidden bg-zinc-50 dark:bg-zinc-900 border-b border-zinc-200 dark:border-zinc-800 px-4 py-3 flex flex-col gap-2 text-sm">
-          <div className="flex justify-between items-center">
-            <div className="flex flex-col">
-              <span className="font-bold text-zinc-900 dark:text-white">{profile.displayName || 'User'}</span>
-              {profile.phone ? (
-                <span className="text-xs font-medium text-zinc-500 dark:text-zinc-400">{profile.phone}</span>
-              ) : profile.role !== 'owner' ? (
-                <button onClick={() => setShowWhatsappPrompt(true)} className="text-[10px] font-medium text-emerald-500 hover:underline text-left mt-0.5 transition-all active:scale-95">
-                  + Add WhatsApp
-                </button>
-              ) : null}
-            </div>
-            <div className="flex flex-wrap justify-end items-center gap-1.5">
-              <span className={clsx("text-[10px] font-medium px-2 py-0.5 rounded-full border", getRoleColor(profile.role))}>
-                {profile.role === 'selected_content' ? 'Selected Content' : 
-                 profile.role === 'content_manager' ? 'Content Manager' :
-                 profile.role === 'user_manager' ? 'User Manager' :
-                 profile.role === 'manager' ? 'Manager' :
-                 profile.role.charAt(0).toUpperCase() + profile.role.slice(1).replace('_', ' ')}
-              </span>
-              {profile.role !== 'owner' && (
-                <span className={clsx("text-[10px] font-medium capitalize px-2 py-0.5 rounded-full border", getStatusColor(profile.status))}>
-                  {profile.status}
-                </span>
-              )}
-            </div>
-          </div>
-          {profile.role !== 'owner' && (
-            <div className="flex justify-between items-center">
-              <div className="flex items-center gap-2">
-                <span className="text-zinc-500 dark:text-zinc-400 text-xs">
-                  {profile.expiryDate ? (() => {
-                    const expiry = new Date(profile.expiryDate);
-                    const expiryEnd = new Date(expiry.getTime() + 24 * 60 * 60 * 1000);
-                    const now = new Date();
-                    const diffTime = expiryEnd.getTime() - now.getTime();
-                    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-                    const isExpiringSoon = diffDays > 0 && diffDays < 3;
-                    const daysText = diffDays > 0 ? `${diffDays}d left` : 'Expired';
-                    return (
-                      <span className={clsx(isExpiringSoon && "text-red-500 font-bold")}>
-                        Exp: {format(expiry, 'MMM dd, yyyy')} ({daysText})
-                      </span>
-                    );
-                  })() : 'No Expiry'}
-                </span>
-                {(profile.role === 'user' || profile.role === 'trial') && (
-                  <Link 
-                    to="/top-up" 
-                    state={{ isExtend: true }}
-                    className="bg-emerald-500/20 text-emerald-500 hover:bg-emerald-500/30 p-0.5 rounded-full transition-all active:scale-95"
-                    title="Extend Membership"
-                  >
-                    <Plus className="w-3 h-3" />
-                  </Link>
-                )}
-              </div>
-              <a 
-                href="https://wa.me/923363284466" 
-                target="_blank" 
-                rel="noreferrer" 
-                className="flex items-center gap-2 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-500 px-2 py-1 rounded text-xs font-medium transition-all active:scale-95"
-              >
-                <MessageCircle className="w-3 h-3" />
-                Support
-              </a>
-            </div>
-          )}
-        </div>
-      )}
 
       {/* Main Content */}
       <main className="flex-1 max-w-7xl mx-auto w-full px-4 pt-4 pb-8">
@@ -623,8 +438,8 @@ export default function Home({ onOpenMediaModal }: { onOpenMediaModal: () => voi
                       </div>
                       
                       <div className="p-1">
-                        <h3 className="text-[8px] font-bold text-zinc-900 dark:text-white line-clamp-1 mb-0.5 group-hover/card:text-emerald-500 transition-colors">
-                          {content.title}
+                        <h3 className="text-[8px] font-bold text-zinc-900 dark:text-white mb-0.5 group-hover/card:text-emerald-500 transition-colors">
+                          {formatContentTitle(content)}
                         </h3>
                         <div className="flex flex-col gap-0.5 text-[8px] text-zinc-500 dark:text-zinc-400">
                           <div className="flex items-center justify-between">
@@ -680,7 +495,7 @@ export default function Home({ onOpenMediaModal }: { onOpenMediaModal: () => voi
                       </div>
                     )}
                     <div className="flex-1 min-w-0">
-                      <div className="text-sm font-medium text-zinc-900 dark:text-zinc-200 truncate">{suggestion.title}</div>
+                      <div className="text-sm font-medium text-zinc-900 dark:text-zinc-200">{formatContentTitle(suggestion)}</div>
                       <div className="text-xs text-zinc-500 capitalize mt-0.5">
                         {suggestion.type} • {suggestion.year}
                       </div>

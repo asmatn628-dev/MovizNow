@@ -1,19 +1,18 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ThemeToggle } from '../../components/ThemeToggle';
 import { useAuth } from '../../contexts/AuthContext';
 import { useContent } from '../../contexts/ContentContext';
-import { Film, Clock, ArrowLeft, ShoppingCart } from 'lucide-react';
-import { useCart } from '../../contexts/CartContext';
+import { Film, Clock, ArrowLeft } from 'lucide-react';
 import { formatContentTitle } from '../../utils/contentUtils';
 import { NotificationMenu } from '../../components/NotificationMenu';
+import { UserProfileMenu } from '../../components/UserProfileMenu';
+import { AdminButtons } from '../../components/AdminButtons';
 import { LazyLoadImage } from 'react-lazy-load-image-component';
 import ContentCard from '../../components/ContentCard';
 
 export default function WatchLater() {
   const { profile, toggleFavorite, toggleWatchLater } = useAuth();
   const { contentList, genres, languages, qualities } = useContent();
-  const { cart } = useCart();
 
   const watchLaterContent = contentList.filter(c => 
     profile?.watchLater?.includes(c.id) && 
@@ -44,18 +43,9 @@ export default function WatchLater() {
             </h1>
           </div>
           <div className="flex items-center gap-4">
-            <ThemeToggle />
-            {((profile?.role === 'selected_content' && profile?.status !== 'expired') || profile?.status === 'pending') && (
-              <Link to="/cart" className="text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white transition-colors relative" title="Cart">
-                <ShoppingCart className="w-5 h-5" />
-                {cart.length > 0 && (
-                  <span className="absolute -top-1.5 -right-1.5 bg-red-500 text-white text-[10px] font-bold w-4 h-4 flex items-center justify-center rounded-full">
-                    {cart.length}
-                  </span>
-                )}
-              </Link>
-            )}
             {profile && <NotificationMenu />}
+            <AdminButtons profile={profile} />
+            <UserProfileMenu />
           </div>
         </div>
       </header>

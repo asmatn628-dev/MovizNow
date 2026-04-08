@@ -78,9 +78,15 @@ export function ContentProvider({ children }: { children: React.ReactNode }) {
           const rawContent = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() } as Content));
           
           // Update search_index
-          const searchIndex = rawContent.filter(c => c.status === 'published').map(c => 
-            `${c.id}|${c.title}|${c.year}|${c.posterUrl}|${c.type}|${c.qualityId || ''}|${c.languageIds?.join(',') || ''}|${c.genreIds?.join(',') || ''}|${c.createdAt}|${c.order ?? ''}`
-          );
+          const searchIndex = rawContent.filter(c => c.status === 'published').map(c => {
+            const seasons = Array.isArray(c.seasons) ? c.seasons : [];
+            const seasonsInfo = seasons.map(s => {
+              const lastEp = s.episodes && s.episodes.length > 0 ? s.episodes[s.episodes.length - 1].episodeNumber : '';
+              return `${s.seasonNumber}:${lastEp}`;
+            }).join(',') || '';
+            
+            return `${c.id}|${c.title}|${c.year}|${c.posterUrl}|${c.type}|${c.qualityId || ''}|${c.languageIds?.join(',') || ''}|${c.genreIds?.join(',') || ''}|${c.createdAt}|${c.order ?? ''}|${seasonsInfo}`;
+          });
           setDoc(doc(db, 'metadata', 'search_index'), { data: searchIndex }).catch(e => console.error("Failed to update search_index", e));
 
           localStorage.setItem('content_cache', JSON.stringify(rawContent));
@@ -100,7 +106,17 @@ export function ContentProvider({ children }: { children: React.ReactNode }) {
           if (indexDoc.exists()) {
             const data = indexDoc.data().data as string[];
             const parsedContent: Content[] = data.map(item => {
-              const [id, title, year, posterUrl, type, qualityId, langIds, genreIds, createdAt, order] = item.split('|');
+              const [id, title, year, posterUrl, type, qualityId, langIds, genreIds, createdAt, order, seasonsInfo] = item.split('|');
+              
+              const seasons = seasonsInfo ? seasonsInfo.split(',').map(s => {
+                const [sNum, lastEp] = s.split(':');
+                return {
+                  id: `s${sNum}`,
+                  seasonNumber: parseInt(sNum, 10),
+                  episodes: lastEp ? [{ id: 'last', episodeNumber: parseInt(lastEp, 10), title: '', url: '' }] : []
+                };
+              }) : [];
+
               return {
                 id,
                 title,
@@ -112,6 +128,7 @@ export function ContentProvider({ children }: { children: React.ReactNode }) {
                 genreIds: genreIds ? genreIds.split(',') : [],
                 createdAt,
                 order: order ? parseInt(order, 10) : undefined,
+                seasons,
                 status: 'published',
                 description: '',
                 trailerUrl: '',

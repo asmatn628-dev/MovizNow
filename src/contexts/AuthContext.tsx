@@ -1,7 +1,20 @@
 import React, { createContext, useContext, useEffect, useState, useRef } from 'react';
 import { auth, db } from '../firebase';
-import { onAuthStateChanged, User, signInWithPopup, GoogleAuthProvider, signOut } from 'firebase/auth';
-import { doc, getDoc, setDoc, onSnapshot, updateDoc, query, collection, where, getDocs, deleteDoc } from 'firebase/firestore';
+import { 
+  onAuthStateChanged, 
+  User, 
+  signInWithPopup, 
+  GoogleAuthProvider, 
+  signOut,
+  signInWithEmailAndPassword,
+  createUserWithEmailAndPassword,
+  RecaptchaVerifier,
+  signInWithPhoneNumber,
+  ConfirmationResult,
+  updateProfile,
+  updatePassword
+} from 'firebase/auth';
+import { doc, getDoc, setDoc, onSnapshot, updateDoc, query, collection, where, getDocs, deleteDoc, limit, writeBatch } from 'firebase/firestore';
 import { UserProfile } from '../types';
 import { logEvent, updateTimeSpent } from '../services/analytics';
 import { handleFirestoreError, OperationType } from '../utils/firestoreErrorHandler';
@@ -13,6 +26,13 @@ interface AuthContextType {
   authLoading: boolean;
   error: string | null;
   signInWithGoogle: () => Promise<void>;
+  signInWithEmail: (email: string, password: string) => Promise<void>;
+  signUpWithEmail: (email: string, password: string, displayName: string, phone?: string) => Promise<void>;
+  signUpWithPhoneAndPassword: (phone: string, password: string, displayName: string, email?: string) => Promise<void>;
+  findUsersByEmailOrPhone: (identifier: string) => Promise<UserProfile[]>;
+  updateUserPassword: (newPassword: string) => Promise<void>;
+  updateUserProfileData: (data: Partial<UserProfile>, newPassword?: string) => Promise<void>;
+  clearError: () => void;
   logout: () => Promise<void>;
   toggleFavorite: (contentId: string) => Promise<void>;
   toggleWatchLater: (contentId: string) => Promise<void>;
@@ -181,43 +201,42 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                   setProfile({ ...data, role: 'admin', status: 'active' }); // Set locally anyway
                 }
               } else {
+                const hasPassword = currentUser.providerData.some(p => p.providerId === 'password');
+                if (!data.hasPassword && hasPassword) {
+                  updateDoc(userRef, { hasPassword: true }).catch(console.error);
+                  data.hasPassword = true;
+                }
                 setProfile(data);
               }
             } else {
               // Create new user profile
-              let pendingData: Partial<UserProfile> = {};
-              if (currentUser.email) {
-                try {
-                  const pendingQuery = query(collection(db, 'users'), where('email', '==', currentUser.email), where('status', '==', 'pending'));
-                  const pendingSnap = await getDocs(pendingQuery);
-                  if (!pendingSnap.empty) {
-                    const pendingDoc = pendingSnap.docs[0];
-                    pendingData = pendingDoc.data();
-                    // Delete the pending document since we are creating the real one
-                    await deleteDoc(pendingDoc.ref);
-                  }
-                } catch (err) {
-                  console.error("Error checking pending users:", err);
-                }
-              }
-
               const isOwner = currentUser.email === 'asmatn628@gmail.com';
               const isAdmin = currentUser.email === 'asmatullah9327@gmail.com';
-              const roleToSet = isOwner ? 'owner' : isAdmin ? 'admin' : (pendingData.role && ['user', 'trial', 'selected_content'].includes(pendingData.role) ? pendingData.role : 'user');
+              const roleToSet = isOwner ? 'owner' : isAdmin ? 'admin' : 'user';
+              const hasPassword = currentUser.providerData.some(p => p.providerId === 'password');
+              
+              // Extract phone from dummy email if available
+              let extractedPhone = '';
+              if (currentUser.email?.endsWith('@moviznow.com')) {
+                const phonePart = currentUser.email.replace('@moviznow.com', '');
+                extractedPhone = standardizePhone(phonePart);
+              }
+
               const newProfile: UserProfile = {
                 uid: currentUser.uid,
                 email: currentUser.email || '',
+                phone: standardizePhone(currentUser.phoneNumber || extractedPhone),
                 displayName: currentUser.displayName || '',
                 photoURL: currentUser.photoURL || '',
                 role: roleToSet,
-                status: (isOwner || isAdmin) ? 'active' : (pendingData.status || 'pending'),
-                createdAt: pendingData.createdAt || new Date().toISOString(),
+                status: (isOwner || isAdmin) ? 'active' : 'pending',
+                createdAt: new Date().toISOString(),
                 sessionsCount: 1,
                 timeSpent: 0,
-                expiryDate: isOwner ? 'Lifetime' : (pendingData.expiryDate || null),
-                ...(pendingData.managedBy && { managedBy: pendingData.managedBy }),
-                ...(pendingData.phone && { phone: pendingData.phone }),
+                expiryDate: isOwner ? 'Lifetime' : null,
+                hasPassword: hasPassword,
               };
+
               try {
                 await setDoc(userRef, newProfile);
               } catch (err) {
@@ -290,14 +309,278 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     };
   }, []);
 
+  const clearError = () => setError(null);
+
   const signInWithGoogle = async () => {
     try {
       setError(null);
       const provider = new GoogleAuthProvider();
-      await signInWithPopup(auth, provider);
+      const result = await signInWithPopup(auth, provider);
+      
+      // Check if we need to link phone/email in Firestore
+      const userRef = doc(db, 'users', result.user.uid);
+      const snap = await getDoc(userRef);
+      if (snap.exists()) {
+        const data = snap.data();
+        if (!data.email && result.user.email) {
+          await updateDoc(userRef, { email: result.user.email });
+        }
+      }
     } catch (err: any) {
       console.error("Login error:", err);
       setError(err.message || "Failed to login");
+    }
+  };
+
+  const signInWithEmail = async (email: string, password: string) => {
+    try {
+      setError(null);
+      await signInWithEmailAndPassword(auth, email, password);
+    } catch (err: any) {
+      console.error("Email login error:", err);
+      if (err.code === 'auth/invalid-credential' || err.code === 'auth/wrong-password') {
+        setError("Invalid password. Try again or reset your password.");
+      } else {
+        setError(err.message || "Failed to login with email");
+      }
+      throw err;
+    }
+  };
+
+  const signUpWithEmail = async (email: string, password: string, displayName: string, phone?: string) => {
+    try {
+      setError(null);
+      
+      // Check if email is already in use in Firestore
+      const emailUsers = await findUsersByEmailOrPhone(email);
+      if (emailUsers.some(u => u.hasPassword)) {
+        throw new Error("This email is already registered.");
+      }
+
+      // Check if phone is already in use
+      if (phone) {
+        const phoneUsers = await findUsersByEmailOrPhone(phone);
+        if (phoneUsers.some(u => u.hasPassword)) {
+          throw new Error("This phone number is already registered to another account.");
+        }
+      }
+
+      const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+      await updateProfile(userCredential.user, { displayName });
+      
+      if (phone) {
+        setTimeout(async () => {
+          try {
+            await updateDoc(doc(db, 'users', userCredential.user.uid), { phone });
+          } catch (e) {}
+        }, 2000);
+      }
+    } catch (err: any) {
+      console.error("Email signup error:", err);
+      setError(err.message || "Failed to sign up");
+      throw err;
+    }
+  };
+
+  const signUpWithPhoneAndPassword = async (identifier: string, password: string, displayName: string, email?: string) => {
+    try {
+      setError(null);
+      
+      const isEmail = identifier.includes('@');
+      const standardizedPhone = isEmail ? '' : standardizePhone(identifier);
+      const digits = standardizedPhone.replace(/\D/g, '');
+      const signupEmail = isEmail ? identifier : (email || `${digits}@moviznow.com`);
+
+      // Check if identifier is already in use
+      const matches = await findUsersByEmailOrPhone(identifier);
+      if (matches.some(u => u.hasPassword)) {
+        throw new Error("This account is already registered.");
+      }
+
+      // Check if email is already in use
+      if (email && email !== signupEmail) {
+        const emailUsers = await findUsersByEmailOrPhone(email);
+        if (emailUsers.some(u => u.hasPassword)) {
+          throw new Error("This email is already registered.");
+        }
+      }
+
+      const userCredential = await createUserWithEmailAndPassword(auth, signupEmail, password);
+      await updateProfile(userCredential.user, { displayName });
+      
+      // The onAuthStateChanged listener will handle profile creation in Firestore
+      // Wait a moment for it to create, then update with phone if available
+      if (standardizedPhone) {
+        setTimeout(async () => {
+          try {
+            await updateDoc(doc(db, 'users', userCredential.user.uid), { phone: standardizedPhone });
+          } catch (e) {}
+        }, 2000);
+      }
+    } catch (err: any) {
+      console.error("Signup error:", err);
+      if (err.code === 'auth/email-already-in-use') {
+        setError("This account is already registered.");
+      } else {
+        setError(err.message || "Failed to sign up");
+      }
+      throw err;
+    }
+  };
+
+  const standardizePhone = (phone: string) => {
+    const digits = phone.replace(/\D/g, '');
+    if (!digits) return '';
+    
+    // Pakistan specific standardization
+    let base = digits;
+    if (base.startsWith('92') && base.length >= 12) base = base.substring(2);
+    else if (base.startsWith('0') && base.length >= 11) base = base.substring(1);
+    
+    // If it's a 10-digit number (standard Pak mobile length without prefix)
+    if (base.length === 10) {
+      return `+92${base}`;
+    }
+    
+    // Fallback for other lengths or formats
+    return phone.startsWith('+') ? `+${digits}` : digits;
+  };
+
+  const findUsersByEmailOrPhone = async (identifier: string): Promise<UserProfile[]> => {
+    try {
+      const trimmed = identifier.trim();
+      if (!trimmed) return [];
+
+      const matches: UserProfile[] = [];
+      const seenUids = new Set<string>();
+
+      const addMatches = (snap: any) => {
+        snap.docs.forEach((doc: any) => {
+          const data = doc.data() as UserProfile;
+          if (!seenUids.has(data.uid)) {
+            matches.push(data);
+            seenUids.add(data.uid);
+          }
+        });
+      };
+
+      // 1. Check exactly as provided (email or phone)
+      const qEmail = query(collection(db, 'users'), where('email', '==', trimmed.toLowerCase()));
+      const snapEmail = await getDocs(qEmail);
+      addMatches(snapEmail);
+
+      const qPhone = query(collection(db, 'users'), where('phone', '==', trimmed));
+      const snapPhone = await getDocs(qPhone);
+      addMatches(snapPhone);
+
+      // 2. If it looks like a phone number, try multiple formats
+      const cleaned = trimmed.replace(/[^\d+]/g, '');
+      const isPhone = cleaned.length >= 7 && /^[\d+]+$/.test(cleaned);
+      
+      if (isPhone) {
+        const standardized = standardizePhone(cleaned);
+        
+        let digitsOnly = cleaned.replace(/[^\d]/g, '');
+        let base = digitsOnly;
+        if (base.startsWith('92')) base = base.substring(2);
+        else if (base.startsWith('0')) base = base.substring(1);
+        
+        const phoneFormats = [
+          standardized,
+          `+92${base}`,
+          `0${base}`,
+          `92${base}`,
+          base
+        ].filter((v, i, a) => v && a.indexOf(v) === i); // Unique non-empty values
+
+        const emailFormats = [
+          `${base}@moviznow.com`,
+          `92${base}@moviznow.com`,
+          `0${base}@moviznow.com`,
+          `+92${base}@moviznow.com`
+        ].filter((v, i, a) => v && a.indexOf(v) === i); // Unique non-empty values
+
+        // Search phone field with 'in' query (up to 10 values)
+        const qPhoneIn = query(collection(db, 'users'), where('phone', 'in', phoneFormats));
+        const snapPhoneIn = await getDocs(qPhoneIn);
+        addMatches(snapPhoneIn);
+
+        // Search email field with 'in' query
+        const qEmailIn = query(collection(db, 'users'), where('email', 'in', emailFormats));
+        const snapEmailIn = await getDocs(qEmailIn);
+        addMatches(snapEmailIn);
+      }
+
+      return matches;
+    } catch (err) {
+      console.error("Error finding users:", err);
+      return [];
+    }
+  };
+
+  const updateUserProfileData = async (data: Partial<UserProfile>, newPassword?: string) => {
+    if (!auth.currentUser || !user || !profile) throw new Error("No user logged in");
+    try {
+      setError(null);
+
+      // Check for phone duplicate if changing
+      if (data.phone && data.phone !== profile.phone) {
+        const existingPhones = await findUsersByEmailOrPhone(data.phone);
+        if (existingPhones.some(u => u.uid !== user.uid)) {
+          throw new Error("This phone number is already in use by another account.");
+        }
+      }
+
+      // Check for email duplicate if changing (though UI might prevent this)
+      if (data.email && data.email !== profile.email) {
+        const existingEmails = await findUsersByEmailOrPhone(data.email);
+        if (existingEmails.some(u => u.uid !== user.uid)) {
+          throw new Error("This email address is already in use by another account.");
+        }
+      }
+      
+      // Update Auth Profile if name changed
+      if (data.displayName && data.displayName !== auth.currentUser.displayName) {
+        await updateProfile(auth.currentUser, { displayName: data.displayName });
+      }
+
+      // Update Auth Email if changed and provided
+      if (data.email && data.email !== auth.currentUser.email && !data.email.endsWith('@moviznow.com')) {
+        const { updateEmail } = await import('firebase/auth');
+        await updateEmail(auth.currentUser, data.email);
+      }
+
+      // Update Password if provided
+      if (newPassword) {
+        await updatePassword(auth.currentUser, newPassword);
+        data.hasPassword = true;
+      }
+
+      // Update Firestore
+      const userRef = doc(db, 'users', user.uid);
+      await updateDoc(userRef, data);
+      
+      setProfile({ ...profile, ...data });
+    } catch (err: any) {
+      console.error("Update profile error:", err);
+      setError(err.message || "Failed to update profile");
+      throw err;
+    }
+  };
+
+  const updateUserPassword = async (newPassword: string) => {
+    if (!auth.currentUser || !user) throw new Error("No user logged in");
+    try {
+      await updatePassword(auth.currentUser, newPassword);
+      const userRef = doc(db, 'users', user.uid);
+      await updateDoc(userRef, { hasPassword: true });
+      if (profile) {
+        setProfile({ ...profile, hasPassword: true });
+      }
+    } catch (err: any) {
+      console.error("Update password error:", err);
+      setError(err.message || "Failed to update password");
+      throw err;
     }
   };
 
@@ -363,7 +646,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, profile, loading, authLoading, error, signInWithGoogle, logout, toggleFavorite, toggleWatchLater }}>
+    <AuthContext.Provider value={{ 
+      user, 
+      profile, 
+      loading, 
+      authLoading, 
+      error, 
+      signInWithGoogle, 
+      signInWithEmail,
+      signUpWithEmail,
+      signUpWithPhoneAndPassword,
+      findUsersByEmailOrPhone,
+      updateUserPassword,
+      updateUserProfileData,
+      clearError,
+      logout, 
+      toggleFavorite, 
+      toggleWatchLater 
+    }}>
       {children}
     </AuthContext.Provider>
   );

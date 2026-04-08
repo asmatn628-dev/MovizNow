@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { db } from '../../firebase';
 import { collection, addDoc, deleteDoc, doc, updateDoc, onSnapshot, writeBatch, getDocs } from 'firebase/firestore';
 import { Quality } from '../../types';
-import { Plus, Edit2, Trash2, X, Check, Search, GripVertical } from 'lucide-react';
+import { Plus, Edit2, Trash2, X, Check, Search, GripVertical, Loader2 } from 'lucide-react';
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
 import ConfirmModal from '../../components/ConfirmModal';
 import { handleFirestoreError, OperationType } from '../../utils/firestoreErrorHandler';
@@ -51,21 +51,32 @@ export default function QualityManagement() {
     return () => unsub();
   }, []);
 
+  const [processing, setProcessing] = useState<Record<string, boolean>>({});
+
   const handleAdd = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newQuality.trim()) return;
-    const maxOrder = qualities.length > 0 ? Math.max(...qualities.map(q => q.order || 0)) : 0;
-    const docRef = await addDoc(collection(db, 'qualities'), { name: newQuality.trim(), order: maxOrder + 1, color: newColor });
-    setQualities([...qualities, { id: docRef.id, name: newQuality.trim(), order: maxOrder + 1, color: newColor }]);
-    setNewQuality('');
-    setNewColor('#10b981');
+    setProcessing(prev => ({ ...prev, add: true }));
+    try {
+      const maxOrder = qualities.length > 0 ? Math.max(...qualities.map(q => q.order || 0)) : 0;
+      const docRef = await addDoc(collection(db, 'qualities'), { name: newQuality.trim(), order: maxOrder + 1, color: newColor });
+      setQualities([...qualities, { id: docRef.id, name: newQuality.trim(), order: maxOrder + 1, color: newColor }]);
+      setNewQuality('');
+      setNewColor('#10b981');
+    } finally {
+      setProcessing(prev => ({ ...prev, add: false }));
+    }
   };
 
   const handleDelete = async () => {
     if (!deleteId) return;
-    await deleteDoc(doc(db, 'qualities', deleteId));
-    setQualities(qualities.filter(q => q.id !== deleteId));
-    setDeleteId(null);
+    setProcessing(prev => ({ ...prev, delete: true }));
+    try {
+      await deleteDoc(doc(db, 'qualities', deleteId));
+      setQualities(qualities.filter(q => q.id !== deleteId));
+    } finally {
+      setProcessing(prev => ({ ...prev, delete: false }));
+    }
   };
 
   const handleEdit = (quality: Quality) => {
@@ -76,11 +87,16 @@ export default function QualityManagement() {
 
   const handleSaveEdit = async () => {
     if (!editName.trim() || !editingId) return;
-    await updateDoc(doc(db, 'qualities', editingId), { name: editName.trim(), color: editColor });
-    setQualities(qualities.map(q => q.id === editingId ? { ...q, name: editName.trim(), color: editColor } : q));
-    setEditingId(null);
-    setEditName('');
-    setEditColor('#10b981');
+    setProcessing(prev => ({ ...prev, edit: true }));
+    try {
+      await updateDoc(doc(db, 'qualities', editingId), { name: editName.trim(), color: editColor });
+      setQualities(qualities.map(q => q.id === editingId ? { ...q, name: editName.trim(), color: editColor } : q));
+      setEditingId(null);
+      setEditName('');
+      setEditColor('#10b981');
+    } finally {
+      setProcessing(prev => ({ ...prev, edit: false }));
+    }
   };
 
   const onDragEnd = async (result: DropResult) => {
@@ -146,10 +162,11 @@ export default function QualityManagement() {
           </div>
           <button
             type="submit"
-            className="bg-emerald-500 hover:bg-emerald-600 text-white px-6 py-3 rounded-xl font-medium flex items-center justify-center gap-2 transition-colors"
+            disabled={processing.add}
+            className="bg-emerald-500 hover:bg-emerald-600 text-white px-6 py-3 rounded-xl font-medium flex items-center justify-center gap-2 transition-colors disabled:opacity-50"
           >
-            <Plus className="w-5 h-5" />
-            Add Quality
+            {processing.add ? <Loader2 className="w-5 h-5 animate-spin" /> : <Plus className="w-5 h-5" />}
+            {processing.add ? 'Adding...' : 'Add Quality'}
           </button>
         </form>
       </div>

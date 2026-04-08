@@ -7,7 +7,7 @@ import { useContent } from '../../contexts/ContentContext';
 import { Content, Genre, Language, Quality, QualityLinks, Season, Episode, LinkDef, Role, Trailer } from '../../types';
 import { motion, AnimatePresence } from 'framer-motion';
 import { clsx } from 'clsx';
-import { Plus, Edit2, Trash2, Share2, Film, Tv, X, Save, Upload, Search, Eye, EyeOff, ArrowUp, ArrowDown, Copy, ClipboardPaste, GripVertical, Bell, RefreshCw, ChevronDown, ChevronUp, User, Lock } from 'lucide-react';
+import { Plus, Edit2, Trash2, Share2, Film, Tv, X, Save, Upload, Search, Eye, EyeOff, ArrowUp, ArrowDown, Copy, ClipboardPaste, GripVertical, Bell, RefreshCw, ChevronDown, ChevronUp, User, Lock, Loader2 } from 'lucide-react';
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
 import ConfirmModal from '../../components/ConfirmModal';
 import AlertModal from '../../components/AlertModal';
@@ -224,6 +224,7 @@ export default function ContentManagement() {
   const { contentList, genres, languages, qualities, loading: contextLoading } = useContent();
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [alertConfig, setAlertConfig] = useState<{ isOpen: boolean; title: string; message: string }>({ isOpen: false, title: '', message: '' });
@@ -538,7 +539,7 @@ export default function ContentManagement() {
     setTrailerTitle(content.trailerTitle || '');
     setTrailerYoutubeTitle(content.trailerYoutubeTitle || '');
     setTrailerSeasonNumber(content.trailerSeasonNumber);
-    setTrailers(content.trailers ? JSON.parse(content.trailers) : []);
+    setTrailers(content.trailers ? (Array.isArray(content.trailers) ? content.trailers : JSON.parse(content.trailers || '[]')) : []);
     setSampleUrl(content.sampleUrl || '');
     setImdbLink(content.imdbLink || '');
     setImdbRating(content.imdbRating || '');
@@ -560,7 +561,7 @@ export default function ContentManagement() {
     
     if (content.type === 'series' && content.seasons) {
       try {
-        const parsedSeasons = JSON.parse(content.seasons);
+        const parsedSeasons = Array.isArray(content.seasons) ? content.seasons : JSON.parse(content.seasons || '[]');
         const normalizedSeasons = parsedSeasons.map((s: any) => ({
           ...s,
           zipLinks: parseLinks(JSON.stringify(s.zipLinks)),
@@ -620,8 +621,9 @@ export default function ContentManagement() {
     reader.readAsDataURL(file);
   };
 
-  const handleSave = (e: React.FormEvent) => {
+  const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
+    setIsSaving(true);
     try {
       // Sort seasons and episodes before saving
       const sortedSeasons = [...seasons].sort((a, b) => a.seasonNumber - b.seasonNumber).map(s => ({
@@ -664,26 +666,23 @@ export default function ContentManagement() {
       }
 
       const currentEditingId = editingId;
-      setIsModalOpen(false);
-      resetForm();
 
       if (currentEditingId) {
-        updateDoc(doc(db, 'content', currentEditingId), data).catch(error => {
-          console.error('Error saving content:', error);
-          setAlertConfig({ isOpen: true, title: 'Error', message: 'Failed to save content' });
-        });
+        await updateDoc(doc(db, 'content', currentEditingId), data);
       } else {
         data.createdAt = new Date().toISOString();
         data.addedBy = user?.uid;
         data.addedByRole = profile?.role;
-        addDoc(collection(db, 'content'), data).catch(error => {
-          console.error('Error saving content:', error);
-          setAlertConfig({ isOpen: true, title: 'Error', message: 'Failed to save content' });
-        });
+        await addDoc(collection(db, 'content'), data);
       }
+      
+      setIsModalOpen(false);
+      resetForm();
     } catch (error) {
       console.error('Error saving content:', error);
       setAlertConfig({ isOpen: true, title: 'Error', message: 'Failed to save content' });
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -990,7 +989,10 @@ export default function ContentManagement() {
 
   const applyFetchedData = (data: any) => {
     if (data.title) setTitle(data.title);
-    if (data.year) setYear(data.year);
+    if (data.year) {
+      const parsedYear = parseInt(data.year.toString());
+      if (!isNaN(parsedYear)) setYear(parsedYear);
+    }
     if (data.type) setType(data.type);
     if (data.description) setDescription(data.description);
     if (data.cast) setCast(data.cast);
@@ -1051,6 +1053,7 @@ export default function ContentManagement() {
             // Merge episodes
             const existingSeason = updatedSeasons[existingSeasonIndex];
             if (fetchedSeason.seasonYear) existingSeason.year = fetchedSeason.seasonYear;
+            if (fetchedSeason.title) existingSeason.title = fetchedSeason.title;
             fetchedSeason.episodes.forEach((fetchedEp: any) => {
               const existingEpIndex = existingSeason.episodes.findIndex(ep => ep.episodeNumber === fetchedEp.episodeNumber);
               if (existingEpIndex !== -1) {
@@ -1081,6 +1084,7 @@ export default function ContentManagement() {
               id: Math.random().toString(36).substr(2, 9),
               seasonNumber: fetchedSeason.seasonNumber,
               year: fetchedSeason.seasonYear,
+              title: fetchedSeason.title,
               zipLinks: [
                 { id: Math.random().toString(36).substr(2, 9), name: '480p', url: '', size: '', unit: 'GB' },
                 { id: Math.random().toString(36).substr(2, 9), name: '720p', url: '', size: '', unit: 'GB' },
@@ -1258,7 +1262,7 @@ export default function ContentManagement() {
 
             if (updatedContent.type === 'series') {
                 try {
-                    let parsedSeasons: Season[] = typeof updatedContent.seasons === 'string' ? JSON.parse(updatedContent.seasons) : updatedContent.seasons;
+                    let parsedSeasons: Season[] = typeof updatedContent.seasons === 'string' ? JSON.parse(updatedContent.seasons || '[]') : updatedContent.seasons;
                     const needsDuration = parsedSeasons.some(s => s.episodes?.some(e => !e.duration));
                     
                     if (needsDuration) {
@@ -1308,7 +1312,7 @@ export default function ContentManagement() {
 
     if (content.type === 'series' && content.seasons) {
       try {
-        const parsedSeasons: Season[] = typeof content.seasons === 'string' ? JSON.parse(content.seasons) : content.seasons;
+        const parsedSeasons: Season[] = typeof content.seasons === 'string' ? JSON.parse(content.seasons || '[]') : content.seasons;
         if (parsedSeasons.length > 1) {
           setShareSeasonModal({ isOpen: true, content, seasons: parsedSeasons });
           setSelectedShareSeasons(parsedSeasons.map(s => s.seasonNumber));
@@ -1427,7 +1431,7 @@ export default function ContentManagement() {
         });
       }
     } else if (updatedContent.type === 'series' && updatedContent.seasons) {
-      const parsedSeasons: Season[] = JSON.parse(updatedContent.seasons);
+      const parsedSeasons: Season[] = Array.isArray(updatedContent.seasons) ? updatedContent.seasons : JSON.parse(updatedContent.seasons || '[]');
       const seasonsToShare = selectedSeasonNumbers 
         ? parsedSeasons.filter(s => selectedSeasonNumbers.includes(s.seasonNumber))
         : parsedSeasons;
@@ -1600,7 +1604,7 @@ export default function ContentManagement() {
       });
     } else if (content.type === 'series' && content.seasons) {
       try {
-        const parsedSeasons: Season[] = JSON.parse(content.seasons);
+        const parsedSeasons: Season[] = Array.isArray(content.seasons) ? content.seasons : JSON.parse(content.seasons || '[]');
         parsedSeasons.forEach(season => {
           text += `\n📺 *Season ${season.seasonNumber}${season.year ? ` (${season.year})` : content.year ? ` (${content.year})` : ''}*\n`;
           const zipLinks = parseLinks(JSON.stringify(season.zipLinks));
@@ -2846,32 +2850,49 @@ export default function ContentManagement() {
                       {seasons.map((season, sIdx) => (
                         <div key={season.id} className="bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl p-4">
                           <div className="flex items-center justify-between mb-4">
-                            <div className="flex items-center gap-4">
-                              <div className="flex items-center gap-2">
-                                <h4 className="font-bold">Season</h4>
-                                <input
-                                  type="number"
-                                  value={season.seasonNumber}
-                                  onChange={(e) => {
-                                    const newSeasons = [...seasons];
-                                    newSeasons[sIdx].seasonNumber = parseInt(e.target.value) || 0;
-                                    setSeasons(newSeasons);
-                                  }}
-                                  className="w-16 bg-zinc-50 dark:bg-zinc-900 border border-zinc-300 dark:border-zinc-700 rounded px-2 py-1 text-sm text-center"
-                                />
+                            <div className="flex flex-col gap-4">
+                              <div className="flex items-center gap-4">
+                                <div className="flex items-center gap-2">
+                                  <h4 className="font-bold">Season</h4>
+                                  <input
+                                    type="number"
+                                    step="0.1"
+                                    value={season.seasonNumber}
+                                    onChange={(e) => {
+                                      const newSeasons = [...seasons];
+                                      newSeasons[sIdx].seasonNumber = parseFloat(e.target.value) || 0;
+                                      setSeasons(newSeasons);
+                                    }}
+                                    className="w-20 bg-zinc-50 dark:bg-zinc-900 border border-zinc-300 dark:border-zinc-700 rounded px-2 py-1 text-sm text-center"
+                                  />
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <h4 className="font-bold text-sm text-zinc-500 dark:text-zinc-400">Year</h4>
+                                  <input
+                                    type="number"
+                                    value={season.year || ''}
+                                    onChange={(e) => {
+                                      const newSeasons = [...seasons];
+                                      newSeasons[sIdx].year = parseInt(e.target.value) || undefined;
+                                      setSeasons(newSeasons);
+                                    }}
+                                    placeholder="YYYY"
+                                    className="w-20 bg-zinc-50 dark:bg-zinc-900 border border-zinc-300 dark:border-zinc-700 rounded px-2 py-1 text-sm text-center"
+                                  />
+                                </div>
                               </div>
                               <div className="flex items-center gap-2">
-                                <h4 className="font-bold text-sm text-zinc-500 dark:text-zinc-400">Year</h4>
+                                <h4 className="font-bold text-sm text-zinc-500 dark:text-zinc-400">Title</h4>
                                 <input
-                                  type="number"
-                                  value={season.year || ''}
+                                  type="text"
+                                  value={season.title || ''}
                                   onChange={(e) => {
                                     const newSeasons = [...seasons];
-                                    newSeasons[sIdx].year = parseInt(e.target.value) || undefined;
+                                    newSeasons[sIdx].title = e.target.value;
                                     setSeasons(newSeasons);
                                   }}
-                                  placeholder="YYYY"
-                                  className="w-20 bg-zinc-50 dark:bg-zinc-900 border border-zinc-300 dark:border-zinc-700 rounded px-2 py-1 text-sm text-center"
+                                  placeholder="Season Title"
+                                  className="flex-1 bg-zinc-50 dark:bg-zinc-900 border border-zinc-300 dark:border-zinc-700 rounded px-2 py-1 text-sm"
                                 />
                               </div>
                             </div>
@@ -3031,21 +3052,22 @@ export default function ContentManagement() {
               </form>
             </div>
 
-            <div className="p-6 border-t border-zinc-200 dark:border-zinc-800 flex justify-end gap-4 sticky bottom-0 bg-zinc-50 dark:bg-zinc-900 z-10 rounded-b-2xl">
+            <div className="p-4 sm:p-6 border-t border-zinc-200 dark:border-zinc-800 flex justify-between gap-2 sticky bottom-0 bg-zinc-50 dark:bg-zinc-900 z-10 rounded-b-2xl">
               <button
                 type="button"
                 onClick={() => setIsModalOpen(false)}
-                className="px-6 py-3 rounded-xl font-medium text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:text-white hover:bg-zinc-200 dark:hover:bg-zinc-800 transition-colors"
+                className="px-5 py-2.5 text-sm rounded-xl font-medium text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:text-white hover:bg-zinc-200 dark:hover:bg-zinc-800 transition-colors"
               >
                 Cancel
               </button>
               <button
                 type="submit"
                 form="content-form"
-                className="bg-emerald-500 hover:bg-emerald-600 text-white px-6 py-3 rounded-xl font-medium flex items-center gap-2 transition-colors"
+                disabled={isSaving}
+                className="bg-emerald-500 hover:bg-emerald-600 text-white px-5 py-2.5 text-sm rounded-xl font-medium flex items-center gap-2 transition-colors disabled:opacity-50"
               >
-                <Save className="w-5 h-5" />
-                Save Content
+                {isSaving ? <Loader2 className="w-5 h-5 animate-spin" /> : <Save className="w-5 h-5" />}
+                {isSaving ? 'Saving...' : 'Save Content'}
               </button>
             </div>
           </motion.div>

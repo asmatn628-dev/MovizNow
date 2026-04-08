@@ -371,7 +371,8 @@ export const MediaModal: React.FC<MediaModalProps> = ({ isOpen, onClose, initial
         id: `s${s.season}`,
         seasonNumber: s.season,
         title: s.name,
-        seasonYear: s.year !== 'N/A' ? parseInt(s.year) : undefined,
+        year: s.year && s.year !== 'N/A' ? parseInt(s.year.toString()) : undefined,
+        seasonYear: s.year && s.year !== 'N/A' ? parseInt(s.year.toString()) : undefined,
         episodes: s.episodes.map((e: any) => ({
           id: `e${e.episode_number}`,
           episodeNumber: e.episode_number,

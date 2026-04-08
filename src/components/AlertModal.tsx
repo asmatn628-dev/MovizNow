@@ -58,7 +58,7 @@ export default function AlertModal({
                   <div className="flex justify-end">
                     <button
                       onClick={onClose}
-                      className="px-6 py-2 rounded-xl font-medium bg-emerald-500 hover:bg-emerald-600 text-white transition-all active:scale-95 border border-white/20 shadow-lg"
+                      className="px-5 py-2.5 text-sm rounded-xl font-medium bg-emerald-500 hover:bg-emerald-600 text-white transition-all active:scale-95 border border-white/20 shadow-lg"
                     >
                       {buttonText}
                     </button>

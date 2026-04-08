@@ -1,5 +1,5 @@
 export type Role = 'owner' | 'admin' | 'user' | 'temporary' | 'selected_content' | 'content_manager' | 'trial' | 'user_manager' | 'manager';
-export type Status = 'pending' | 'active' | 'expired';
+export type Status = 'pending' | 'active' | 'expired' | 'suspended';
 
 export interface UserProfile {
   uid: string;
@@ -22,6 +22,8 @@ export interface UserProfile {
   isUserManager?: boolean; // Flag to keep user in User Managers list even if role changes
   previousStatus?: 'active' | 'pending' | 'suspended' | 'expired'; // Store previous status when manager role changes
   lastActive?: string; // ISO string
+  requirePasswordReset?: boolean;
+  hasPassword?: boolean;
 }
 
 export interface AppNotification {
@@ -95,6 +97,7 @@ export interface Episode {
 export interface Season {
   id: string;
   seasonNumber: number;
+  title?: string;
   year?: number;
   trailerUrl?: string;
   zipLinks: QualityLinks;

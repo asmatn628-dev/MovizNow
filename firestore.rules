@@ -19,7 +19,8 @@ service cloud.firestore {
       return isAuthenticated() &&
         (
           (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
-           get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin') ||
+           (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' ||
+            get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'owner')) ||
           (request.auth.token.email == "asmatn628@gmail.com" && request.auth.token.email_verified == true) ||
           (request.auth.token.email == "asmatullah9327@gmail.com" && request.auth.token.email_verified == true) ||
           (request.auth.token.email == "kabirahmaddev@gmail.com" && request.auth.token.email_verified == true)
@@ -52,20 +53,38 @@ service cloud.firestore {
     // Rules
     // ===============================================================
 
+    function isValidUser(data) {
+      return data.email is string && data.email.size() < 100 &&
+             data.phone is string && data.phone.size() < 20 &&
+             data.displayName is string && data.displayName.size() < 100 &&
+             data.role in ['admin', 'owner', 'manager', 'user_manager', 'content_manager', 'user', 'trial', 'selected_content'] &&
+             data.status in ['active', 'pending', 'suspended'];
+    }
+
+    function isPendingOwner(userId, resourceData) {
+      return isAuthenticated() && 
+             userId.startsWith('pending_') && 
+             (
+               (resourceData.email != null && resourceData.email == request.auth.token.email) || 
+               (resourceData.phone != null && resourceData.phone == request.auth.token.phone_number) ||
+               (request.auth.token.email != null && resourceData.phone != null && request.auth.token.email.replace('@moviznow.com', '') == resourceData.phone.replace('+', ''))
+             );
+    }
+
     match /users/{userId} {
-      allow read: if isOwner(userId) || isAdmin() || isManager() || (isUserManager() && (resource.data.managedBy == request.auth.uid || resource.data.status == 'pending'));
-      allow create: if (isOwner(userId) && request.resource.data.uid == request.auth.uid && request.resource.data.role == 'user') || 
-                       (isOwner(userId) && request.resource.data.uid == request.auth.uid && request.resource.data.role in ['user', 'trial', 'selected_content'] && 'managedBy' in request.resource.data) ||
-                       (isOwner(userId) && request.resource.data.uid == request.auth.uid && isAdmin()) ||
-                       (isUserManager() && request.resource.data.managedBy == request.auth.uid && request.resource.data.role in ['user', 'trial', 'selected_content'] && request.resource.data.status != 'suspended') ||
-                       (isManager() && request.resource.data.managedBy == request.auth.uid && request.resource.data.role in ['user', 'trial', 'selected_content'] && request.resource.data.status != 'suspended');
-      allow update: if isAdmin() || 
-                       (isOwner(userId) && request.resource.data.role == resource.data.role && request.resource.data.status == resource.data.status) ||
-                       (isUserManager() && resource.data.managedBy == request.auth.uid && request.resource.data.managedBy == request.auth.uid && request.resource.data.role in ['user', 'trial', 'selected_content'] && request.resource.data.status != 'suspended') ||
-                       (isUserManager() && resource.data.status == 'pending' && request.resource.data.managedBy == request.auth.uid && request.resource.data.role in ['user', 'trial', 'selected_content'] && request.resource.data.status != 'suspended') ||
-                       (isManager() && resource.data.managedBy == request.auth.uid && request.resource.data.managedBy == request.auth.uid && request.resource.data.role in ['user', 'trial', 'selected_content'] && request.resource.data.status != 'suspended') ||
-                       (isManager() && resource.data.status == 'pending' && request.resource.data.managedBy == request.auth.uid && request.resource.data.role in ['user', 'trial', 'selected_content'] && request.resource.data.status != 'suspended');
-      allow delete: if isAdmin();
+      allow read: if true;
+      allow create: if (isAdmin() && isValidUser(request.resource.data)) ||
+                       (isOwner(userId) && request.resource.data.uid == request.auth.uid && request.resource.data.role == 'user' && isValidUser(request.resource.data)) || 
+                       (isOwner(userId) && request.resource.data.uid == request.auth.uid && request.resource.data.role in ['user', 'trial', 'selected_content'] && 'managedBy' in request.resource.data && isValidUser(request.resource.data)) ||
+                       (isUserManager() && request.resource.data.managedBy == request.auth.uid && request.resource.data.role in ['user', 'trial', 'selected_content'] && request.resource.data.status != 'suspended' && isValidUser(request.resource.data)) ||
+                       (isManager() && request.resource.data.managedBy == request.auth.uid && request.resource.data.role in ['user', 'trial', 'selected_content'] && request.resource.data.status != 'suspended' && isValidUser(request.resource.data));
+      allow update: if (isAdmin() && isValidUser(request.resource.data)) || 
+                       (isOwner(userId) && request.resource.data.role == resource.data.role && request.resource.data.status == resource.data.status && isValidUser(request.resource.data)) ||
+                       (isUserManager() && resource.data.managedBy == request.auth.uid && request.resource.data.managedBy == request.auth.uid && request.resource.data.role in ['user', 'trial', 'selected_content'] && request.resource.data.status != 'suspended' && isValidUser(request.resource.data)) ||
+                       (isUserManager() && resource.data.status == 'pending' && request.resource.data.managedBy == request.auth.uid && request.resource.data.role in ['user', 'trial', 'selected_content'] && request.resource.data.status != 'suspended' && isValidUser(request.resource.data)) ||
+                       (isManager() && resource.data.managedBy == request.auth.uid && request.resource.data.managedBy == request.auth.uid && request.resource.data.role in ['user', 'trial', 'selected_content'] && request.resource.data.status != 'suspended' && isValidUser(request.resource.data)) ||
+                       (isManager() && resource.data.status == 'pending' && request.resource.data.managedBy == request.auth.uid && request.resource.data.role in ['user', 'trial', 'selected_content'] && request.resource.data.status != 'suspended' && isValidUser(request.resource.data));
+      allow delete: if isAdmin() || isPendingOwner(userId, resource.data);
     }
 
     match /genres/{genreId} {

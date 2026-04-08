@@ -64,30 +64,36 @@ export default function Cart() {
   const handleSendPaymentScreenshot = async () => {
     if (!profile) return;
     
-    let currentOrderId = orderId;
-    if (!confirmed) {
-        // If not confirmed, create the order first
-        currentOrderId = await handleConfirm();
-        if (!currentOrderId) return; // Failed to create order
+    setLoading(true);
+    try {
+      let currentOrderId = orderId;
+      if (!confirmed) {
+          // If not confirmed, create the order first
+          currentOrderId = await handleConfirm();
+          setLoading(true); // handleConfirm sets it to false, so we set it back to true
+          if (!currentOrderId) return; // Failed to create order
+      }
+
+      // Fetch the last content order
+      const q = query(
+        collection(db, 'orders'),
+        where('userId', '==', profile.uid),
+        where('type', '==', 'content'),
+        orderBy('createdAt', 'desc'),
+        limit(1)
+      );
+      const snapshot = await getDocs(q);
+      const lastOrder = snapshot.docs[0]?.data();
+
+      const message = `Add Content\nOrder ID: ${currentOrderId}\nItems: ${lastOrder?.items?.length || 0}\nTotal Amount: Rs ${lastOrder?.amount || totalPrice}`;
+      const whatsappUrl = `https://wa.me/923363284466?text=${encodeURIComponent(message)}`;
+      
+      clearCart();
+      window.open(whatsappUrl, '_blank');
+      navigate('/');
+    } finally {
+      setLoading(false);
     }
-
-    // Fetch the last content order
-    const q = query(
-      collection(db, 'orders'),
-      where('userId', '==', profile.uid),
-      where('type', '==', 'content'),
-      orderBy('createdAt', 'desc'),
-      limit(1)
-    );
-    const snapshot = await getDocs(q);
-    const lastOrder = snapshot.docs[0]?.data();
-
-    const message = `Add Content\nOrder ID: ${currentOrderId}\nItems: ${lastOrder?.items?.length || 0}\nTotal Amount: Rs ${lastOrder?.amount || totalPrice}`;
-    const whatsappUrl = `https://wa.me/923363284466?text=${encodeURIComponent(message)}`;
-    
-    clearCart();
-    window.open(whatsappUrl, '_blank');
-    navigate('/');
   };
 
   return (
@@ -110,7 +116,7 @@ export default function Cart() {
               {cart.map((item, index) => (
                 <div key={index} className="flex items-start sm:items-center justify-between gap-4 border-b border-zinc-200 dark:border-zinc-800 pb-4 last:border-0 last:pb-0">
                   <div className="flex-1 min-w-0">
-                    <h3 className="font-semibold truncate">{item.title}</h3>
+                    <h3 className="font-semibold">{item.title}</h3>
                     <p className="text-sm text-zinc-500 dark:text-zinc-400">
                       {item.type === 'season' ? `Season ${item.seasonNumber}` : 'Movie'}
                     </p>
@@ -128,7 +134,7 @@ export default function Cart() {
               ))}
             </div>
           ) : (
-            <p className="text-center text-zinc-500 dark:text-zinc-400">Your cart is empty. Add Movie and Series from home page and start watching.</p>
+            <p className="text-center text-zinc-500 dark:text-zinc-400">Your cart is empty. Add Movies and Series (Seasons) from home page and start watching.</p>
           )}
           
           <div className="flex justify-between items-center border-t border-zinc-200 dark:border-zinc-800 pt-4 mt-4">

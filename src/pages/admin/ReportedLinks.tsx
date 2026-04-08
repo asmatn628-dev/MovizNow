@@ -132,7 +132,7 @@ export default function ReportedLinks() {
         const links = parseLinks(content.movieLinks);
         foundLink = links.find(l => l.id === report.linkId);
       } else if (content.type === 'series' && content.seasons) {
-        const seasons = JSON.parse(content.seasons) as Season[];
+        const seasons = (Array.isArray(content.seasons) ? content.seasons : JSON.parse(content.seasons || '[]')) as Season[];
         for (const season of seasons) {
           if (season.zipLinks) {
             foundLink = season.zipLinks.find(l => l.id === report.linkId);
@@ -225,7 +225,7 @@ export default function ReportedLinks() {
           updated = true;
         }
       } else if (content.type === 'series' && content.seasons) {
-        const seasons = JSON.parse(content.seasons) as Season[];
+        const seasons = (Array.isArray(content.seasons) ? content.seasons : JSON.parse(content.seasons || '[]')) as Season[];
         for (let s = 0; s < seasons.length; s++) {
           const season = seasons[s];
           

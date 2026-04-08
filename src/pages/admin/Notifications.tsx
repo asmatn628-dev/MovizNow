@@ -45,7 +45,6 @@ export default function Notifications() {
     setProcessing(prev => ({ ...prev, delete: true }));
     try {
       await deleteDoc(doc(db, "notifications", deleteId));
-      setDeleteId(null);
     } catch (error) {
       console.error("Error deleting notification:", error);
     } finally {

@@ -6,19 +6,32 @@ export const formatContentTitle = (content: Content) => {
   }
 
   try {
-    const seasons: Season[] = JSON.parse(content.seasons);
+    const seasons: Season[] = Array.isArray(content.seasons) ? content.seasons : JSON.parse(content.seasons || '[]');
     if (seasons.length === 0) return content.title;
 
     if (seasons.length === 1) {
       const season = seasons[0];
-      const episodeCount = season.episodes.length;
-      return `${content.title} (Season ${season.seasonNumber} Episode ${episodeCount})`;
+      const episodes = season.episodes || [];
+      const lastEpisode = episodes.length > 0 
+        ? Math.max(...episodes.map(e => e.episodeNumber))
+        : 0;
+      
+      if (lastEpisode > 0) {
+        return `${content.title} (Season ${season.seasonNumber} Episode ${lastEpisode})`;
+      }
+      return `${content.title} (Season ${season.seasonNumber})`;
+    } else if (seasons.length === 2) {
+      const seasonNumbers = seasons
+        .map(s => s.seasonNumber)
+        .sort((a, b) => a - b);
+      return `${content.title} (Season ${seasonNumbers.join(',')})`;
     } else {
       const seasonNumbers = seasons
         .map(s => s.seasonNumber)
-        .sort((a, b) => a - b)
-        .join(',');
-      return `${content.title} (Season ${seasonNumbers})`;
+        .sort((a, b) => a - b);
+      const min = seasonNumbers[0];
+      const max = seasonNumbers[seasonNumbers.length - 1];
+      return `${content.title} (Season ${min}-${max})`;
     }
   } catch (e) {
     return content.title;

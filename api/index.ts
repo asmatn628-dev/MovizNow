@@ -374,9 +374,10 @@ async function startServer() {
         await admin.messaging().subscribeToTopic(token, "all_users");
         res.json({ success: true });
       } catch (fcmError: any) {
-        console.warn("FCM Subscription failed (likely missing service account):", fcmError.message);
+        const isAuthError = fcmError.message.includes('401') || fcmError.message.includes('authentication');
+        console.warn(`FCM Subscription failed: ${fcmError.message}${isAuthError ? ' (This usually means a Service Account Key is missing or invalid in the environment)' : ''}`);
         // Return success anyway to avoid client-side errors, as we can't fix this without user action
-        res.json({ success: true, warning: "FCM not fully configured" });
+        res.json({ success: true, warning: "FCM not fully configured", details: fcmError.message });
       }
     } catch (error) {
       console.error("Error in subscribe endpoint:", error);
@@ -410,6 +411,30 @@ async function startServer() {
       }
     } catch (error) {
       console.error("Error in send notification endpoint:", error);
+      res.status(500).json({ error: "Internal Server Error" });
+    }
+  });
+
+  // Admin Reset Password
+  app.post(["/api/admin/reset-password", "/admin/reset-password"], async (req, res) => {
+    try {
+      const { uid, adminUid } = req.body;
+      if (!uid || !adminUid) return res.status(400).json({ error: "Missing uid or adminUid" });
+
+      // Verify admin
+      const adminDoc = await db.collection('users').doc(adminUid).get();
+      if (!adminDoc.exists || (adminDoc.data()?.role !== 'admin' && adminDoc.data()?.role !== 'owner')) {
+        return res.status(403).json({ error: "Unauthorized" });
+      }
+
+      // Reset password to default and set flag
+      const defaultPassword = "moviznow123";
+      await admin.auth().updateUser(uid, { password: defaultPassword });
+      await db.collection('users').doc(uid).update({ requirePasswordReset: true });
+
+      res.json({ success: true, message: "Password reset to moviznow123" });
+    } catch (error) {
+      console.error("Admin Reset Password Error:", error);
       res.status(500).json({ error: "Internal Server Error" });
     }
   });

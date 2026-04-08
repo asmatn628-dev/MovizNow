@@ -20,6 +20,7 @@ const Favorites = lazy(() => import('./pages/user/Favorites'));
 const MovieRequests = lazy(() => import('./pages/user/MovieRequests'));
 const TopUp = lazy(() => import('./pages/user/TopUp'));
 const Cart = lazy(() => import('./pages/user/Cart'));
+const Settings = lazy(() => import('./pages/user/Settings'));
 
 import AdminLayout from './pages/admin/AdminLayout';
 import Analytics from './pages/admin/Analytics';
@@ -82,6 +83,7 @@ export default function App() {
                     <Route path="/requests" element={<ProtectedRoute><MovieRequests /></ProtectedRoute>} />
                     <Route path="/top-up" element={<ProtectedRoute><TopUp /></ProtectedRoute>} />
                     <Route path="/cart" element={<ProtectedRoute><Cart /></ProtectedRoute>} />
+                    <Route path="/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
                     
                     {/* Admin Routes */}
                     <Route path="/admin" element={<ProtectedRoute requireAdmin><AdminLayout /></ProtectedRoute>}>

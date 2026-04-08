@@ -268,7 +268,7 @@ export default function SelectedContentUsers() {
               <div className="space-y-2">
                 {filteredContent.map((content) => {
                   const isSeries = content.type === 'series';
-                  const seasons = isSeries && content.seasons ? JSON.parse(content.seasons) : [];
+                  const seasons = isSeries && content.seasons ? (Array.isArray(content.seasons) ? content.seasons : JSON.parse(content.seasons || '[]')) : [];
                   const isFullyAssigned = assignedIds.has(content.id);
                   const isPartiallyAssigned = !isFullyAssigned && seasons.some((s: any) => assignedIds.has(`${content.id}:${s.id}`));
 

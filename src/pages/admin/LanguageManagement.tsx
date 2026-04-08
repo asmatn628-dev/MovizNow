@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { db } from '../../firebase';
 import { collection, addDoc, deleteDoc, doc, updateDoc, onSnapshot, writeBatch, getDocs } from 'firebase/firestore';
 import { Language } from '../../types';
-import { Plus, Edit2, Trash2, X, Check, Search, GripVertical } from 'lucide-react';
+import { Plus, Edit2, Trash2, X, Check, Search, GripVertical, Loader2 } from 'lucide-react';
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
 import ConfirmModal from '../../components/ConfirmModal';
 import { handleFirestoreError, OperationType } from '../../utils/firestoreErrorHandler';
@@ -49,20 +49,31 @@ export default function LanguageManagement() {
     return () => unsub();
   }, []);
 
+  const [processing, setProcessing] = useState<Record<string, boolean>>({});
+
   const handleAdd = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newLanguage.trim()) return;
-    const maxOrder = languages.length > 0 ? Math.max(...languages.map(l => l.order || 0)) : 0;
-    const docRef = await addDoc(collection(db, 'languages'), { name: newLanguage.trim(), order: maxOrder + 1 });
-    setLanguages([...languages, { id: docRef.id, name: newLanguage.trim(), order: maxOrder + 1 }]);
-    setNewLanguage('');
+    setProcessing(prev => ({ ...prev, add: true }));
+    try {
+      const maxOrder = languages.length > 0 ? Math.max(...languages.map(l => l.order || 0)) : 0;
+      const docRef = await addDoc(collection(db, 'languages'), { name: newLanguage.trim(), order: maxOrder + 1 });
+      setLanguages([...languages, { id: docRef.id, name: newLanguage.trim(), order: maxOrder + 1 }]);
+      setNewLanguage('');
+    } finally {
+      setProcessing(prev => ({ ...prev, add: false }));
+    }
   };
 
   const handleDelete = async () => {
     if (!deleteId) return;
-    await deleteDoc(doc(db, 'languages', deleteId));
-    setLanguages(languages.filter(l => l.id !== deleteId));
-    setDeleteId(null);
+    setProcessing(prev => ({ ...prev, delete: true }));
+    try {
+      await deleteDoc(doc(db, 'languages', deleteId));
+      setLanguages(languages.filter(l => l.id !== deleteId));
+    } finally {
+      setProcessing(prev => ({ ...prev, delete: false }));
+    }
   };
 
   const handleEdit = (language: Language) => {
@@ -72,10 +83,15 @@ export default function LanguageManagement() {
 
   const handleSaveEdit = async () => {
     if (!editName.trim() || !editingId) return;
-    await updateDoc(doc(db, 'languages', editingId), { name: editName.trim() });
-    setLanguages(languages.map(l => l.id === editingId ? { ...l, name: editName.trim() } : l));
-    setEditingId(null);
-    setEditName('');
+    setProcessing(prev => ({ ...prev, edit: true }));
+    try {
+      await updateDoc(doc(db, 'languages', editingId), { name: editName.trim() });
+      setLanguages(languages.map(l => l.id === editingId ? { ...l, name: editName.trim() } : l));
+      setEditingId(null);
+      setEditName('');
+    } finally {
+      setProcessing(prev => ({ ...prev, edit: false }));
+    }
   };
 
   const onDragEnd = async (result: DropResult) => {
@@ -132,10 +148,11 @@ export default function LanguageManagement() {
           />
           <button
             type="submit"
-            className="bg-emerald-500 hover:bg-emerald-600 text-white px-6 py-3 rounded-xl font-medium flex items-center justify-center gap-2 transition-colors w-full"
+            disabled={processing.add}
+            className="bg-emerald-500 hover:bg-emerald-600 text-white px-6 py-3 rounded-xl font-medium flex items-center justify-center gap-2 transition-colors w-full disabled:opacity-50"
           >
-            <Plus className="w-5 h-5" />
-            Add Language
+            {processing.add ? <Loader2 className="w-5 h-5 animate-spin" /> : <Plus className="w-5 h-5" />}
+            {processing.add ? 'Adding...' : 'Add Language'}
           </button>
         </form>
       </div>

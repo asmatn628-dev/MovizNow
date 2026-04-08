@@ -88,28 +88,34 @@ export default function TopUp() {
   const handleSendPaymentScreenshot = async () => {
     if (!profile) return;
     
-    let currentOrderId = orderId;
-    if (!confirmed) {
-        currentOrderId = await handleConfirm();
-        if (!currentOrderId) return;
-    }
-    
-    // Fetch the last membership order
-    const q = query(
-      collection(db, 'orders'),
-      where('userId', '==', profile.uid),
-      where('type', '==', 'membership'),
-      orderBy('createdAt', 'desc'),
-      limit(1)
-    );
-    const snapshot = await getDocs(q);
-    const lastOrder = snapshot.docs[0]?.data();
+    setLoading(true);
+    try {
+      let currentOrderId = orderId;
+      if (!confirmed) {
+          currentOrderId = await handleConfirm();
+          setLoading(true);
+          if (!currentOrderId) return;
+      }
+      
+      // Fetch the last membership order
+      const q = query(
+        collection(db, 'orders'),
+        where('userId', '==', profile.uid),
+        where('type', '==', 'membership'),
+        orderBy('createdAt', 'desc'),
+        limit(1)
+      );
+      const snapshot = await getDocs(q);
+      const lastOrder = snapshot.docs[0]?.data();
 
-    const message = `Membership Top Up\nOrder ID: ${currentOrderId}\nMonths: ${lastOrder?.months || months}\nAmount: Rs ${lastOrder?.amount || months * 200}`;
-    const whatsappUrl = `https://wa.me/923363284466?text=${encodeURIComponent(message)}`;
-    
-    window.open(whatsappUrl, '_blank');
-    navigate('/');
+      const message = `Membership Top Up\nOrder ID: ${currentOrderId}\nMonths: ${lastOrder?.months || months}\nAmount: Rs ${lastOrder?.amount || months * 200}`;
+      const whatsappUrl = `https://wa.me/923363284466?text=${encodeURIComponent(message)}`;
+      
+      window.open(whatsappUrl, '_blank');
+      navigate('/');
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (

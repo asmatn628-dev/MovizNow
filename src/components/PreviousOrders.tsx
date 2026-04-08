@@ -87,9 +87,9 @@ export default function PreviousOrders() {
       <div className="space-y-3">
         {orders.map((order) => (
           <div key={order.id} className="bg-zinc-50 dark:bg-zinc-900 rounded-xl overflow-hidden border border-zinc-200 dark:border-zinc-800">
-            <button
+            <div
               onClick={() => setExpandedId(expandedId === order.id ? null : order.id)}
-              className="w-full px-4 py-3 flex items-center justify-between hover:bg-zinc-200 dark:hover:bg-zinc-800/50 transition-colors"
+              className="w-full px-4 py-3 flex items-center justify-between hover:bg-zinc-200 dark:hover:bg-zinc-800/50 transition-colors cursor-pointer"
             >
               <div className="flex items-center gap-3">
                 <span className="font-mono text-sm text-zinc-600 dark:text-zinc-300">#{order.id}</span>
@@ -134,7 +134,7 @@ export default function PreviousOrders() {
                 {order.status === 'cancelled' && <span className="flex items-center gap-1 text-xs text-zinc-500 bg-zinc-500/10 px-2 py-1 rounded-full"><XCircle className="w-3 h-3" /> Cancelled</span>}
                 {expandedId === order.id ? <ChevronUp className="w-4 h-4 text-zinc-500" /> : <ChevronDown className="w-4 h-4 text-zinc-500" />}
               </div>
-            </button>
+            </div>
             <AnimatePresence>
               {expandedId === order.id && (
                 <motion.div

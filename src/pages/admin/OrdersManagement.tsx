@@ -10,6 +10,7 @@ import { useModalBehavior } from '../../hooks/useModalBehavior';
 import ConfirmModal from '../../components/ConfirmModal';
 
 const CACHE_KEY = 'admin_orders_cache';
+const PHONES_CACHE_KEY = 'admin_user_phones_cache';
 
 export default function OrdersManagement() {
   const [orders, setOrders] = useState<Order[]>(() => {
@@ -22,7 +23,14 @@ export default function OrdersManagement() {
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [processingId, setProcessingId] = useState<string | null>(null);
   const [selectedUserPhone, setSelectedUserPhone] = useState<string | null>(null);
-  const [userPhones, setUserPhones] = useState<Record<string, string>>({});
+  const [userPhones, setUserPhones] = useState<Record<string, string>>(() => {
+    const cached = localStorage.getItem(PHONES_CACHE_KEY);
+    return cached ? JSON.parse(cached) : {};
+  });
+
+  useEffect(() => {
+    localStorage.setItem(PHONES_CACHE_KEY, JSON.stringify(userPhones));
+  }, [userPhones]);
   const [confirmModal, setConfirmModal] = useState<{
     isOpen: boolean;
     title: string;
@@ -47,6 +55,8 @@ export default function OrdersManagement() {
         const newPhones: Record<string, string> = { ...userPhones };
         const missingUserIds = Array.from(new Set(orders.map(o => o.userId))).filter(id => !newPhones[id]);
         
+        if (missingUserIds.length === 0) return;
+
         for (const userId of missingUserIds) {
           try {
             const userRef = doc(db, 'users', userId);
@@ -441,7 +451,7 @@ export default function OrdersManagement() {
                       <a 
                         href={`https://wa.me/${selectedUserPhone.replace(/\D/g, '')}?text=${encodeURIComponent(
                           selectedOrder.status === 'pending' 
-                            ? `Ap ke Order ka Shukriya!\nAp ke Order ${selectedOrder.id} ki total payment ${selectedOrder.amount} hai. Order ke Approval ke liye Payment Screenshot bhej dain.\nBank: Easypaisa, Jazzcash, NayaPay, SadaPay \nAccount Number: 03416286423\nAccount Title: Asmat Ullah`
+                            ? `*Ap ke Order ka Shukriya!*\nAp ke Order ${selectedOrder.id} ki total payment Rs ${selectedOrder.amount} hai. Order ke Approval ke liye Payment kar ke Screenshot bhej dain.\n\n*Payment Details:*\n*Banks :* Easypaisa, Jazzcash, NayaPay, SadaPay \n*Account Number :* 03416286423\n*Account Title :* Asmat Ullah`
                             : selectedOrder.status === 'approved'
                             ? `Thanks for your Payment, Your order ${selectedOrder.id} has been approved.\n🍿 Enjoy watching on MovizNow!`
                             : ""
@@ -484,22 +494,22 @@ export default function OrdersManagement() {
               </div>
 
               {selectedOrder.status === 'pending' ? (
-                <div className="flex gap-3 mt-6 pt-6 border-t border-zinc-200 dark:border-zinc-800">
+                <div className="flex justify-between gap-2 mt-6 pt-6 border-t border-zinc-200 dark:border-zinc-800">
                   <button
                     onClick={() => {
                       setConfirmModal({
                         isOpen: true,
                         title: 'Decline Order',
                         message: 'Are you sure you want to decline this order?',
-                        onConfirm: () => {
-                          handleDecline(selectedOrder.id);
+                        onConfirm: async () => {
+                          await handleDecline(selectedOrder.id);
                           setSelectedOrder(null);
                         },
                         confirmText: 'Decline'
                       });
                     }}
                     disabled={processingId === selectedOrder.id}
-                    className="flex-1 py-2.5 rounded-xl font-medium bg-red-500/10 text-red-500 hover:bg-red-500/20 transition-colors disabled:opacity-50"
+                    className="px-5 py-2.5 text-sm rounded-xl font-medium bg-red-500/10 text-red-500 hover:bg-red-500/20 transition-colors disabled:opacity-50"
                   >
                     Decline
                   </button>
@@ -509,36 +519,36 @@ export default function OrdersManagement() {
                         isOpen: true,
                         title: 'Approve Order',
                         message: 'Are you sure you want to approve this order?',
-                        onConfirm: () => {
-                          handleApprove(selectedOrder);
+                        onConfirm: async () => {
+                          await handleApprove(selectedOrder);
                           setSelectedOrder(null);
                         },
                         confirmText: 'Approve'
                       });
                     }}
                     disabled={processingId === selectedOrder.id}
-                    className="flex-1 py-2.5 rounded-xl font-medium bg-emerald-500 text-white hover:bg-emerald-600 transition-colors disabled:opacity-50"
+                    className="px-5 py-2.5 text-sm rounded-xl font-medium bg-emerald-500 text-white hover:bg-emerald-600 transition-colors disabled:opacity-50"
                   >
                     Approve
                   </button>
                 </div>
               ) : (
-                <div className="mt-6 pt-6 border-t border-zinc-200 dark:border-zinc-800">
+                <div className="flex justify-end mt-6 pt-6 border-t border-zinc-200 dark:border-zinc-800">
                   <button
                     onClick={() => {
                       setConfirmModal({
                         isOpen: true,
                         title: 'Delete Order',
                         message: 'Are you sure you want to delete this order permanently? This will remove it from all records.',
-                        onConfirm: () => {
-                          handleDelete(selectedOrder.id);
+                        onConfirm: async () => {
+                          await handleDelete(selectedOrder.id);
                           setSelectedOrder(null);
                         },
                         confirmText: 'Delete'
                       });
                     }}
                     disabled={processingId === selectedOrder.id}
-                    className="w-full py-2.5 rounded-xl font-medium bg-red-500/10 text-red-500 hover:bg-red-500/20 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                    className="px-5 py-2.5 text-sm rounded-xl font-medium bg-red-500/10 text-red-500 hover:bg-red-500/20 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
                   >
                     <Trash2 className="w-4 h-4" />
                     Delete Order Permanently

@@ -108,7 +108,7 @@ export default function ErrorLinks() {
             if (links[info.linkIndex]) currentLink = links[info.linkIndex];
           }
         } else if (content.type === 'series' && content.seasons) {
-          const seasons: Season[] = JSON.parse(content.seasons);
+          const seasons: Season[] = Array.isArray(content.seasons) ? content.seasons : JSON.parse(content.seasons || '[]');
           const sIdx = info.seasonIndex!;
           if (seasons[sIdx]) {
             if (info.listType === 'zip') {
@@ -320,7 +320,7 @@ export default function ErrorLinks() {
         }
       } else if (content.type === 'series' && content.seasons) {
         try {
-          const seasons: Season[] = JSON.parse(content.seasons);
+          const seasons: Season[] = Array.isArray(content.seasons) ? content.seasons : JSON.parse(content.seasons || '[]');
           seasons.forEach((season, sIdx) => {
             const zipLinks = parseLinks(JSON.stringify(season.zipLinks));
             zipLinks.forEach((link, idx) => {
@@ -541,7 +541,7 @@ export default function ErrorLinks() {
         }
       } else if (content.type === 'series' && content.seasons) {
         try {
-          const seasons: Season[] = JSON.parse(content.seasons);
+          const seasons: Season[] = Array.isArray(content.seasons) ? content.seasons : JSON.parse(content.seasons || '[]');
           const sIdx = info.seasonIndex!;
           if (seasons[sIdx]) {
             if (info.listType === 'zip') {
@@ -707,7 +707,7 @@ export default function ErrorLinks() {
         }
       } else if (content.type === 'series' && content.seasons) {
         try {
-          const seasons: Season[] = JSON.parse(content.seasons);
+          const seasons: Season[] = Array.isArray(content.seasons) ? content.seasons : JSON.parse(content.seasons || '[]');
           const sIdx = editingLink.seasonIndex!;
           
           if (seasons[sIdx]) {

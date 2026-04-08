@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { db } from '../../firebase';
 import { collection, doc, updateDoc, onSnapshot, query, where, getDocs, writeBatch, deleteDoc, setDoc } from 'firebase/firestore';
 import { UserProfile, Role, Status, AnalyticsEvent } from '../../types';
-import { Edit2, MessageCircle, X, Check, Search, ArrowUp, ArrowDown, Clock, MousePointerClick, Film, Trash2, Tv, Plus, Loader2, ArrowRight, UserPlus, Calendar, Heart, Bookmark, Save } from 'lucide-react';
+import { Edit2, MessageCircle, X, Check, Search, ArrowUp, ArrowDown, Clock, MousePointerClick, Film, Trash2, Tv, Plus, Loader2, ArrowRight, UserPlus, Calendar, Heart, Bookmark, Save, Lock, Layers } from 'lucide-react';
 import { format, formatDistanceToNow } from 'date-fns';
 import clsx from 'clsx';
 import AlertModal from '../../components/AlertModal';
@@ -19,8 +19,26 @@ import { useLocation, useNavigate } from 'react-router-dom';
 type SortField = 'createdAt' | 'displayName' | 'phone' | 'expiryDate';
 type SortOrder = 'asc' | 'desc';
 
+const standardizePhone = (phone: string) => {
+  const digits = phone.replace(/\D/g, '');
+  if (!digits) return '';
+  
+  // Pakistan specific standardization
+  let base = digits;
+  if (base.startsWith('92') && base.length >= 12) base = base.substring(2);
+  else if (base.startsWith('0') && base.length >= 11) base = base.substring(1);
+  
+  // If it's a 10-digit number (standard Pak mobile length without prefix)
+  if (base.length === 10) {
+    return `+92${base}`;
+  }
+  
+  // Fallback for other lengths or formats
+  return phone.startsWith('+') ? `+${digits}` : digits;
+};
+
 export default function UserManagement() {
-  const { profile } = useAuth();
+  const { profile, findUsersByEmailOrPhone } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
   const searchParams = new URLSearchParams(location.search);
@@ -52,14 +70,55 @@ export default function UserManagement() {
   const [assignedIds, setAssignedIds] = useState<Set<string>>(new Set());
   const [contentSearchTerm, setContentSearchTerm] = useState('');
   
-  // Add Pending User State
+  // Add User State
   const [isAddUserModalOpen, setIsAddUserModalOpen] = useState(false);
-  const [searchPendingQuery, setSearchPendingQuery] = useState('');
-  const [searchedPendingUser, setSearchedPendingUser] = useState<UserProfile | null>(null);
-  const [searchPendingError, setSearchPendingError] = useState<string | null>(null);
-  const [newUserForm, setNewUserForm] = useState({ email: '', phone: '', role: 'user' as Role, expiryDate: '' });
+  const [newUserForm, setNewUserForm] = useState({ email: '', phone: '', displayName: '', role: 'user' as Role, status: 'pending' as 'pending' | 'active', expiryDate: '' });
+  const [foundUser, setFoundUser] = useState<UserProfile | null>(null);
+  const [searchStatus, setSearchStatus] = useState<'idle' | 'searching' | 'found' | 'not_found'>('idle');
   const [managers, setManagers] = useState<Record<string, string>>({});
   const [processing, setProcessing] = useState<Record<string, boolean>>({});
+
+  const handleSearchUser = async () => {
+    if (!newUserForm.phone && !newUserForm.email) {
+      setAlertConfig({ isOpen: true, title: 'Error', message: 'Please provide a WhatsApp Number or Email.' });
+      return;
+    }
+
+    setSearchStatus('searching');
+    try {
+      const standardizedPhone = newUserForm.phone ? standardizePhone(newUserForm.phone) : '';
+      const usersRef = collection(db, 'users');
+      
+      let q;
+      if (standardizedPhone) {
+        q = query(usersRef, where('phone', '==', standardizedPhone));
+      } else {
+        q = query(usersRef, where('email', '==', newUserForm.email));
+      }
+      
+      const querySnapshot = await getDocs(q);
+      
+      let user: any = null;
+      querySnapshot.forEach((doc) => {
+        const data = doc.data() as UserProfile;
+        if (data.status === 'pending') {
+          user = { id: doc.id, ...data };
+        }
+      });
+
+      if (user) {
+        setFoundUser(user);
+        setSearchStatus('found');
+      } else {
+        setSearchStatus('not_found');
+        setAlertConfig({ isOpen: true, title: 'Not Found', message: 'No pending user found with that phone or email.' });
+      }
+    } catch (error) {
+      console.error('Error searching user:', error);
+      setSearchStatus('idle');
+      setAlertConfig({ isOpen: true, title: 'Error', message: 'Failed to search user.' });
+    }
+  };
 
   useModalBehavior(alertConfig.isOpen, () => setAlertConfig(prev => ({ ...prev, isOpen: false })));
   useModalBehavior(!!deleteConfirm, () => setDeleteConfirm(null));
@@ -80,7 +139,7 @@ export default function UserManagement() {
     }
 
     let q = collection(db, 'users') as any;
-    if (profile?.role === 'user_manager' || profile?.role === 'manager') {
+    if ((profile?.role as string) === 'user_manager' || (profile?.role as string) === 'manager') {
       q = query(collection(db, 'users'), where('managedBy', '==', profile.uid));
     } else if ((profile?.role === 'admin' || profile?.role === 'owner') && managedByFilter) {
       q = query(collection(db, 'users'), where('managedBy', '==', managedByFilter));
@@ -292,14 +351,50 @@ export default function UserManagement() {
     setIsEditingOverlay(true);
   };
 
+  const handleResetPassword = async (userId: string) => {
+    try {
+      setProcessing(prev => ({ ...prev, [`reset_${userId}`]: true }));
+      await updateDoc(doc(db, 'users', userId), {
+        requirePasswordReset: true
+      });
+      setAlertConfig({ isOpen: true, title: 'Success', message: 'User has been flagged for password reset on next login.' });
+    } catch (error: any) {
+      console.error("Error resetting password:", error);
+      setAlertConfig({ isOpen: true, title: 'Error', message: error.message || 'Failed to reset password' });
+    } finally {
+      setProcessing(prev => ({ ...prev, [`reset_${userId}`]: false }));
+    }
+  };
+
   const handleSave = async () => {
     if (!editingId || !selectedUser || selectedUser.role === 'owner') return;
     setProcessing(prev => ({ ...prev, save: true }));
     try {
+      const standardizedPhone = standardizePhone(editForm.phone || '');
+
+      // Check for duplicates (excluding current user)
+      if (editForm.email && editForm.email !== selectedUser.email) {
+        const existingEmails = await findUsersByEmailOrPhone(editForm.email);
+        if (existingEmails.some(u => u.uid !== editingId)) {
+          setAlertConfig({ isOpen: true, title: 'Error', message: 'Email address is already in use by another account.' });
+          setProcessing(prev => ({ ...prev, save: false }));
+          return;
+        }
+      }
+      
+      if (standardizedPhone && standardizedPhone !== selectedUser.phone) {
+        const existingPhones = await findUsersByEmailOrPhone(standardizedPhone);
+        if (existingPhones.some(u => u.uid !== editingId)) {
+          setAlertConfig({ isOpen: true, title: 'Error', message: 'WhatsApp Number is already in use by another account.' });
+          setProcessing(prev => ({ ...prev, save: false }));
+          return;
+        }
+      }
+
       const updateData: any = {
         displayName: editForm.displayName,
         email: editForm.email,
-        phone: editForm.phone,
+        phone: standardizedPhone,
         role: editForm.role,
         status: editForm.status,
         permissions: editForm.permissions || [],
@@ -368,21 +463,71 @@ export default function UserManagement() {
     setProcessing(prev => ({ ...prev, delete: true }));
     const userToDelete = users.find(u => u.uid === deleteConfirm);
     if (userToDelete?.role === 'owner') {
-      setDeleteConfirm(null);
       setProcessing(prev => ({ ...prev, delete: false }));
       return;
     }
     const currentDeleteConfirm = deleteConfirm;
-    setDeleteConfirm(null);
     
     try {
-      await updateDoc(doc(db, 'users', currentDeleteConfirm), {
-        status: 'suspended' // Soft delete by suspending
-      });
-      setAlertConfig({ isOpen: true, title: 'Success', message: 'User suspended successfully' });
+      if (userToDelete?.status === 'suspended') {
+        // Second time: delete all user data
+        const batch = writeBatch(db);
+        
+        // 1. Delete user document
+        batch.delete(doc(db, 'users', currentDeleteConfirm));
+        
+        // 2. Delete orders
+        const ordersQuery = query(collection(db, 'orders'), where('userId', '==', currentDeleteConfirm));
+        const ordersSnap = await getDocs(ordersQuery);
+        ordersSnap.forEach(d => batch.delete(d.ref));
+        
+        // 3. Delete movie requests created by this user
+        const requestsQuery = query(collection(db, 'movie_requests'), where('userId', '==', currentDeleteConfirm));
+        const requestsSnap = await getDocs(requestsQuery);
+        requestsSnap.forEach(d => batch.delete(d.ref));
+
+        // 3b. Remove user from other movie requests they joined
+        const joinedRequestsQuery = query(collection(db, 'movie_requests'), where('requestedBy', 'array-contains', currentDeleteConfirm));
+        const joinedRequestsSnap = await getDocs(joinedRequestsQuery);
+        joinedRequestsSnap.forEach(d => {
+          const data = d.data();
+          if (data.userId !== currentDeleteConfirm) {
+            const newRequestedBy = (data.requestedBy || []).filter((id: string) => id !== currentDeleteConfirm);
+            batch.update(d.ref, { 
+              requestedBy: newRequestedBy,
+              requestCount: newRequestedBy.length
+            });
+          }
+        });
+        
+        // 4. Delete analytics
+        const analyticsQuery = query(collection(db, 'analytics'), where('userId', '==', currentDeleteConfirm));
+        const analyticsSnap = await getDocs(analyticsQuery);
+        analyticsSnap.forEach(d => batch.delete(d.ref));
+        
+        // 5. Delete FCM tokens
+        const tokensQuery = query(collection(db, 'fcm_tokens'), where('userId', '==', currentDeleteConfirm));
+        const tokensSnap = await getDocs(tokensQuery);
+        tokensSnap.forEach(d => batch.delete(d.ref));
+
+        // 6. Delete notifications targeted to this user
+        const notificationsQuery = query(collection(db, 'notifications'), where('targetUserId', '==', currentDeleteConfirm));
+        const notificationsSnap = await getDocs(notificationsQuery);
+        notificationsSnap.forEach(d => batch.delete(d.ref));
+        
+        await batch.commit();
+        setAlertConfig({ isOpen: true, title: 'Success', message: 'User and all associated data deleted successfully' });
+      } else {
+        // First time: suspend
+        await updateDoc(doc(db, 'users', currentDeleteConfirm), {
+          status: 'suspended'
+        });
+        setAlertConfig({ isOpen: true, title: 'Success', message: 'User suspended successfully' });
+      }
+      setDeleteConfirm(null);
     } catch (error) {
-      console.error('Error suspending user:', error);
-      setAlertConfig({ isOpen: true, title: 'Error', message: 'Failed to suspend user' });
+      console.error('Error in delete/suspend action:', error);
+      setAlertConfig({ isOpen: true, title: 'Error', message: 'Failed to complete action' });
     } finally {
       setProcessing(prev => ({ ...prev, delete: false }));
     }
@@ -390,7 +535,7 @@ export default function UserManagement() {
 
   const sendWhatsAppReminder = (user: UserProfile) => {
     if (!user.phone) {
-      setAlertConfig({ isOpen: true, title: 'Missing Phone Number', message: 'User does not have a phone number set.' });
+      setAlertConfig({ isOpen: true, title: 'Missing WhatsApp Number', message: 'User does not have a WhatsApp number set.' });
       return;
     }
     
@@ -649,109 +794,66 @@ export default function UserManagement() {
     return result;
   }, [users, searchTerm, filterRole, filterStatus, sortField, sortOrder]);
 
-  const handleSearchPendingUser = async () => {
-    if (!searchPendingQuery) {
-      setSearchPendingError('Please enter an email or phone number.');
-      return;
-    }
-    setProcessing(prev => ({ ...prev, searchPending: true }));
-    setSearchPendingError(null);
-    setSearchedPendingUser(null);
-
-    try {
-      // Search by email
-      let q = query(collection(db, 'users'), where('email', '==', searchPendingQuery), where('status', '==', 'pending'));
-      let snapshot = await getDocs(q);
-      
-      // If not found by email, search by phone
-      if (snapshot.empty) {
-        q = query(collection(db, 'users'), where('phone', '==', searchPendingQuery), where('status', '==', 'pending'));
-        snapshot = await getDocs(q);
-      }
-
-      if (snapshot.empty) {
-        setSearchPendingError('User not found or is already active.');
-        return;
-      }
-
-      const userDoc = snapshot.docs[0];
-      const userData = userDoc.data() as UserProfile;
-
-      setSearchedPendingUser(userData);
-      setNewUserForm({
-        email: userData.email || '',
-        phone: userData.phone || '',
-        role: userData.role || 'user',
-        expiryDate: userData.expiryDate ? new Date(userData.expiryDate).toISOString().split('T')[0] : ''
-      });
-    } catch (error) {
-      console.error("Error searching user:", error);
-      setSearchPendingError('An error occurred while searching.');
-    } finally {
-      setProcessing(prev => ({ ...prev, searchPending: false }));
-    }
-  };
-
-  const handleClaimPendingUser = async () => {
-    if (!searchedPendingUser) return;
-    setProcessing(prev => ({ ...prev, claim: true }));
-    try {
-      const updateData: any = {
-        role: newUserForm.role,
-        managedBy: profile?.uid,
-        isUserManager: newUserForm.role === 'user_manager' || newUserForm.role === 'manager'
-      };
-      if (newUserForm.expiryDate) {
-        updateData.expiryDate = new Date(newUserForm.expiryDate).toISOString();
-      }
-      await updateDoc(doc(db, 'users', searchedPendingUser.uid), updateData);
-      setIsAddUserModalOpen(false);
-      setSearchedPendingUser(null);
-      setSearchPendingQuery('');
-      setAlertConfig({ isOpen: true, title: 'Success', message: 'User successfully claimed and updated.' });
-    } catch (error) {
-      console.error("Error claiming user:", error);
-      setAlertConfig({ isOpen: true, title: 'Error', message: 'Failed to update user.' });
-    } finally {
-      setProcessing(prev => ({ ...prev, claim: false }));
-    }
-  };
-
   const handleAddUser = async () => {
-    if (!newUserForm.email && !newUserForm.phone) {
-      setAlertConfig({ isOpen: true, title: 'Error', message: 'Please provide either an email or a phone number.' });
+    if (!foundUser && !newUserForm.phone) {
+      setAlertConfig({ isOpen: true, title: 'Error', message: 'Please provide a WhatsApp Number.' });
       return;
     }
 
     setProcessing(prev => ({ ...prev, addUser: true }));
     try {
-      const newUserId = `pending_${Date.now()}`;
-      const newUserData: any = {
-        uid: newUserId,
-        email: newUserForm.email || `${newUserForm.phone}@pending.local`,
-        phone: newUserForm.phone || '',
-        role: newUserForm.role,
-        status: 'pending',
-        createdAt: new Date().toISOString(),
-        isUserManager: newUserForm.role === 'user_manager' || newUserForm.role === 'manager'
-      };
+      if (foundUser) {
+        // Claim existing pending user
+        await updateDoc(doc(db, 'users', (foundUser as any).id), {
+          managedBy: profile?.uid,
+          role: newUserForm.role,
+          status: newUserForm.status,
+          displayName: newUserForm.displayName || foundUser.displayName
+        });
+        setAlertConfig({ isOpen: true, title: 'Success', message: 'Pending user claimed successfully.' });
+      } else {
+        const standardizedPhone = standardizePhone(newUserForm.phone);
+        const digits = standardizedPhone.replace(/\D/g, '');
+        const emailToMatch = newUserForm.email || `${digits}@moviznow.com`;
 
-      if (newUserForm.expiryDate) {
-        newUserData.expiryDate = new Date(newUserForm.expiryDate).toISOString();
+        // Check if user is allowed to add new users
+        if ((profile?.role as string) === 'user_manager' || (profile?.role as string) === 'manager') {
+          setAlertConfig({ isOpen: true, title: 'Error', message: 'No pending user found with that phone or email. Managers can only claim existing pending users.' });
+        } else {
+          // No matches, create new pending user
+          const newUserId = `pending_${Date.now()}`;
+          const newUserData: any = {
+            uid: newUserId,
+            email: emailToMatch,
+            phone: standardizedPhone,
+            displayName: newUserForm.displayName || '',
+            role: newUserForm.role,
+            status: newUserForm.status,
+            hasPassword: false,
+            createdAt: new Date().toISOString(),
+            isUserManager: (newUserForm.role as string) === 'user_manager' || (newUserForm.role as string) === 'manager'
+          };
+
+          if (newUserForm.expiryDate) {
+            newUserData.expiryDate = new Date(newUserForm.expiryDate).toISOString();
+          }
+
+          if ((profile?.role as string) === 'user_manager' || (profile?.role as string) === 'manager') {
+            newUserData.managedBy = profile.uid;
+          }
+
+          await setDoc(doc(db, 'users', newUserId), newUserData);
+          setAlertConfig({ isOpen: true, title: 'Success', message: 'Pending user added successfully.' });
+        }
       }
-
-      if (profile?.role === 'user_manager' || profile?.role === 'manager') {
-        newUserData.managedBy = profile.uid;
-      }
-
-      await setDoc(doc(db, 'users', newUserId), newUserData);
       
       setIsAddUserModalOpen(false);
-      setNewUserForm({ email: '', phone: '', role: 'user', expiryDate: '' });
-      setAlertConfig({ isOpen: true, title: 'Success', message: 'Pending user added successfully.' });
+      setNewUserForm({ email: '', phone: '', displayName: '', role: 'user', status: 'pending', expiryDate: '' });
+      setFoundUser(null);
+      setSearchStatus('idle');
     } catch (error) {
-      console.error('Error adding user:', error);
-      setAlertConfig({ isOpen: true, title: 'Error', message: 'Failed to add user.' });
+      console.error('Error adding/claiming user:', error);
+      setAlertConfig({ isOpen: true, title: 'Error', message: 'Failed to add/claim user.' });
     } finally {
       setProcessing(prev => ({ ...prev, addUser: false }));
     }
@@ -774,14 +876,16 @@ export default function UserManagement() {
             </button>
           )}
         </div>
-        { (profile?.role === 'user_manager' || profile?.role === 'manager') && (
-          <Button
-            onClick={() => setIsAddUserModalOpen(true)}
-            variant="emerald"
-            icon={<UserPlus className="w-5 h-5" />}
-          >
-            Add User
-          </Button>
+        { ((profile?.role as string) === 'user_manager' || (profile?.role as string) === 'manager' || profile?.role === 'admin' || profile?.role === 'owner') && (
+          <div className="flex gap-2">
+            <Button
+              onClick={() => setIsAddUserModalOpen(true)}
+              variant="emerald"
+              icon={<UserPlus className="w-5 h-5" />}
+            >
+              {(profile?.role === 'admin' || profile?.role === 'owner') ? 'Add User' : 'Add Pending User'}
+            </Button>
+          </div>
         )}
       </div>
 
@@ -873,8 +977,8 @@ export default function UserManagement() {
                     />
                   </th>
                   <th className="px-4 md:px-6 py-4 cursor-pointer hover:text-zinc-900 dark:text-white transition-colors whitespace-nowrap" onClick={() => toggleSort('displayName')}>
-                  User Info <SortIcon field="displayName" />
-                </th>
+                    User Info <SortIcon field="displayName" />
+                  </th>
                 <th className="px-4 md:px-6 py-4 whitespace-nowrap">Role</th>
                 <th className="px-4 md:px-6 py-4 cursor-pointer hover:text-zinc-900 dark:text-white transition-colors whitespace-nowrap" onClick={() => toggleSort('expiryDate')}>
                   Expiry Date <SortIcon field="expiryDate" />
@@ -1056,10 +1160,11 @@ export default function UserManagement() {
                       value={editForm.email || ''}
                       onChange={(e) => setEditForm({ ...editForm, email: e.target.value })}
                       className="w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-2 focus:outline-none focus:border-emerald-500"
+                      disabled={(profile?.role as string) === 'user_manager' || (profile?.role as string) === 'manager'}
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-zinc-500 dark:text-zinc-400 mb-1">Phone</label>
+                    <label className="block text-sm font-medium text-zinc-500 dark:text-zinc-400 mb-1">WhatsApp Number</label>
                     <input
                       type="text"
                       value={editForm.phone || ''}
@@ -1127,8 +1232,8 @@ export default function UserManagement() {
                     )}
                     <div>
                       <h3 className="text-lg font-bold text-zinc-900 dark:text-white">{selectedUser.displayName || 'No Name'}</h3>
-                      <p className="text-zinc-500 dark:text-zinc-400 text-sm">{selectedUser.email}</p>
-                      <p className="text-zinc-500 dark:text-zinc-400 text-sm">{selectedUser.phone || 'No Phone'}</p>
+                      <p className="text-zinc-500 dark:text-zinc-400 text-sm">{selectedUser.email?.endsWith('@moviznow.com') ? 'No Email' : selectedUser.email}</p>
+                      <p className="text-zinc-500 dark:text-zinc-400 text-sm">{selectedUser.phone || 'No WhatsApp Number'}</p>
                     </div>
                   </div>
 
@@ -1144,6 +1249,20 @@ export default function UserManagement() {
                            selectedUser.role.charAt(0).toUpperCase() + selectedUser.role.slice(1).replace('_', ' ')}
                         </div>
                       </div>
+                      {(profile?.role === 'admin' || profile?.role === 'owner') && (
+                        <div className="text-center">
+                          <div className="text-zinc-500 text-[10px] uppercase font-bold mb-0.5">Password</div>
+                          <button
+                            onClick={() => handleResetPassword(selectedUser.uid)}
+                            disabled={processing[`reset_${selectedUser.uid}`] || !selectedUser.hasPassword}
+                            className="text-xs font-bold text-red-500 hover:text-red-600 transition-colors disabled:opacity-50 flex items-center gap-1 mx-auto"
+                            title={!selectedUser.hasPassword ? "User has not set a password yet" : "Force password reset"}
+                          >
+                            {processing[`reset_${selectedUser.uid}`] ? <Loader2 className="w-3 h-3 animate-spin" /> : <Lock className="w-3 h-3" />}
+                            Reset
+                          </button>
+                        </div>
+                      )}
                       <div className="text-right">
                         <div className="text-zinc-500 text-[10px] uppercase font-bold mb-0.5">Status</div>
                         <div className="capitalize font-bold text-zinc-900 dark:text-white text-sm">{selectedUser.status}</div>
@@ -1366,22 +1485,22 @@ export default function UserManagement() {
               )}
             </div>
 
-            <div className="p-4 md:p-6 border-t border-zinc-200 dark:border-zinc-800 flex gap-4 shrink-0">
+            <div className="p-4 md:p-6 border-t border-zinc-200 dark:border-zinc-800 flex justify-between gap-2 shrink-0">
               {isEditingOverlay ? (
                 <>
                   <Button
                     onClick={() => { setIsEditingOverlay(false); setSelectedUser(null); }}
                     variant="secondary"
-                    className="flex-1 py-3"
+                    className="px-5 py-2.5 text-sm"
                   >
                     Cancel
                   </Button>
                   <Button
                     onClick={handleSave}
                     variant="emerald"
-                    className="flex-1 py-3"
+                    className="px-5 py-2.5 text-sm"
                     loading={processing.save}
-                    icon={<Check className="w-5 h-5" />}
+                    icon={<Check className="w-4 h-4" />}
                   >
                     Save
                   </Button>
@@ -1394,9 +1513,9 @@ export default function UserManagement() {
                       setSelectedUser(null);
                     }}
                     variant="emerald"
-                    className="flex-1 py-3"
+                    className="px-5 py-2.5 text-sm"
                     loading={processing[`reminder_${selectedUser.uid}`]}
-                    icon={<MessageCircle className="w-5 h-5" />}
+                    icon={<MessageCircle className="w-4 h-4" />}
                   >
                     Send Reminder
                   </Button>
@@ -1406,8 +1525,8 @@ export default function UserManagement() {
                         handleEdit(selectedUser);
                       }}
                       variant="secondary"
-                      className="flex-1 py-3"
-                      icon={<Edit2 className="w-5 h-5" />}
+                      className="px-5 py-2.5 text-sm"
+                      icon={<Edit2 className="w-4 h-4" />}
                     >
                       Edit User
                     </Button>
@@ -1450,7 +1569,7 @@ export default function UserManagement() {
                 {smartSearch(allContent, contentSearchTerm)
                   .map((content) => {
                     const isSeries = content.type === 'series';
-                    const seasons = isSeries && content.seasons ? (typeof content.seasons === 'string' ? JSON.parse(content.seasons) : content.seasons) : [];
+                    const seasons = isSeries && content.seasons ? (typeof content.seasons === 'string' ? JSON.parse(content.seasons || '[]') : content.seasons) : [];
                     const isFullyAssigned = assignedIds.has(content.id);
                     const isPartiallyAssigned = !isFullyAssigned && seasons.some((s: any) => assignedIds.has(`${content.id}:${s.id}`));
 
@@ -1518,18 +1637,18 @@ export default function UserManagement() {
               </div>
             </div>
 
-            <div className="p-6 border-t border-zinc-200 dark:border-zinc-800 flex justify-end gap-4">
+            <div className="p-4 sm:p-6 border-t border-zinc-200 dark:border-zinc-800 flex justify-between gap-2">
               <Button
                 onClick={() => setIsContentPickerOpen(false)}
                 variant="secondary"
-                className="px-6"
+                className="px-5 py-2.5 text-sm"
               >
                 Cancel
               </Button>
               <Button
                 onClick={handleSaveAccess}
                 variant="emerald"
-                className="px-6"
+                className="px-5 py-2.5 text-sm"
                 loading={processing.saveAccess}
               >
                 Save Changes
@@ -1548,11 +1667,14 @@ export default function UserManagement() {
 
       <ConfirmModal
         isOpen={!!deleteConfirm}
-        title="Suspend User"
-        message="Are you sure you want to suspend this user? They will no longer be able to access the application."
-        confirmText="Suspend"
+        title={users.find(u => u.uid === deleteConfirm)?.status === 'suspended' ? "Delete User Data" : "Suspend User"}
+        message={users.find(u => u.uid === deleteConfirm)?.status === 'suspended' 
+          ? "Are you sure you want to PERMANENTLY delete this user and all their associated data (orders, requests, analytics)? This action cannot be undone." 
+          : "Are you sure you want to suspend this user? They will no longer be able to access the application."}
+        confirmText={users.find(u => u.uid === deleteConfirm)?.status === 'suspended' ? "Delete Everything" : "Suspend"}
         onConfirm={handleDelete}
         onCancel={() => setDeleteConfirm(null)}
+        loading={processing.delete}
       />
 
       {/* Add User Modal */}
@@ -1560,82 +1682,59 @@ export default function UserManagement() {
         <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4">
           <div className="bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl w-full max-w-md overflow-hidden flex flex-col max-h-[90vh]">
             <div className="p-4 md:p-6 border-b border-zinc-200 dark:border-zinc-800 flex justify-between items-center shrink-0">
-              <h2 className="text-xl font-bold">{(profile?.role === 'user_manager' || profile?.role === 'manager' || profile?.role === 'owner') ? 'Search Pending User' : 'Add Pending User'}</h2>
-              <button onClick={() => { setIsAddUserModalOpen(false); setSearchedPendingUser(null); setSearchPendingQuery(''); setSearchPendingError(null); }} className="text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:text-white transition-colors">
+              <h2 className="text-xl font-bold">{(profile?.role === 'admin' || profile?.role === 'owner') ? 'Add User' : 'Add Pending User'}</h2>
+              <button onClick={() => { setIsAddUserModalOpen(false); setSearchStatus('idle'); setFoundUser(null); }} className="text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:text-white transition-colors">
                 <X className="w-6 h-6" />
               </button>
             </div>
             
             <div className="p-4 md:p-6 space-y-4 overflow-y-auto">
-              {(profile?.role === 'user_manager' || profile?.role === 'manager' || profile?.role === 'owner') && !searchedPendingUser && (
-                <div className="space-y-4">
-                  <div>
-                    <label className="block text-sm font-medium text-zinc-500 dark:text-zinc-400 mb-1">Search by Email or WhatsApp</label>
-                    <div className="flex gap-2">
-                      <input
-                        type="text"
-                        value={searchPendingQuery}
-                        onChange={(e) => setSearchPendingQuery(e.target.value)}
-                        placeholder="user@example.com or +1234567890"
-                        className="flex-1 bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-2 focus:outline-none focus:border-emerald-500"
-                        onKeyDown={(e) => e.key === 'Enter' && handleSearchPendingUser()}
-                      />
-                      <Button
-                        onClick={handleSearchPendingUser}
-                        variant="emerald"
-                        loading={processing.searchPending}
-                        icon={<Search className="w-4 h-4" />}
-                      >
-                        Search
-                      </Button>
-                    </div>
-                    {searchPendingError && (
-                      <p className="text-red-500 text-sm mt-2">{searchPendingError}</p>
-                    )}
-                  </div>
-                </div>
-              )}
-
-              {(!profile || (profile.role !== 'user_manager' && profile.role !== 'manager') || searchedPendingUser) && (
+              {(profile?.role === 'admin' || profile?.role === 'owner' || searchStatus === 'found') ? (
                 <>
-                  {(profile?.role === 'user_manager' || profile?.role === 'manager' || profile?.role === 'owner') && searchedPendingUser && (
-                    <div className="bg-zinc-100 dark:bg-zinc-800/50 p-4 rounded-xl mb-4 flex items-center gap-4">
-                      {searchedPendingUser.photoURL ? (
-                        <img src={searchedPendingUser.photoURL} alt={searchedPendingUser.displayName} className="w-12 h-12 rounded-full object-cover" referrerPolicy="no-referrer" />
-                      ) : (
-                        <div className="w-12 h-12 bg-zinc-50 dark:bg-zinc-900 rounded-full flex items-center justify-center text-xl font-bold text-emerald-500 shrink-0">
-                          {(searchedPendingUser.displayName || searchedPendingUser.email || '?').charAt(0).toUpperCase()}
-                        </div>
-                      )}
+                  {searchStatus === 'found' && foundUser ? (
+                    <div className="bg-zinc-100 dark:bg-zinc-800 p-4 rounded-xl flex items-center gap-4">
+                      <img src={foundUser.photoURL || 'https://ui-avatars.com/api/?name=' + foundUser.displayName} alt={foundUser.displayName} className="w-12 h-12 rounded-full" />
                       <div>
-                        <p className="text-sm text-zinc-500 dark:text-zinc-400 mb-0.5 font-bold uppercase tracking-wider text-[10px]">Found Pending User:</p>
-                        <p className="font-bold text-zinc-900 dark:text-white">{searchedPendingUser.displayName || 'No Name'}</p>
-                        <p className="text-xs text-zinc-500 dark:text-zinc-400">{searchedPendingUser.email || searchedPendingUser.phone}</p>
+                        <p className="font-bold">{foundUser.displayName || 'No Name'}</p>
+                        <p className="text-sm text-zinc-500 dark:text-zinc-400">{foundUser.phone}</p>
+                        <p className="text-sm text-zinc-500 dark:text-zinc-400">{foundUser.email}</p>
                       </div>
                     </div>
+                  ) : (
+                    <>
+                      <div>
+                        <label className="block text-sm font-medium text-zinc-500 dark:text-zinc-400 mb-1">WhatsApp Number *</label>
+                        <input
+                          type="text"
+                          value={newUserForm.phone}
+                          onChange={(e) => setNewUserForm({ ...newUserForm, phone: e.target.value })}
+                          placeholder="+923111222333"
+                          className="w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-2 focus:outline-none focus:border-emerald-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-zinc-500 dark:text-zinc-400 mb-1">Name (Optional)</label>
+                        <input
+                          type="text"
+                          value={newUserForm.displayName}
+                          onChange={(e) => setNewUserForm({ ...newUserForm, displayName: e.target.value })}
+                          placeholder="John Doe"
+                          className="w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-2 focus:outline-none focus:border-emerald-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-zinc-500 dark:text-zinc-400 mb-1">Email (Optional)</label>
+                        <input
+                          type="email"
+                          value={newUserForm.email}
+                          onChange={(e) => setNewUserForm({ ...newUserForm, email: e.target.value })}
+                          placeholder="user@example.com"
+                          className="w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-2 focus:outline-none focus:border-emerald-500"
+                          disabled={searchStatus === 'found' || (profile?.role as string) === 'user_manager' || (profile?.role as string) === 'manager'}
+                        />
+                      </div>
+                    </>
                   )}
-                  <div>
-                    <label className="block text-sm font-medium text-zinc-500 dark:text-zinc-400 mb-1">Email</label>
-                    <input
-                      type="email"
-                      value={newUserForm.email}
-                      onChange={(e) => setNewUserForm({ ...newUserForm, email: e.target.value })}
-                      placeholder="user@example.com"
-                      disabled={!!searchedPendingUser}
-                      className="w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-2 focus:outline-none focus:border-emerald-500 disabled:opacity-50"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-zinc-500 dark:text-zinc-400 mb-1">WhatsApp Number</label>
-                    <input
-                      type="text"
-                      value={newUserForm.phone}
-                      onChange={(e) => setNewUserForm({ ...newUserForm, phone: e.target.value })}
-                      placeholder="+1234567890"
-                      disabled={!!searchedPendingUser}
-                      className="w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-2 focus:outline-none focus:border-emerald-500 disabled:opacity-50"
-                    />
-                  </div>
                   <div className="flex items-center gap-4">
                     <div className="flex-1">
                       <label className="block text-sm font-medium text-zinc-500 dark:text-zinc-400 mb-1">Role</label>
@@ -1659,49 +1758,91 @@ export default function UserManagement() {
                       </select>
                     </div>
                     <div className="flex-1">
-                      <label className="block text-sm font-medium text-zinc-500 dark:text-zinc-400 mb-1">Expiry Date</label>
-                      <input
-                        type="date"
-                        value={newUserForm.expiryDate}
-                        onChange={(e) => setNewUserForm({ ...newUserForm, expiryDate: e.target.value })}
+                      <label className="block text-sm font-medium text-zinc-500 dark:text-zinc-400 mb-1">Status</label>
+                      <select
+                        value={newUserForm.status}
+                        onChange={(e) => setNewUserForm({ ...newUserForm, status: e.target.value as 'pending' | 'active' })}
                         className="w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-emerald-500"
-                      />
+                      >
+                        <option value="pending">Pending</option>
+                        <option value="active">Active</option>
+                      </select>
                     </div>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-zinc-500 dark:text-zinc-400 mb-1">Expiry Date (Optional)</label>
+                    <input
+                      type="date"
+                      value={newUserForm.expiryDate}
+                      onChange={(e) => setNewUserForm({ ...newUserForm, expiryDate: e.target.value })}
+                      className="w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-2 focus:outline-none focus:border-emerald-500"
+                    />
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div>
+                    <label className="block text-sm font-medium text-zinc-500 dark:text-zinc-400 mb-1">WhatsApp Number</label>
+                    <input
+                      type="text"
+                      value={newUserForm.phone}
+                      onChange={(e) => setNewUserForm({ ...newUserForm, phone: e.target.value })}
+                      placeholder="+923111222333"
+                      className="w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-2 focus:outline-none focus:border-emerald-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-zinc-500 dark:text-zinc-400 mb-1">Email</label>
+                    <input
+                      type="email"
+                      value={newUserForm.email}
+                      onChange={(e) => setNewUserForm({ ...newUserForm, email: e.target.value })}
+                      placeholder="user@example.com"
+                      className="w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-2 focus:outline-none focus:border-emerald-500"
+                    />
                   </div>
                 </>
               )}
             </div>
 
-            <div className="p-4 md:p-6 border-t border-zinc-200 dark:border-zinc-800 flex gap-4 shrink-0">
+            <div className="p-4 md:p-6 border-t border-zinc-200 dark:border-zinc-800 flex gap-3 shrink-0">
               <Button
-                onClick={() => { setIsAddUserModalOpen(false); setSearchedPendingUser(null); setSearchPendingQuery(''); setSearchPendingError(null); }}
+                onClick={() => { setIsAddUserModalOpen(false); setSearchStatus('idle'); setFoundUser(null); }}
                 variant="secondary"
-                className="flex-1 py-3"
+                className="flex-1"
               >
                 Cancel
               </Button>
-              {(profile?.role === 'user_manager' || profile?.role === 'manager' || profile?.role === 'owner') && !searchedPendingUser ? (
+              {(profile?.role === 'admin' || profile?.role === 'owner') ? (
                 <Button
-                  onClick={handleSearchPendingUser}
+                  onClick={handleAddUser}
                   variant="emerald"
-                  className="flex-1 py-3"
-                  loading={processing.searchPending}
-                  icon={<Search className="w-5 h-5" />}
+                  className="flex-1"
+                  loading={processing.addUser}
+                  icon={<UserPlus className="w-4 h-4" />}
                 >
-                  Search
+                  Add User
+                </Button>
+              ) : searchStatus === 'found' ? (
+                <Button
+                  onClick={handleAddUser}
+                  variant="emerald"
+                  className="flex-1"
+                  loading={processing.addUser}
+                  icon={<UserPlus className="w-4 h-4" />}
+                >
+                  Claim User
                 </Button>
               ) : (
-                (!profile || (profile.role !== 'user_manager' && profile.role !== 'manager') || searchedPendingUser) && (
-                  <Button
-                    onClick={searchedPendingUser ? handleClaimPendingUser : handleAddUser}
-                    variant="emerald"
-                    className="flex-1 py-3"
-                    loading={searchedPendingUser ? processing.claim : processing.addUser}
-                    icon={<Check className="w-5 h-5" />}
-                  >
-                    {searchedPendingUser ? 'Claim & Update' : 'Add User'}
-                  </Button>
-                )
+                <Button
+                  onClick={handleSearchUser}
+                  variant="emerald"
+                  className="flex-1"
+                  loading={searchStatus === 'searching'}
+                  icon={<Search className="w-4 h-4" />}
+                >
+                  Search User
+                </Button>
               )}
             </div>
           </div>

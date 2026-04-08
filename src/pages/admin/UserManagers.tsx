@@ -84,10 +84,8 @@ export default function UserManagers() {
     try {
       await updateDoc(doc(db, 'users', managerToRemove), { isUserManager: false });
       setManagers(prev => prev.filter(m => m.uid !== managerToRemove));
-      setManagerToRemove(null);
     } catch (error) {
       console.error('Error removing manager:', error);
-      setManagerToRemove(null);
     } finally {
       setProcessing(prev => ({ ...prev, remove: false }));
     }

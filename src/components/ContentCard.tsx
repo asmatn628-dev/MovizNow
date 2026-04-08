@@ -37,7 +37,7 @@ const ContentCard = React.memo(({
   const seasons = React.useMemo(() => {
     if (content.type === 'series' && content.seasons) {
       try {
-        return JSON.parse(content.seasons);
+        return Array.isArray(content.seasons) ? content.seasons : JSON.parse(content.seasons || '[]');
       } catch (e) {
         return [];
       }
@@ -52,7 +52,7 @@ const ContentCard = React.memo(({
     }
     if (content.trailers) {
       try {
-        const additional = JSON.parse(content.trailers);
+        const additional = Array.isArray(content.trailers) ? content.trailers : JSON.parse(content.trailers || '[]');
         list.push(...additional);
       } catch (e) {}
     }
@@ -257,7 +257,7 @@ const ContentCard = React.memo(({
 
       <div className="p-3 flex flex-col flex-1 bg-zinc-50 dark:bg-zinc-900">
         <Link to={`/movie/${content.id}`} className="hover:text-emerald-500 transition-colors">
-          <h3 className="font-bold text-sm md:text-base leading-tight mb-1 line-clamp-2">{formatContentTitle(content)}</h3>
+          <h3 className="font-bold text-sm md:text-base leading-tight mb-1">{formatContentTitle(content)}</h3>
         </Link>
         <div className="flex items-center gap-2 text-zinc-500 text-sm mb-2">
           <span>{content.year}</span>
