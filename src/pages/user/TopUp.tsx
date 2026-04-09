@@ -48,7 +48,6 @@ export default function TopUp() {
   }, [profile?.uid]);
 
   const isExtend = location.state?.isExtend;
-  const isTrial = profile?.role === 'trial';
   const isExpired = profile?.status === 'expired';
 
   const actionText = isExtend ? 'Extend' : (isExpired && profile?.role === 'user' ? 'Renew' : 'Get');

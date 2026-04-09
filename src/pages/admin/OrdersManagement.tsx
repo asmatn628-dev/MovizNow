@@ -155,7 +155,7 @@ export default function OrdersManagement() {
         newExpiryDate.setMonth(newExpiryDate.getMonth() + months);
 
         await updateDoc(userRef, {
-          role: 'user', // Change to user if trial
+          role: 'user',
           status: 'active',
           expiryDate: newExpiryDate.toISOString()
         });
@@ -261,7 +261,6 @@ export default function OrdersManagement() {
             >
               <option value="all">All Roles</option>
               <option value="user">User</option>
-              <option value="trial">Trial</option>
               <option value="selected_content">Selected Content</option>
             </select>
           </div>

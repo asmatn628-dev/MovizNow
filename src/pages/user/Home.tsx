@@ -209,8 +209,6 @@ export default function Home({ onOpenMediaModal }: { onOpenMediaModal: () => voi
       case 'manager': return 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/30';
       case 'content_manager': return 'bg-blue-500/10 text-blue-700 dark:text-blue-400 border-blue-500/30';
       case 'selected_content': return 'bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-500/30';
-      case 'temporary': return 'bg-orange-500/10 text-orange-700 dark:text-orange-400 border-orange-500/30';
-      case 'trial': return 'bg-yellow-500/10 text-yellow-700 dark:text-yellow-400 border-yellow-500/30';
       default: return 'bg-zinc-500/10 text-zinc-700 dark:text-zinc-400 border-zinc-500/30';
     }
   };
@@ -269,8 +267,8 @@ export default function Home({ onOpenMediaModal }: { onOpenMediaModal: () => voi
 
     if (!search) {
       result.sort((a, b) => {
-        // For temporary and selected_content users, prioritize assigned content
-        if (profile?.role === 'temporary' || profile?.role === 'selected_content') {
+        // For selected_content users, prioritize assigned content
+        if (profile?.role === 'selected_content') {
           const aAssigned = profile.assignedContent?.some(id => id === a.id || id.startsWith(`${a.id}:`)) ? 1 : 0;
           const bAssigned = profile.assignedContent?.some(id => id === b.id || id.startsWith(`${b.id}:`)) ? 1 : 0;
           if (aAssigned !== bAssigned) return bAssigned - aAssigned;
@@ -345,7 +343,7 @@ export default function Home({ onOpenMediaModal }: { onOpenMediaModal: () => voi
               <p className="text-yellow-700 dark:text-yellow-500/80 text-sm sm:text-lg font-medium">Your account activation is pending. Please Get Membership or Add any content to cart to activate your account.</p>
             </div>
             <div className="flex flex-col gap-2 sm:gap-3 min-w-[140px] sm:min-w-[220px] shrink-0">
-              {(profile?.role === 'trial' || profile?.role === 'user') && (
+              {profile?.role === 'user' && (
                 <Link to="/top-up" className="flex items-center justify-center gap-1.5 sm:gap-2 bg-yellow-500 text-white dark:text-black px-3 sm:px-6 py-2 sm:py-3 rounded-lg sm:rounded-xl text-xs sm:text-base font-bold hover:bg-yellow-400 transition-all active:scale-95 shadow-lg shadow-yellow-500/20 border border-white/20">
                   Get Membership
                 </Link>
@@ -361,23 +359,7 @@ export default function Home({ onOpenMediaModal }: { onOpenMediaModal: () => voi
             </div>
           </div>
         )}
-        {profile?.status === 'expired' && profile?.role === 'trial' && (
-          <div className="bg-red-500/10 border border-red-500/20 text-red-500 p-4 sm:p-6 rounded-2xl mb-8 flex flex-row items-center justify-between gap-4 sm:gap-8">
-            <div className="flex-1 min-w-0">
-              <h3 className="font-bold text-lg sm:text-2xl mb-1 sm:mb-2">Trial Expired</h3>
-              <p className="text-red-500/80 text-sm sm:text-lg font-medium">Your Free Trial is Expired. Buy membership to enjoy watching.</p>
-            </div>
-            <div className="flex flex-col gap-2 sm:gap-3 min-w-[140px] sm:min-w-[220px] shrink-0">
-              <Link to="/top-up" className="flex items-center justify-center gap-1.5 sm:gap-2 bg-red-500 text-white px-3 sm:px-6 py-2 sm:py-3 rounded-lg sm:rounded-xl text-xs sm:text-base font-bold hover:bg-red-600 transition-all active:scale-95 shadow-lg shadow-red-500/20 border border-white/20">
-                Buy Now
-              </Link>
-              <a href={`https://wa.me/92${settings?.supportNumber || '3363284466'}`} target="_blank" rel="noreferrer" className="flex items-center justify-center gap-1.5 sm:gap-2 bg-red-500/10 border border-red-500/30 px-3 sm:px-6 py-2 sm:py-3 rounded-lg sm:rounded-xl text-xs sm:text-base font-bold hover:bg-red-500/20 transition-all active:scale-95">
-                <MessageCircle className="w-3 h-3 sm:w-5 sm:h-5" /> Admin
-              </a>
-            </div>
-          </div>
-        )}
-        {profile?.status === 'expired' && profile?.role !== 'trial' && (
+        {profile?.status === 'expired' && (
           <div className="bg-red-500/10 border border-red-500/20 text-red-500 p-4 sm:p-6 rounded-2xl mb-8 flex flex-row items-center justify-between gap-4 sm:gap-8">
             <div className="flex-1 min-w-0">
               <h3 className="font-bold text-lg sm:text-2xl mb-1 sm:mb-2">Membership Expired</h3>
@@ -412,8 +394,8 @@ export default function Home({ onOpenMediaModal }: { onOpenMediaModal: () => voi
                   const qualityObj = qualities.find(q => q.id === content.qualityId);
                   const contentLangs = languages.filter(l => content.languageIds?.includes(l.id)).map(l => l.name).join(', ');
                   const contentGenres = genres.filter(g => content.genreIds?.includes(g.id)).map(g => g.name).join(', ');
-                  const isAssigned = (profile?.role === 'temporary' || profile?.role === 'selected_content') && profile.assignedContent?.some((id: string) => id === content.id || id.startsWith(`${content.id}:`));
-                  const isLocked = profile?.status !== 'active' || ((profile?.role === 'temporary' || profile?.role === 'selected_content') && !isAssigned);
+                  const isAssigned = profile?.role === 'selected_content' && profile.assignedContent?.some((id: string) => id === content.id || id.startsWith(`${content.id}:`));
+                  const isLocked = profile?.status !== 'active' || (profile?.role === 'selected_content' && !isAssigned);
                   const isPending = profile?.status === 'pending';
                   
                   return (

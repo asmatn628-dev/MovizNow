@@ -79,7 +79,14 @@ export function ContentProvider({ children }: { children: React.ReactNode }) {
           
           // Update search_index
           const searchIndex = rawContent.filter(c => c.status === 'published').map(c => {
-            const seasons = Array.isArray(c.seasons) ? c.seasons : [];
+            let seasons: any[] = [];
+            if (c.seasons) {
+              try {
+                seasons = Array.isArray(c.seasons) ? c.seasons : JSON.parse(c.seasons as string);
+              } catch (e) {
+                console.error("Failed to parse seasons for search index", e);
+              }
+            }
             const seasonsInfo = seasons.map(s => {
               const lastEp = s.episodes && s.episodes.length > 0 ? s.episodes[s.episodes.length - 1].episodeNumber : '';
               return `${s.seasonNumber}:${lastEp}`;
@@ -89,7 +96,31 @@ export function ContentProvider({ children }: { children: React.ReactNode }) {
           });
           setDoc(doc(db, 'metadata', 'search_index'), { data: searchIndex }).catch(e => console.error("Failed to update search_index", e));
 
-          localStorage.setItem('content_cache', JSON.stringify(rawContent));
+          try {
+            const sanitizedContent = rawContent.map(c => {
+              let minimalSeasons: any[] = [];
+              if (c.seasons) {
+                try {
+                  const parsedSeasons = Array.isArray(c.seasons) ? c.seasons : JSON.parse(c.seasons as string);
+                  minimalSeasons = parsedSeasons.map((s: any) => ({
+                    seasonNumber: s.seasonNumber,
+                    episodes: s.episodes && s.episodes.length > 0 ? [{ episodeNumber: s.episodes[s.episodes.length - 1].episodeNumber }] : []
+                  }));
+                } catch (e) {}
+              }
+              return {
+                ...c,
+                movieLinks: undefined,
+                fullSeasonZip: undefined,
+                fullSeasonMkv: undefined,
+                seasons: minimalSeasons.length > 0 ? minimalSeasons : undefined
+              };
+            });
+            localStorage.setItem('content_cache', JSON.stringify(sanitizedContent));
+          } catch (e) {
+            console.error("Failed to save content cache", e);
+          }
+          
           setContentList(rawContent);
           setLoading(false);
         }, (error) => {
@@ -136,7 +167,11 @@ export function ContentProvider({ children }: { children: React.ReactNode }) {
                 updatedAt: createdAt
               } as unknown as Content;
             });
-            localStorage.setItem('content_cache', JSON.stringify(parsedContent));
+            try {
+              localStorage.setItem('content_cache', JSON.stringify(parsedContent));
+            } catch (e) {
+              console.error("Failed to save content cache", e);
+            }
             setContentList(parsedContent);
             setLoading(false);
           } else {
@@ -146,15 +181,31 @@ export function ContentProvider({ children }: { children: React.ReactNode }) {
               const snapshot = await getDocs(q);
               const rawContent = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() } as Content));
               
-              const sanitizedContent = rawContent.map(c => ({
-                ...c,
-                movieLinks: undefined,
-                fullSeasonZip: undefined,
-                fullSeasonMkv: undefined,
-                seasons: undefined
-              }));
+              const sanitizedContent = rawContent.map(c => {
+                let minimalSeasons: any[] = [];
+                if (c.seasons) {
+                  try {
+                    const parsedSeasons = Array.isArray(c.seasons) ? c.seasons : JSON.parse(c.seasons as string);
+                    minimalSeasons = parsedSeasons.map((s: any) => ({
+                      seasonNumber: s.seasonNumber,
+                      episodes: s.episodes && s.episodes.length > 0 ? [{ episodeNumber: s.episodes[s.episodes.length - 1].episodeNumber }] : []
+                    }));
+                  } catch (e) {}
+                }
+                return {
+                  ...c,
+                  movieLinks: undefined,
+                  fullSeasonZip: undefined,
+                  fullSeasonMkv: undefined,
+                  seasons: minimalSeasons.length > 0 ? minimalSeasons : undefined
+                };
+              });
               
-              localStorage.setItem('content_cache', JSON.stringify(sanitizedContent));
+              try {
+                localStorage.setItem('content_cache', JSON.stringify(sanitizedContent));
+              } catch (e) {
+                console.error("Failed to save content cache", e);
+              }
               setContentList(rawContent);
             } catch (error) {
               console.error("Error fetching fallback content", error);

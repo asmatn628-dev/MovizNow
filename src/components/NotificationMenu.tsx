@@ -15,6 +15,7 @@ export const NotificationMenu: React.FC<NotificationMenuProps> = () => {
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [isOpen, setIsOpen] = useState(false);
   const [localLastCheck, setLocalLastCheck] = useState<Date | null>(null);
+  const mountTime = useRef(new Date());
   const menuRef = useRef<HTMLDivElement>(null);
 
   useModalBehavior(isOpen, () => setIsOpen(false));
@@ -29,7 +30,7 @@ export const NotificationMenu: React.FC<NotificationMenuProps> = () => {
     const q = query(collection(db, 'notifications'), orderBy('createdAt', 'desc'));
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const notifs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as AppNotification))
-        .filter(n => !n.targetUserId || n.targetUserId === profile.uid);
+        .filter(n => !n.targetUserId && (!n.targetUserIds || n.targetUserIds.length === 0) || (n.targetUserId === profile.uid) || (n.targetUserIds?.includes(profile.uid)));
       setNotifications(notifs);
     });
 
@@ -69,12 +70,11 @@ export const NotificationMenu: React.FC<NotificationMenuProps> = () => {
 
   const lastCheck = (localLastCheck && (!profile.lastNotificationCheck || localLastCheck > new Date(profile.lastNotificationCheck)))
     ? localLastCheck
-    : (profile.lastNotificationCheck ? new Date(profile.lastNotificationCheck) : new Date(profile.createdAt));
+    : (profile.lastNotificationCheck ? new Date(profile.lastNotificationCheck) : mountTime.current);
 
-  const unreadCount = notifications.filter(n => {
+  const unreadCount = isOpen ? 0 : notifications.filter(n => {
     const notifDate = new Date(n.createdAt);
-    const userCreatedAt = new Date(profile.createdAt);
-    return notifDate > lastCheck && notifDate > userCreatedAt;
+    return notifDate > lastCheck;
   }).length;
 
   return (
@@ -111,43 +111,60 @@ export const NotificationMenu: React.FC<NotificationMenuProps> = () => {
               <div className="divide-y divide-zinc-800/50">
                 {notifications.map(notification => {
                   const isNew = new Date(notification.createdAt) > lastCheck;
+                  const targetUrl = notification.buttonUrl || (notification.contentId ? `/movie/${notification.contentId}` : null);
+                  const actionLabel = notification.buttonLabel || (notification.contentId ? (notification.type === 'series' ? 'View Series' : 'View Movie') : null);
 
-                  return (
-                    <Link 
-                      key={notification.id}
-                      to={`/movie/${notification.contentId}`}
-                      onClick={() => setIsOpen(false)}
-                      className={`block p-4 hover:bg-zinc-200 dark:hover:bg-zinc-800/50 transition-colors ${isNew ? 'bg-emerald-500/5' : ''}`}
-                    >
-                      <div className="flex gap-4">
-                        {notification.posterUrl ? (
-                          <img 
-                            src={notification.posterUrl} 
-                            alt="Poster" 
-                            className="w-12 h-16 object-cover rounded-md shrink-0 border border-zinc-200 dark:border-zinc-800"
-                            referrerPolicy="no-referrer"
-                          />
-                        ) : (
-                          <div className="w-12 h-16 bg-zinc-100 dark:bg-zinc-800 rounded-md shrink-0 flex items-center justify-center">
-                            <Bell className="w-5 h-5 text-zinc-600" />
-                          </div>
-                        )}
-                        <div className="flex-1 min-w-0">
-                          <h4 className="text-sm font-bold text-zinc-900 dark:text-white mb-1 leading-tight">{notification.title}</h4>
-                          <p className="text-xs text-zinc-500 dark:text-zinc-400 line-clamp-2 mb-2">{notification.body}</p>
-                          <div className="flex items-center justify-between">
-                            <span className="text-[10px] text-zinc-500 font-medium">
-                              {formatDistanceToNow(new Date(notification.createdAt), { addSuffix: true })}
-                            </span>
+                  const content = (
+                    <div className="flex gap-4">
+                      {notification.posterUrl ? (
+                        <img 
+                          src={notification.posterUrl} 
+                          alt="Poster" 
+                          className="w-12 h-16 object-cover rounded-md shrink-0 border border-zinc-200 dark:border-zinc-800"
+                          referrerPolicy="no-referrer"
+                        />
+                      ) : (
+                        <div className="w-12 h-16 bg-zinc-100 dark:bg-zinc-800 rounded-md shrink-0 flex items-center justify-center">
+                          <Bell className="w-5 h-5 text-zinc-600" />
+                        </div>
+                      )}
+                      <div className="flex-1 min-w-0">
+                        <h4 className="text-sm font-bold text-zinc-900 dark:text-white mb-1 leading-tight">{notification.title}</h4>
+                        <p className="text-xs text-zinc-500 dark:text-zinc-400 line-clamp-2 mb-2">{notification.body}</p>
+                        <div className="flex items-center justify-between">
+                          <span className="text-[10px] text-zinc-500 font-medium">
+                            {formatDistanceToNow(new Date(notification.createdAt), { addSuffix: true })}
+                          </span>
+                          {actionLabel && (
                             <span className="text-[10px] font-bold text-emerald-500 uppercase tracking-wider">
-                              {notification.type === 'movie' || notification.title.includes('Movie') ? 'View Movie' : 
-                               notification.type === 'series' || notification.title.includes('Series') ? 'View Series' : 
-                               'View Content'}
+                              {actionLabel}
                             </span>
-                          </div>
+                          )}
                         </div>
                       </div>
-                    </Link>
+                    </div>
+                  );
+
+                  if (targetUrl) {
+                    return (
+                      <Link 
+                        key={notification.id}
+                        to={targetUrl}
+                        onClick={() => setIsOpen(false)}
+                        className={`block p-4 hover:bg-zinc-200 dark:hover:bg-zinc-800/50 transition-colors ${isNew ? 'bg-emerald-500/5' : ''}`}
+                      >
+                        {content}
+                      </Link>
+                    );
+                  }
+
+                  return (
+                    <div 
+                      key={notification.id}
+                      className={`block p-4 hover:bg-zinc-200 dark:hover:bg-zinc-800/50 transition-colors ${isNew ? 'bg-emerald-500/5' : ''}`}
+                    >
+                      {content}
+                    </div>
                   );
                 })}
               </div>

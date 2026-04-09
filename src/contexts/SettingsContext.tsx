@@ -48,7 +48,7 @@ export const SettingsProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           ],
           adminTabsOrder: [
             'Dashboard', 'Analytics', 'Orders', 'Content', 'Users', 
-            'UserManagers', 'TemporaryUsers', 'SelectedContent', 
+            'UserManagers', 'SelectedContent', 
             'Income', 'ErrorLinks', 'ReportedLinks', 'Notifications', 'Requests'
           ]
         });

@@ -279,19 +279,12 @@ export default function MovieDetails() {
           let recent: Content[] = recentStr ? JSON.parse(recentStr) : [];
           // Remove if already exists
           recent = recent.filter(c => c.id !== mergedContent.id);
-          // Add to front, keep only minimal data to save space
-          const minimalContent = {
-            id: mergedContent.id,
-            title: mergedContent.title,
-            year: mergedContent.year,
-            posterUrl: mergedContent.posterUrl,
-            type: mergedContent.type,
-            qualityId: mergedContent.qualityId,
-            languageIds: mergedContent.languageIds,
-            genreIds: mergedContent.genreIds,
-            createdAt: mergedContent.createdAt
-          } as Content;
-          recent.unshift(minimalContent);
+          
+          // Save full content to local storage for offline access
+          localStorage.setItem(`movie_details_${mergedContent.id}`, JSON.stringify(mergedContent));
+
+          // Add to front, keep full data as requested
+          recent.unshift(mergedContent);
           // Keep max 100
           if (recent.length > 100) recent = recent.slice(0, 100);
           localStorage.setItem('recently_viewed', JSON.stringify(recent));
@@ -527,13 +520,12 @@ export default function MovieDetails() {
 
   const isPending = profile?.status === 'pending';
   const isExpired = profile?.status === 'expired';
-  const isTemp = profile?.role === 'temporary';
   const isSelectedContent = profile?.role === 'selected_content';
   const isAssigned = profile?.assignedContent?.some(id => id === content.id || id.startsWith(`${content.id}:`));
-  const canPlay = profile?.role === 'admin' || profile?.role === 'owner' || profile?.role === 'content_manager' || profile?.role === 'manager' || (profile?.status === 'active' && (!(isTemp || isSelectedContent || content.status === 'selected_content') || isAssigned));
+  const canPlay = profile?.role === 'admin' || profile?.role === 'owner' || profile?.role === 'content_manager' || profile?.role === 'manager' || (profile?.status === 'active' && (!(isSelectedContent || content.status === 'selected_content') || isAssigned));
 
   const allowedSeasons = profile?.assignedContent?.filter(id => id.startsWith(`${content.id}:`)).map(id => id.split(':')[1]) || [];
-  const hasFullAccess = profile?.role === 'admin' || profile?.role === 'owner' || profile?.role === 'content_manager' || profile?.role === 'manager' || (!(isTemp || isSelectedContent || content.status === 'selected_content')) || profile?.assignedContent?.includes(content.id);
+  const hasFullAccess = profile?.role === 'admin' || profile?.role === 'owner' || profile?.role === 'content_manager' || profile?.role === 'manager' || (!(isSelectedContent || content.status === 'selected_content')) || profile?.assignedContent?.includes(content.id);
 
   const toggleWatchLater = async () => {
     if (!profile) return;
@@ -571,37 +563,38 @@ export default function MovieDetails() {
   };
 
   const handlePlayClick = (url: string, linkName?: string, linkId?: string, isZip?: boolean, tinyUrl?: string) => {
-    // Allow Sample link to be played by anyone
-    if (linkId === 'sample') {
-      setLinkPopup({ isOpen: true, url, name: linkName || 'Sample', id: linkId, isZip, tinyUrl });
-      return;
-    }
+    // Check eligibility before opening links
+    const checkEligibility = () => {
+      if (linkId === 'sample') return true;
+      if (!profile) {
+        setShowLoginPrompt(true);
+        return false;
+      }
+      if (!canPlay) {
+        if (isPending) {
+          setAlertConfig({ 
+            isOpen: true, 
+            title: 'Account Pending', 
+            message: 'Your account activation is pending. Please Get Membership or Add any content to cart to activate your account.' 
+          });
+        } else if (isExpired) {
+          if (profile?.role === 'trial') {
+            setAlertConfig({ isOpen: true, title: 'Trial Expired', message: 'Your free Trial has expired. Please get Membership to continue watching.' });
+          } else {
+            setAlertConfig({ isOpen: true, title: 'Membership Expired', message: 'Your membership has expired. Please renew to continue watching.' });
+          }
+        } else {
+          setAlertConfig({ isOpen: true, title: 'Content Locked', message: 'This content is locked. Please contact admin to get access to this movie/series.' });
+        }
+        return false;
+      }
+      return true;
+    };
+
+    if (!checkEligibility()) return;
 
     if (isOffline) {
       setAlertConfig({ isOpen: true, title: 'No Internet', message: 'You need an internet connection to open this link.' });
-      return;
-    }
-
-    if (!profile) {
-      setShowLoginPrompt(true);
-      return;
-    }
-    if (!canPlay) {
-      if (isPending) {
-        setAlertConfig({ 
-          isOpen: true, 
-          title: 'Account Pending', 
-          message: 'Your account activation is pending. Please Get Membership or Add any content to cart to activate your account.' 
-        });
-      } else if (isExpired) {
-        if (profile?.role === 'trial') {
-          setAlertConfig({ isOpen: true, title: 'Trial Expired', message: 'Your free Trial has expired. Please get Membership to continue watching.' });
-        } else {
-          setAlertConfig({ isOpen: true, title: 'Membership Expired', message: 'Your membership has expired. Please renew to continue watching.' });
-        }
-      } else {
-        setAlertConfig({ isOpen: true, title: 'Content Locked', message: 'This content is locked. Please contact admin to get access to this movie/series.' });
-      }
       return;
     }
     

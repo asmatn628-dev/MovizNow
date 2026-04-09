@@ -53,7 +53,6 @@ export default function AdminLayout() {
     { id: 'Content', path: '/admin/content', label: 'Movies & Series', icon: Film },
     { id: 'Users', path: '/admin/users', label: 'Membership', icon: Users },
     { id: 'UserManagers', path: '/admin/user-managers', label: 'User Managers', icon: Users },
-    { id: 'TemporaryUsers', path: '/admin/temporary-users', label: 'Temporary Users', icon: Clock },
     { id: 'SelectedContent', path: '/admin/selected-content', label: 'Selected Content Only', icon: Film },
     { id: 'Income', path: '/admin/income', label: 'Income / Earn', icon: DollarSign },
     { id: 'ErrorLinks', path: '/admin/error-links', label: 'Error Links', icon: AlertTriangle },
@@ -95,7 +94,7 @@ export default function AdminLayout() {
   return (
     <div className="min-h-screen bg-white dark:bg-zinc-950 text-zinc-900 dark:text-white flex flex-col md:flex-row transition-colors duration-300">
       {/* Mobile Header */}
-      <div className="md:hidden flex items-center justify-between p-4 bg-zinc-50 dark:bg-zinc-900 border-b border-zinc-200 dark:border-zinc-800">
+      <div className="md:hidden sticky top-0 z-40 h-16 flex items-center justify-between p-4 bg-white dark:bg-zinc-950 border-b border-zinc-200 dark:border-zinc-800 transition-colors duration-300">
         <h1 className="text-xl font-bold text-emerald-500 flex items-center gap-3">
           <img src="/logo.svg?v=2" alt="Logo" className="w-6 h-6" />
           <span className="tracking-tight">
@@ -124,7 +123,7 @@ export default function AdminLayout() {
 
       {/* Sidebar */}
       <aside className={clsx(
-        "fixed md:static inset-y-0 left-0 z-50 w-64 bg-zinc-50 dark:bg-zinc-900 border-r border-zinc-200 dark:border-zinc-800 flex flex-col transform transition-transform duration-300 ease-in-out",
+        "fixed md:sticky top-0 inset-y-0 left-0 z-50 w-64 h-screen bg-zinc-50 dark:bg-zinc-900 border-r border-zinc-200 dark:border-zinc-800 flex flex-col transform transition-transform duration-300 ease-in-out",
         isMobileMenuOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0"
       )}>
         <div className="p-6 hidden md:block">
@@ -206,7 +205,7 @@ export default function AdminLayout() {
       )}
 
       {/* Main Content */}
-      <main className="flex-1 overflow-auto p-4 md:p-8">
+      <main className="flex-1 p-4 md:p-8">
         <Outlet />
       </main>
 

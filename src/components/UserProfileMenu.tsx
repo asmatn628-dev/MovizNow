@@ -57,7 +57,6 @@ export function UserProfileMenu({ onOpenLogoutModal }: { onOpenLogoutModal?: () 
       case 'manager': return 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/30';
       case 'content_manager': return 'bg-blue-500/10 text-blue-700 dark:text-blue-400 border-blue-500/30';
       case 'selected_content': return 'bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-500/30';
-      case 'temporary': return 'bg-orange-500/10 text-orange-700 dark:text-orange-400 border-orange-500/30';
       case 'trial': return 'bg-yellow-500/10 text-yellow-700 dark:text-yellow-400 border-yellow-500/30';
       default: return 'bg-zinc-500/10 text-zinc-700 dark:text-zinc-400 border-zinc-500/30';
     }
@@ -99,7 +98,17 @@ export function UserProfileMenu({ onOpenLogoutModal }: { onOpenLogoutModal?: () 
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="font-bold text-zinc-900 dark:text-white truncate">{profile.displayName || 'User'}</p>
-                  <p className="text-xs text-zinc-500 truncate">{profile.phone || (profile.email?.endsWith('@moviznow.com') ? 'No Email' : profile.email)}</p>
+                  <div className="space-y-0.5">
+                    {profile.email && !profile.email.endsWith('@moviznow.com') && (
+                      <p className="text-[10px] text-zinc-500 truncate">{profile.email}</p>
+                    )}
+                    {profile.phone && (
+                      <p className="text-[10px] text-zinc-500 truncate">{profile.phone}</p>
+                    )}
+                    {!profile.phone && profile.email?.endsWith('@moviznow.com') && (
+                      <p className="text-[10px] text-zinc-500 truncate">No Contact Info</p>
+                    )}
+                  </div>
                 </div>
               </div>
               

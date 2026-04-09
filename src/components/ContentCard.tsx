@@ -66,8 +66,8 @@ const ContentCard = React.memo(({
     return list;
   }, [content, seasons]);
 
-  const isAssigned = (profile?.role === 'temporary' || profile?.role === 'selected_content') && profile.assignedContent?.some((id: string) => id === content.id || id.startsWith(`${content.id}:`));
-  const isLocked = profile?.status !== 'active' || ((profile?.role === 'temporary' || profile?.role === 'selected_content') && !isAssigned);
+  const isAssigned = profile?.role === 'selected_content' && profile.assignedContent?.some((id: string) => id === content.id || id.startsWith(`${content.id}:`));
+  const isLocked = profile?.status !== 'active' || (profile?.role === 'selected_content' && !isAssigned);
   const isPending = profile?.status === 'pending';
   
   const qualityObj = qualities.find(q => q.id === content.qualityId);
@@ -217,7 +217,7 @@ const ContentCard = React.memo(({
             </button>
           )
         )}
-        {isLocked && (profile?.role === 'trial' || profile?.role === 'user') && (
+        {isLocked && profile?.role === 'user' && (
           <Link
             to="/top-up"
             onClick={(e) => e.stopPropagation()}

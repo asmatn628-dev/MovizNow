@@ -31,7 +31,6 @@ import LanguageManagement from './pages/admin/LanguageManagement';
 import QualityManagement from './pages/admin/QualityManagement';
 import UserManagement from './pages/admin/UserManagement';
 import UserManagers from './pages/admin/UserManagers';
-import TemporaryUsers from './pages/admin/TemporaryUsers';
 import SelectedContentUsers from './pages/admin/SelectedContentUsers';
 import IncomeManagement from './pages/admin/IncomeManagement';
 import ErrorLinks from './pages/admin/ErrorLinks';
@@ -99,7 +98,6 @@ export default function App() {
                       <Route path="qualities" element={<QualityManagement />} />
                       <Route path="users" element={<UserManagement />} />
                       <Route path="user-managers" element={<UserManagers />} />
-                      <Route path="temporary-users" element={<TemporaryUsers />} />
                       <Route path="selected-content" element={<SelectedContentUsers />} />
                       <Route path="income" element={<IncomeManagement />} />
                       <Route path="error-links" element={<ErrorLinks />} />

@@ -1,4 +1,4 @@
-export type Role = 'owner' | 'admin' | 'user' | 'temporary' | 'selected_content' | 'content_manager' | 'trial' | 'user_manager' | 'manager';
+export type Role = 'owner' | 'admin' | 'user' | 'selected_content' | 'content_manager' | 'trial' | 'user_manager' | 'manager';
 export type Status = 'pending' | 'active' | 'expired' | 'suspended';
 
 export interface UserProfile {
@@ -30,12 +30,26 @@ export interface AppNotification {
   id: string;
   title: string;
   body: string;
-  contentId: string;
+  contentId?: string;
   posterUrl?: string;
-  type?: 'movie' | 'series';
+  type?: 'movie' | 'series' | 'custom';
   createdAt: string;
   createdBy: string;
   targetUserId?: string;
+  targetUserIds?: string[];
+  targetUserNames?: string[];
+  buttonLabel?: string;
+  buttonUrl?: string;
+}
+
+export interface NotificationTemplate {
+  id: string;
+  name: string;
+  title: string;
+  body: string;
+  buttonLabel?: string;
+  buttonUrl?: string;
+  createdAt: string;
 }
 
 export interface AnalyticsEvent {

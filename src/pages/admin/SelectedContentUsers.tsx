@@ -17,11 +17,54 @@ export default function SelectedContentUsers() {
   const [contentSearchTerm, setContentSearchTerm] = useState('');
   const [alertConfig, setAlertConfig] = useState<{ isOpen: boolean; title: string; message: string }>({ isOpen: false, title: '', message: '' });
 
-  useModalBehavior(!!selectedUser, () => setSelectedUser(null));
+  const handleSaveAccess = async () => {
+    if (!selectedUser) return;
+    try {
+      const assignedContent = Array.from(assignedIds);
+      await updateDoc(doc(db, 'users', selectedUser.uid), {
+        assignedContent: assignedContent,
+      });
+      setUsers(prev => prev.map(u => u.uid === selectedUser.uid ? { ...u, assignedContent } : u));
+      localStorage.removeItem(`pending_access_${selectedUser.uid}`);
+      setSelectedUser(null);
+      setAssignedIds(new Set());
+    } catch (error) {
+      console.error('Error updating access:', error);
+      setAlertConfig({ isOpen: true, title: 'Error', message: 'Failed to update access' });
+    }
+  };
+
+  const handleExit = async () => {
+    if (selectedUser) {
+      const pendingAccess = localStorage.getItem(`pending_access_${selectedUser.uid}`);
+      if (pendingAccess) {
+        try {
+          const assignedContent = JSON.parse(pendingAccess);
+          await updateDoc(doc(db, 'users', selectedUser.uid), {
+            assignedContent: assignedContent,
+          });
+          setUsers(prev => prev.map(u => u.uid === selectedUser.uid ? { ...u, assignedContent } : u));
+          localStorage.removeItem(`pending_access_${selectedUser.uid}`);
+        } catch (error) {
+          console.error('Error syncing access on exit:', error);
+        }
+      }
+    }
+    setSelectedUser(null);
+    setAssignedIds(new Set());
+  };
+
+  useModalBehavior(!!selectedUser, handleExit);
   useModalBehavior(alertConfig.isOpen, () => setAlertConfig(prev => ({ ...prev, isOpen: false })));
 
   const [roleFilter, setRoleFilter] = useState<Role | 'all'>('selected_content');
   const [statusFilter, setStatusFilter] = useState<Status | 'all'>('all');
+
+  useEffect(() => {
+    if (selectedUser) {
+      localStorage.setItem(`pending_access_${selectedUser.uid}`, JSON.stringify(Array.from(assignedIds)));
+    }
+  }, [assignedIds, selectedUser]);
 
   useEffect(() => {
     const fetchUsers = async () => {
@@ -74,7 +117,16 @@ export default function SelectedContentUsers() {
 
   const handleManageAccess = (user: UserProfile) => {
     setSelectedUser(user);
-    setAssignedIds(new Set(user.assignedContent || []));
+    const cached = localStorage.getItem(`pending_access_${user.uid}`);
+    if (cached) {
+      try {
+        setAssignedIds(new Set(JSON.parse(cached)));
+      } catch (e) {
+        setAssignedIds(new Set(user.assignedContent || []));
+      }
+    } else {
+      setAssignedIds(new Set(user.assignedContent || []));
+    }
   };
 
   const toggleContent = (contentId: string, seasons?: any[]) => {
@@ -123,19 +175,6 @@ export default function SelectedContentUsers() {
     setAssignedIds(newSet);
   };
 
-  const handleSaveAccess = async () => {
-    if (!selectedUser) return;
-    try {
-      await updateDoc(doc(db, 'users', selectedUser.uid), {
-        assignedContent: Array.from(assignedIds),
-      });
-      setSelectedUser(null);
-      setAssignedIds(new Set());
-    } catch (error) {
-      console.error('Error updating access:', error);
-      setAlertConfig({ isOpen: true, title: 'Error', message: 'Failed to update access' });
-    }
-  };
 
   const filteredUsers = useMemo(() => {
     let result = users;
@@ -171,7 +210,6 @@ export default function SelectedContentUsers() {
           >
             <option value="all">All Roles</option>
             <option value="selected_content">Selected Content Only</option>
-            <option value="temporary">Temporary</option>
             <option value="user">User</option>
           </select>
           <select
@@ -258,7 +296,7 @@ export default function SelectedContentUsers() {
                     className="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg pl-9 pr-3 py-1.5 text-sm focus:outline-none focus:border-emerald-500 text-zinc-900 dark:text-white transition-colors duration-300"
                   />
                 </div>
-                <button onClick={() => setSelectedUser(null)} className="text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white p-2 transition-colors">
+                <button onClick={handleExit} className="text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white p-2 transition-colors">
                   <X className="w-6 h-6" />
                 </button>
               </div>
@@ -338,7 +376,7 @@ export default function SelectedContentUsers() {
 
             <div className="p-6 border-t border-zinc-100 dark:border-zinc-800 flex justify-end gap-4">
               <button
-                onClick={() => setSelectedUser(null)}
+                onClick={handleExit}
                 className="px-6 py-2 rounded-xl font-medium text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors duration-300"
               >
                 Cancel

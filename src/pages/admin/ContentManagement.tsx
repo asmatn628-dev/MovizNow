@@ -213,6 +213,23 @@ const QualityInputs: React.FC<QualityInputsProps> = ({ links, onChange, droppabl
               </Draggable>
             ))}
             {provided.placeholder}
+            {safeLinks.length === 0 && (
+              <button
+                type="button"
+                onClick={() => {
+                  onChange([{ id: Math.random().toString(36).substr(2, 9), name: '', url: '', size: '', unit: 'MB' }]);
+                }}
+                className="w-full py-3 border-2 border-dashed border-zinc-200 dark:border-zinc-800 rounded-xl text-zinc-500 hover:text-emerald-500 hover:border-emerald-500 transition-all flex items-center justify-center gap-2"
+              >
+                <Plus className="w-4 h-4" />
+                <span className="text-sm font-medium">
+                  Add {droppableId.startsWith('movie-links') ? 'Movie' : 
+                        droppableId.includes('zip') ? 'ZIP' : 
+                        droppableId.includes('mkv') ? 'MKV' : 
+                        droppableId.includes('episode') ? 'Episode' : ''} Link
+                </span>
+              </button>
+            )}
           </div>
         )}
       </Droppable>

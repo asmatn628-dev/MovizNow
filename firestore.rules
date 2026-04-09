@@ -72,7 +72,15 @@ service cloud.firestore {
     }
 
     match /users/{userId} {
-      allow read: if true;
+      // Protect PII: Only owner and authorized staff can read full profiles by ID
+      allow get: if isOwner(userId) || isAdminOrEditor() || isUserManager();
+      
+      // Protect against bulk scraping: 
+      // 1. Admins and Managers can query freely
+      // 2. Others (including unauthenticated) can only perform limited queries (max 5 results)
+      //    This is specifically to support the login/signup flow (finding dummy emails by phone).
+      allow list: if isAdminOrEditor() || isUserManager() || request.query.limit <= 5;
+
       allow create: if (isAdmin() && isValidUser(request.resource.data)) ||
                        (isOwner(userId) && request.resource.data.uid == request.auth.uid && request.resource.data.role == 'user' && isValidUser(request.resource.data)) || 
                        (isOwner(userId) && request.resource.data.uid == request.auth.uid && request.resource.data.role in ['user', 'trial', 'selected_content'] && 'managedBy' in request.resource.data && isValidUser(request.resource.data)) ||
@@ -126,6 +134,10 @@ service cloud.firestore {
     match /notifications/{notificationId} {
       allow read: if isAuthenticated();
       allow write: if isAdminOrEditor();
+    }
+
+    match /notification_templates/{templateId} {
+      allow read, write: if isAdminOrEditor();
     }
 
     match /test/{docId} {

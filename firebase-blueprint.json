@@ -100,10 +100,30 @@
         "body": { "type": "string" },
         "contentId": { "type": "string" },
         "posterUrl": { "type": "string" },
+        "targetUserId": { "type": "string", "description": "Optional user ID for targeted notifications." },
+        "targetUserIds": { "type": "array", "items": { "type": "string" }, "description": "List of user IDs for targeted notifications." },
+        "targetUserNames": { "type": "array", "items": { "type": "string" }, "description": "List of user names for targeted notifications." },
+        "buttonLabel": { "type": "string" },
+        "buttonUrl": { "type": "string" },
         "createdAt": { "type": "string", "format": "date-time" },
         "createdBy": { "type": "string" }
       },
-      "required": ["id", "title", "body", "contentId", "createdAt", "createdBy"]
+      "required": ["id", "title", "body", "createdAt", "createdBy"]
+    },
+    "NotificationTemplate": {
+      "title": "NotificationTemplate",
+      "description": "A template for notifications.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "title": { "type": "string" },
+        "body": { "type": "string" },
+        "buttonLabel": { "type": "string" },
+        "buttonUrl": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "name", "title", "body", "createdAt"]
     },
     "FCMToken": {
       "title": "FCMToken",
@@ -209,6 +229,10 @@
     "/fcm_tokens/{tokenId}": {
       "schema": { "$ref": "#/entities/FCMToken" },
       "description": "Stores FCM tokens for push notifications."
+    },
+    "/notification_templates/{templateId}": {
+      "schema": { "$ref": "#/entities/NotificationTemplate" },
+      "description": "Stores notification templates."
     }
   }
 }

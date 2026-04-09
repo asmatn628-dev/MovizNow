@@ -870,8 +870,9 @@ export default function UserManagement() {
   };
 
   return (
-    <div className="p-4 md:p-8">
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-4">
+    <div className="flex flex-col min-h-full">
+      {/* Line 1: Title and Add User (Non-sticky) */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
         <div className="flex items-center gap-4">
           <h1 className="text-2xl md:text-3xl font-bold">Membership Management</h1>
           {managedByFilter && (
@@ -899,74 +900,94 @@ export default function UserManagement() {
         )}
       </div>
 
-      <div className="flex flex-col md:flex-row gap-4 mb-6">
-        <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-zinc-500" />
-          <input
-            type="text"
-            placeholder="Search users by name, email, or phone..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl pl-10 pr-4 py-3 focus:outline-none focus:border-emerald-500"
-          />
-        </div>
-        
-        <div className="flex gap-4 overflow-x-auto pb-2 md:pb-0">
-          {selectedUsers.length > 0 && (
-            <div className="flex items-center gap-2 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-2">
-              <span className="text-sm text-zinc-500 dark:text-zinc-400">{selectedUsers.length} selected</span>
+      {/* Sticky Header: Search and Filters */}
+      <div className="sticky top-16 md:top-0 z-30 bg-white dark:bg-zinc-950 border-b border-zinc-200 dark:border-zinc-800 -mx-4 md:-mx-8 px-4 md:px-8 py-3 mb-6 transition-colors duration-300">
+        <div className="space-y-3">
+          {/* Line 2: Search Bar */}
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
+            <input
+              type="text"
+              placeholder="Search users by name, email, or phone..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl pl-9 pr-4 py-2 focus:outline-none focus:border-emerald-500 text-sm"
+            />
+          </div>
+
+          {/* Line 3: Filters and Bulk Actions */}
+          <div className="flex flex-wrap gap-3 items-center">
+            {selectedUsers.length > 0 && (
+              <div className="flex items-center gap-2 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg px-3 py-1.5">
+                <span className="text-xs text-zinc-500 dark:text-zinc-400">{selectedUsers.length} selected</span>
+                <select
+                  onChange={(e) => {
+                    if (e.target.value) {
+                      handleBulkStatusChange(e.target.value as any);
+                      e.target.value = '';
+                    }
+                  }}
+                  className="bg-transparent border-none text-xs focus:outline-none text-emerald-500 font-medium cursor-pointer"
+                >
+                  <option value="">Bulk Actions</option>
+                  <option value="active">Set Active</option>
+                  <option value="pending">Set Pending</option>
+                  <option value="expired">Set Expired</option>
+                  {(profile?.role === 'admin' || profile?.role === 'owner') && (
+                    <option value="suspended">Suspend</option>
+                  )}
+                </select>
+              </div>
+            )}
+            <div className="flex gap-2 flex-1 overflow-x-auto pb-1 md:pb-0 items-center">
               <select
-                onChange={(e) => {
-                  if (e.target.value) {
-                    handleBulkStatusChange(e.target.value as any);
-                    e.target.value = '';
-                  }
-                }}
-                className="bg-transparent border-none text-sm focus:outline-none text-emerald-500 font-medium cursor-pointer"
+                value={filterRole}
+                onChange={(e) => setFilterRole(e.target.value as any)}
+                className="bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg px-3 py-1.5 focus:outline-none focus:border-emerald-500 min-w-[120px] text-xs"
               >
-                <option value="">Bulk Actions</option>
-                <option value="active">Set Active</option>
-                <option value="pending">Set Pending</option>
-                <option value="expired">Set Expired</option>
+                <option value="all">All Roles</option>
+                <option value="user">User</option>
+                <option value="trial">Trial</option>
+                <option value="selected_content">Selected Content</option>
                 {(profile?.role === 'admin' || profile?.role === 'owner') && (
-                  <option value="suspended">Suspend</option>
+                  <>
+                    <option value="content_manager">Content Manager</option>
+                    <option value="user_manager">User Manager</option>
+                    <option value="manager">Manager</option>
+                    <option value="admin">Admin</option>
+                  </>
                 )}
               </select>
+              <select
+                value={filterStatus}
+                onChange={(e) => setFilterStatus(e.target.value as any)}
+                className="bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg px-3 py-1.5 focus:outline-none focus:border-emerald-500 min-w-[120px] text-xs"
+              >
+                <option value="all">All Statuses</option>
+                <option value="active">Active</option>
+                <option value="pending">Pending</option>
+                <option value="expired">Expired</option>
+              </select>
+              
+              {(searchTerm || filterRole !== 'all' || filterStatus !== 'all') && (
+                <button
+                  onClick={() => {
+                    setSearchTerm('');
+                    setFilterRole('all');
+                    setFilterStatus('all');
+                  }}
+                  className="p-1.5 text-zinc-500 hover:text-red-500 hover:bg-red-500/10 rounded-lg transition-colors shrink-0"
+                  title="Reset Filters"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              )}
             </div>
-          )}
-          <select
-            value={filterRole}
-            onChange={(e) => setFilterRole(e.target.value as any)}
-            className="bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-3 focus:outline-none focus:border-emerald-500 min-w-[140px]"
-          >
-                <option value="all">All Roles</option>
-            <option value="user">User</option>
-            <option value="trial">Trial</option>
-            <option value="selected_content">Selected Content</option>
-            {(profile?.role === 'admin' || profile?.role === 'owner') && (
-              <>
-                <option value="temporary">Temporary</option>
-                <option value="content_manager">Content Manager</option>
-                <option value="user_manager">User Manager</option>
-                <option value="manager">Manager</option>
-                <option value="admin">Admin</option>
-              </>
-            )}
-            {/* Removed Owner option */}
-          </select>
-
-          <select
-            value={filterStatus}
-            onChange={(e) => setFilterStatus(e.target.value as any)}
-            className="bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-3 focus:outline-none focus:border-emerald-500 min-w-[140px]"
-          >
-            <option value="all">All Statuses</option>
-            <option value="active">Active</option>
-            <option value="pending">Pending</option>
-            <option value="expired">Expired</option>
-          </select>
+          </div>
         </div>
       </div>
+
+      <div className="flex-1">
 
       {loading ? (
         <div className="flex justify-center items-center py-20">
@@ -1047,7 +1068,6 @@ export default function UserManagement() {
                           user.role === 'content_manager' ? 'bg-indigo-500/10 text-indigo-500' :
                           user.role === 'user_manager' ? 'bg-blue-500/10 text-blue-500' :
                           user.role === 'manager' ? 'bg-emerald-500/10 text-emerald-500' :
-                          user.role === 'temporary' ? 'bg-orange-500/10 text-orange-500' : 
                           user.role === 'selected_content' ? 'bg-pink-500/10 text-pink-500' :
                           user.role === 'trial' ? 'bg-yellow-500/10 text-yellow-500' :
                           'bg-zinc-500/10 text-zinc-500'}`}
@@ -1140,6 +1160,7 @@ export default function UserManagement() {
         )}
       </div>
       )}
+    </div>
 
       {selectedUser && (
         <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4">
@@ -1195,7 +1216,6 @@ export default function UserManagement() {
                         <option value="selected_content">Selected Content</option>
                         {(profile?.role === 'admin' || profile?.role === 'owner') && (
                           <>
-                            <option value="temporary">Temporary</option>
                             <option value="content_manager">Content Manager</option>
                             <option value="user_manager">User Manager</option>
                             <option value="manager">Manager</option>
@@ -1304,7 +1324,7 @@ export default function UserManagement() {
                     )}
                   </div>
 
-                  {(selectedUser.role === 'selected_content' || selectedUser.role === 'temporary') && (
+                  {selectedUser.role === 'selected_content' && (
                     <div className="border-t border-zinc-200 dark:border-zinc-800 pt-6">
                       <div className="flex items-center justify-between mb-4">
                         <h4 className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Assigned Content</h4>
@@ -1320,10 +1340,25 @@ export default function UserManagement() {
                       
                       <div className="flex flex-wrap gap-2">
                         {selectedUser.assignedContent?.map(id => {
-                          const content = allContent.find(c => c.id === id);
+                          const [contentId, seasonId] = id.split(':');
+                          const content = allContent.find(c => c.id === contentId);
+                          let displayName = content?.title || contentId;
+                          
+                          if (seasonId && content?.seasons) {
+                            try {
+                              const seasons = Array.isArray(content.seasons) ? content.seasons : JSON.parse(content.seasons || '[]');
+                              const season = seasons.find((s: any) => s.id === seasonId);
+                              if (season) {
+                                displayName += ` - Season ${season.seasonNumber}`;
+                              }
+                            } catch (e) {
+                              console.error("Error parsing seasons:", e);
+                            }
+                          }
+                          
                           return (
                             <div key={id} className="flex items-center gap-2 bg-zinc-100 dark:bg-zinc-800 px-2 py-1 rounded-lg border border-zinc-300 dark:border-zinc-700">
-                              <span className="text-[10px] text-zinc-600 dark:text-zinc-300">{content?.title || id}</span>
+                              <span className="text-[10px] text-zinc-600 dark:text-zinc-300">{displayName}</span>
                               <button 
                                 onClick={async () => {
                                   const nextAssigned = (selectedUser.assignedContent || []).filter(cid => cid !== id);
@@ -1758,7 +1793,6 @@ export default function UserManagement() {
                         <option value="selected_content">Selected Content</option>
                         {(profile?.role === 'admin' || profile?.role === 'owner') && (
                           <>
-                            <option value="temporary">Temporary</option>
                             <option value="content_manager">Content Manager</option>
                             <option value="user_manager">User Manager</option>
                             <option value="manager">Manager</option>

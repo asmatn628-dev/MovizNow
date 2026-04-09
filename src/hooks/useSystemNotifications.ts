@@ -50,10 +50,12 @@ export function useSystemNotifications(profile: UserProfile | null) {
       }
 
       // Ignore notifications targeted at other users
-      if (
-        notification.targetUserId &&
-        notification.targetUserId !== profile.uid
-      ) {
+      const isTargetedToMe = 
+        (!notification.targetUserId && (!notification.targetUserIds || notification.targetUserIds.length === 0)) || 
+        (notification.targetUserId === profile.uid) || 
+        (notification.targetUserIds?.includes(profile.uid));
+
+      if (!isTargetedToMe) {
         lastNotificationId.current = notification.id;
         return;
       }

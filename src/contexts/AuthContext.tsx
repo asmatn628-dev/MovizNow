@@ -14,7 +14,7 @@ import {
   updateProfile,
   updatePassword
 } from 'firebase/auth';
-import { doc, getDoc, setDoc, onSnapshot, updateDoc, query, collection, where, getDocs, deleteDoc, limit, writeBatch } from 'firebase/firestore';
+import { doc, getDoc, setDoc, onSnapshot, updateDoc, query, collection, where, getDocs, deleteDoc, limit, writeBatch, orderBy } from 'firebase/firestore';
 import { UserProfile } from '../types';
 import { logEvent, updateTimeSpent } from '../services/analytics';
 import { handleFirestoreError, OperationType } from '../utils/firestoreErrorHandler';
@@ -465,11 +465,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       };
 
       // 1. Check exactly as provided (email or phone)
-      const qEmail = query(collection(db, 'users'), where('email', '==', trimmed.toLowerCase()));
+      const qEmail = query(collection(db, 'users'), where('email', '==', trimmed.toLowerCase()), limit(5));
       const snapEmail = await getDocs(qEmail);
       addMatches(snapEmail);
 
-      const qPhone = query(collection(db, 'users'), where('phone', '==', trimmed));
+      const qPhone = query(collection(db, 'users'), where('phone', '==', trimmed), limit(5));
       const snapPhone = await getDocs(qPhone);
       addMatches(snapPhone);
 
@@ -501,12 +501,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         ].filter((v, i, a) => v && a.indexOf(v) === i); // Unique non-empty values
 
         // Search phone field with 'in' query (up to 10 values)
-        const qPhoneIn = query(collection(db, 'users'), where('phone', 'in', phoneFormats));
+        const qPhoneIn = query(collection(db, 'users'), where('phone', 'in', phoneFormats), limit(5));
         const snapPhoneIn = await getDocs(qPhoneIn);
         addMatches(snapPhoneIn);
 
         // Search email field with 'in' query
-        const qEmailIn = query(collection(db, 'users'), where('email', 'in', emailFormats));
+        const qEmailIn = query(collection(db, 'users'), where('email', 'in', emailFormats), limit(5));
         const snapEmailIn = await getDocs(qEmailIn);
         addMatches(snapEmailIn);
       }
