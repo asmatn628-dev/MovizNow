@@ -64,18 +64,23 @@ export default function OrdersManagement() {
         
         if (missingUserIds.length === 0) return;
 
-        for (const userId of missingUserIds) {
-          try {
-            const userRef = doc(db, 'users', userId);
-            const userSnap = await getDoc(userRef);
-            if (userSnap.exists()) {
-              newPhones[userId] = userSnap.data().phone || '';
-            }
-          } catch (error) {
-            console.error(`Error fetching phone for user ${userId}:`, error);
-          }
+        // Fetch missing phones in parallel
+        try {
+          const results = await Promise.all(
+            missingUserIds.map(async (userId) => {
+              const userRef = doc(db, 'users', userId);
+              const userSnap = await getDoc(userRef);
+              return { userId, phone: userSnap.exists() ? userSnap.data().phone || '' : '' };
+            })
+          );
+          
+          results.forEach(({ userId, phone }) => {
+            newPhones[userId] = phone;
+          });
+          setUserPhones(newPhones);
+        } catch (error) {
+          console.error("Error fetching user phones:", error);
         }
-        setUserPhones(newPhones);
       };
       fetchUserPhones();
     }
@@ -89,7 +94,7 @@ export default function OrdersManagement() {
 
   useEffect(() => {
     const q = query(collection(db, 'orders'), orderBy('createdAt', 'desc'));
-    const unsubscribe = onSnapshot(q, async (snapshot) => {
+    const unsubscribe = onSnapshot(q, (snapshot) => {
       const ordersData = snapshot.docs.map(doc => ({
         id: doc.id,
         ...doc.data()
@@ -98,13 +103,21 @@ export default function OrdersManagement() {
       localStorage.setItem(CACHE_KEY, JSON.stringify(ordersData));
       setOrders(ordersData);
       setLoading(false);
+    });
 
-      // Auto-delete pending orders older than 7 days and cancelled orders older than 24 hours
+    return () => unsubscribe();
+  }, []);
+
+  // Separate effect for auto-deletion to avoid blocking the main snapshot listener
+  useEffect(() => {
+    if (loading || orders.length === 0) return;
+
+    const runAutoDelete = async () => {
       const now = new Date();
       const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
       const twentyFourHoursAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
       
-      const ordersToDelete = ordersData.filter(order => {
+      const ordersToDelete = orders.filter(order => {
         const createdAt = (order.createdAt as any)?.seconds 
           ? new Date((order.createdAt as any).seconds * 1000) 
           : new Date(order.createdAt);
@@ -115,19 +128,24 @@ export default function OrdersManagement() {
       });
 
       if (ordersToDelete.length > 0) {
-        console.log(`Auto-deleting ${ordersToDelete.length} old orders`);
-        for (const order of ordersToDelete) {
-          try {
-            await deleteDoc(doc(db, 'orders', order.id));
-          } catch (err) {
-            console.error(`Failed to auto-delete order ${order.id}:`, err);
-          }
+        // Use a batch for faster deletion
+        const { writeBatch } = await import('firebase/firestore');
+        const batch = writeBatch(db);
+        ordersToDelete.forEach(order => {
+          batch.delete(doc(db, 'orders', order.id));
+        });
+        try {
+          await batch.commit();
+          console.log(`Auto-deleted ${ordersToDelete.length} old orders`);
+        } catch (err) {
+          console.error("Failed to commit auto-delete batch:", err);
         }
       }
-    });
+    };
 
-    return () => unsubscribe();
-  }, []);
+    const timer = setTimeout(runAutoDelete, 5000); // Wait 5s after load/change
+    return () => clearTimeout(timer);
+  }, [orders, loading]);
 
   const handleApprove = async (order: Order) => {
     setProcessingId(order.id);
@@ -155,7 +173,7 @@ export default function OrdersManagement() {
         newExpiryDate.setMonth(newExpiryDate.getMonth() + months);
 
         await updateDoc(userRef, {
-          role: 'user',
+          role: 'user', // Change to user if trial
           status: 'active',
           expiryDate: newExpiryDate.toISOString()
         });
@@ -261,6 +279,7 @@ export default function OrdersManagement() {
             >
               <option value="all">All Roles</option>
               <option value="user">User</option>
+              <option value="trial">Trial</option>
               <option value="selected_content">Selected Content</option>
             </select>
           </div>

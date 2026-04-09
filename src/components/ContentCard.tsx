@@ -77,6 +77,8 @@ const ContentCard = React.memo(({
   const isFavorite = profile?.favorites?.includes(content.id);
   const isWatchLater = profile?.watchLater?.includes(content.id);
 
+  const canSeeDraft = ['owner', 'admin', 'manager', 'content_manager'].includes(profile?.role);
+
   const matchingSeason = React.useMemo(() => {
     if (!selectedYear || content.type !== 'series') return null;
     return seasons.find((s: any) => s.year?.toString() === selectedYear);
@@ -175,15 +177,22 @@ const ContentCard = React.memo(({
           </div>
         )}
 
-        {isLocked && (
-          <div className={clsx(
-            "absolute top-2 left-2 px-2 py-1 rounded text-[10px] font-bold uppercase tracking-wider flex items-center gap-1 shadow-lg z-20",
-            isPending ? "bg-yellow-500 text-white dark:text-black" : "bg-red-500 text-white"
-          )}>
-            <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
-            {isPending ? 'Pending' : 'Restricted'}
-          </div>
-        )}
+        <div className="absolute top-2 left-2 flex flex-col gap-1 z-20">
+          {content.status === 'draft' && canSeeDraft && (
+            <div className="px-2 py-1 rounded text-[10px] font-bold uppercase tracking-wider bg-orange-500 text-white shadow-lg">
+              Draft
+            </div>
+          )}
+          {isLocked && (
+            <div className={clsx(
+              "px-2 py-1 rounded text-[10px] font-bold uppercase tracking-wider flex items-center gap-1 shadow-lg",
+              isPending ? "bg-yellow-500 text-white dark:text-black" : "bg-red-500 text-white"
+            )}>
+              <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
+              {isPending ? 'Pending' : 'Restricted'}
+            </div>
+          )}
+        </div>
       </Link>
 
       {/* Action Buttons - Only visible on desktop hover to prevent accidental clicks on mobile */}
@@ -217,7 +226,7 @@ const ContentCard = React.memo(({
             </button>
           )
         )}
-        {isLocked && profile?.role === 'user' && (
+        {isLocked && (profile?.role === 'trial' || profile?.role === 'user') && (
           <Link
             to="/top-up"
             onClick={(e) => e.stopPropagation()}

@@ -155,20 +155,34 @@ export default function UserManagement() {
       q = query(collection(db, 'users'), where('managedBy', '==', managedByFilter));
     }
 
-    const unsub = onSnapshot(q, async (snapshot: any) => {
+    const unsub = onSnapshot(q, (snapshot: any) => {
       const data = snapshot.docs.map((doc: any) => {
         const userData = { ...doc.data() } as UserProfile;
         return userData;
       });
       
+      setUsers(data);
+      setLoading(false);
+    }, (error: any) => {
+      console.error("Users snapshot error:", error);
+      setLoading(false);
+      handleFirestoreError(error, OperationType.LIST, 'users');
+    });
+    return () => unsub();
+  }, [profile, managedByFilter]);
+
+  // Separate effect for auto-updates and caching to avoid blocking the main listener
+  useEffect(() => {
+    if (loading || users.length === 0) return;
+
+    const runAutoUpdates = async () => {
       const now = new Date();
       let batches = [writeBatch(db)];
       let currentBatchIndex = 0;
       let operationCount = 0;
       let hasUpdates = false;
 
-      data.forEach((user: UserProfile, index: number) => {
-        const docRef = snapshot.docs[index].ref;
+      users.forEach((user: UserProfile) => {
         let needsUpdate = false;
         const updates: any = {};
         
@@ -176,19 +190,15 @@ export default function UserManagement() {
         if (user.email === 'asmatn628@gmail.com' && user.role !== 'owner') {
           updates.role = 'owner';
           updates.expiryDate = 'Lifetime';
-          user.role = 'owner';
-          user.expiryDate = 'Lifetime';
           needsUpdate = true;
         }
         
         // Auto-expire users whose expiry date has passed
         if (user.status === 'active' && user.expiryDate && user.role !== 'owner') {
           const expiryDate = new Date(user.expiryDate);
-          // Add 24 hours to make it expire at the end of the day
           const expiryEnd = new Date(expiryDate.getTime() + 24 * 60 * 60 * 1000);
           if (now > expiryEnd) {
             updates.status = 'expired';
-            user.status = 'expired';
             needsUpdate = true;
           }
         }
@@ -199,7 +209,7 @@ export default function UserManagement() {
             currentBatchIndex++;
             operationCount = 0;
           }
-          batches[currentBatchIndex].update(docRef, updates);
+          batches[currentBatchIndex].update(doc(db, 'users', user.uid), updates);
           operationCount++;
           hasUpdates = true;
         }
@@ -208,21 +218,20 @@ export default function UserManagement() {
       if (hasUpdates) {
         try {
           await Promise.all(batches.map(b => b.commit()));
+          console.log("Auto-updates committed successfully");
         } catch (error) {
           console.error("Error committing auto-updates batch:", error);
         }
       }
 
-      setUsers(data);
-      localStorage.setItem(cacheKey, JSON.stringify(data));
-      setLoading(false);
-    }, (error: any) => {
-      console.error("Users snapshot error:", error);
-      setLoading(false);
-      handleFirestoreError(error, OperationType.LIST, 'users');
-    });
-    return () => unsub();
-  }, [profile, managedByFilter]);
+      // Update cache
+      const cacheKey = `cached_users_${profile?.uid}_${managedByFilter || 'all'}`;
+      localStorage.setItem(cacheKey, JSON.stringify(users));
+    };
+
+    const timer = setTimeout(runAutoUpdates, 3000); // Wait 3s after load/change
+    return () => clearTimeout(timer);
+  }, [users, loading, profile, managedByFilter]);
 
   useEffect(() => {
     if (profile?.role === 'admin' || profile?.role === 'owner') {
@@ -262,26 +271,24 @@ export default function UserManagement() {
     setUserRequests([]);
     setAssignedContentTitles([]);
     try {
-      // Fetch Movie Requests
-      const requestsQ = query(
-        collection(db, 'movie_requests'),
-        where('userId', '==', user.uid)
-      );
-      const requestsSnapshot = await getDocs(requestsQ);
+      // Parallelize all analytics fetches
+      const [requestsSnapshot, analyticsSnapshot, contentSnapshot] = await Promise.all([
+        getDocs(query(collection(db, 'movie_requests'), where('userId', '==', user.uid))),
+        getDocs(query(collection(db, 'analytics'), where('userId', '==', user.uid))),
+        user.role === 'selected_content' && user.assignedContent && user.assignedContent.length > 0
+          ? getDocs(collection(db, 'content'))
+          : Promise.resolve(null)
+      ]);
+
+      // Process Movie Requests
       const requestsData = requestsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       setUserRequests(requestsData);
 
-      const q = query(
-        collection(db, 'analytics'), 
-        where('userId', '==', user.uid)
-      );
-      const snapshot = await getDocs(q);
+      // Process Analytics
       let movies = 0;
       let links = 0;
-      
-      // We want to keep track of all events to sort them by timestamp
       const events: AnalyticsEvent[] = [];
-      snapshot.forEach(doc => {
+      analyticsSnapshot.forEach(doc => {
         events.push(doc.data() as AnalyticsEvent);
       });
 
@@ -313,9 +320,8 @@ export default function UserManagement() {
         clickedLinks: Array.from(clickedLinks) 
       });
 
-      if (user.role === 'selected_content' && user.assignedContent && user.assignedContent.length > 0) {
-        // Fetch titles for assigned content
-        const contentSnapshot = await getDocs(collection(db, 'content'));
+      // Process Assigned Content Titles
+      if (contentSnapshot) {
         const titles: string[] = [];
         contentSnapshot.forEach(doc => {
           if (user.assignedContent!.includes(doc.id)) {
