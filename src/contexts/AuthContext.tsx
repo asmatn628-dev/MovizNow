@@ -464,14 +464,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         });
       };
 
-      // 1. Check exactly as provided (email or phone)
-      const qEmail = query(collection(db, 'users'), where('email', '==', trimmed.toLowerCase()), limit(5));
-      const snapEmail = await getDocs(qEmail);
-      addMatches(snapEmail);
+      const queries = [];
 
-      const qPhone = query(collection(db, 'users'), where('phone', '==', trimmed), limit(5));
-      const snapPhone = await getDocs(qPhone);
-      addMatches(snapPhone);
+      // 1. Check exactly as provided (email or phone)
+      queries.push(getDocs(query(collection(db, 'users'), where('email', '==', trimmed.toLowerCase()), limit(5))));
+      queries.push(getDocs(query(collection(db, 'users'), where('phone', '==', trimmed), limit(5))));
 
       // 2. If it looks like a phone number, try multiple formats
       const cleaned = trimmed.replace(/[^\d+]/g, '');
@@ -491,25 +488,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           `0${base}`,
           `92${base}`,
           base
-        ].filter((v, i, a) => v && a.indexOf(v) === i); // Unique non-empty values
+        ].filter((v, i, a) => v && a.indexOf(v) === i);
 
         const emailFormats = [
           `${base}@moviznow.com`,
           `92${base}@moviznow.com`,
           `0${base}@moviznow.com`,
           `+92${base}@moviznow.com`
-        ].filter((v, i, a) => v && a.indexOf(v) === i); // Unique non-empty values
+        ].filter((v, i, a) => v && a.indexOf(v) === i);
 
-        // Search phone field with 'in' query (up to 10 values)
-        const qPhoneIn = query(collection(db, 'users'), where('phone', 'in', phoneFormats), limit(5));
-        const snapPhoneIn = await getDocs(qPhoneIn);
-        addMatches(snapPhoneIn);
-
-        // Search email field with 'in' query
-        const qEmailIn = query(collection(db, 'users'), where('email', 'in', emailFormats), limit(5));
-        const snapEmailIn = await getDocs(qEmailIn);
-        addMatches(snapEmailIn);
+        if (phoneFormats.length > 0) {
+          queries.push(getDocs(query(collection(db, 'users'), where('phone', 'in', phoneFormats), limit(5))));
+        }
+        if (emailFormats.length > 0) {
+          queries.push(getDocs(query(collection(db, 'users'), where('email', 'in', emailFormats), limit(5))));
+        }
       }
+
+      const snapshots = await Promise.all(queries);
+      snapshots.forEach(addMatches);
 
       return matches;
     } catch (err) {

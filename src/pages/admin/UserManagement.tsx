@@ -388,22 +388,26 @@ export default function UserManagement() {
     try {
       const standardizedPhone = standardizePhone(editForm.phone || '');
 
-      // Check for duplicates (excluding current user)
+      // Check for duplicates in parallel
+      const duplicateChecks = [];
       if (editForm.email && editForm.email !== selectedUser.email) {
-        const existingEmails = await findUsersByEmailOrPhone(editForm.email);
-        if (existingEmails.some(u => u.uid !== editingId)) {
-          setAlertConfig({ isOpen: true, title: 'Error', message: 'Email address is already in use by another account.' });
-          setProcessing(prev => ({ ...prev, save: false }));
-          return;
-        }
+        duplicateChecks.push(findUsersByEmailOrPhone(editForm.email).then(matches => ({ type: 'email', matches })));
       }
-      
       if (standardizedPhone && standardizedPhone !== selectedUser.phone) {
-        const existingPhones = await findUsersByEmailOrPhone(standardizedPhone);
-        if (existingPhones.some(u => u.uid !== editingId)) {
-          setAlertConfig({ isOpen: true, title: 'Error', message: 'WhatsApp / Phone Number is already in use by another account.' });
-          setProcessing(prev => ({ ...prev, save: false }));
-          return;
+        duplicateChecks.push(findUsersByEmailOrPhone(standardizedPhone).then(matches => ({ type: 'phone', matches })));
+      }
+
+      if (duplicateChecks.length > 0) {
+        const results = await Promise.all(duplicateChecks);
+        for (const res of results) {
+          if (res.matches.some(u => u.uid !== editingId)) {
+            const msg = res.type === 'email' 
+              ? 'Email address is already in use by another account.' 
+              : 'WhatsApp / Phone Number is already in use by another account.';
+            setAlertConfig({ isOpen: true, title: 'Error', message: msg });
+            setProcessing(prev => ({ ...prev, save: false }));
+            return;
+          }
         }
       }
 
@@ -438,29 +442,34 @@ export default function UserManagement() {
         // Expire all managed users
         const q = query(collection(db, 'users'), where('managedBy', '==', currentEditingId));
         const snapshot = await getDocs(q);
-        const updatePromises = snapshot.docs.map(userDoc => {
-          const userData = userDoc.data() as UserProfile;
-          return updateDoc(doc(db, 'users', userDoc.id), {
-            status: 'expired',
-            previousStatus: userData.status || 'active'
+        if (!snapshot.empty) {
+          const batch = writeBatch(db);
+          snapshot.docs.forEach(userDoc => {
+            const userData = userDoc.data() as UserProfile;
+            batch.update(userDoc.ref, {
+              status: 'expired',
+              previousStatus: userData.status || 'active'
+            });
           });
-        });
-        await Promise.all(updatePromises);
+          await batch.commit();
+        }
       } else if (previousRole !== 'user_manager' && newRole === 'user_manager') {
         // Restore all managed users
         const q = query(collection(db, 'users'), where('managedBy', '==', currentEditingId));
         const snapshot = await getDocs(q);
-        const updatePromises = snapshot.docs.map(userDoc => {
-          const userData = userDoc.data() as UserProfile;
-          if (userData.previousStatus) {
-            return updateDoc(doc(db, 'users', userDoc.id), {
-              status: userData.previousStatus,
-              previousStatus: null
-            });
-          }
-          return Promise.resolve();
-        });
-        await Promise.all(updatePromises);
+        if (!snapshot.empty) {
+          const batch = writeBatch(db);
+          snapshot.docs.forEach(userDoc => {
+            const userData = userDoc.data() as UserProfile;
+            if (userData.previousStatus) {
+              batch.update(userDoc.ref, {
+                status: userData.previousStatus,
+                previousStatus: null
+              });
+            }
+          });
+          await batch.commit();
+        }
       }
 
       setEditingId(null);
@@ -492,19 +501,30 @@ export default function UserManagement() {
         // 1. Delete user document
         batch.delete(doc(db, 'users', currentDeleteConfirm));
         
+        // Parallelize all data fetches
+        const [
+          ordersSnap,
+          requestsSnap,
+          joinedRequestsSnap,
+          analyticsSnap,
+          tokensSnap,
+          notificationsSnap
+        ] = await Promise.all([
+          getDocs(query(collection(db, 'orders'), where('userId', '==', currentDeleteConfirm))),
+          getDocs(query(collection(db, 'movie_requests'), where('userId', '==', currentDeleteConfirm))),
+          getDocs(query(collection(db, 'movie_requests'), where('requestedBy', 'array-contains', currentDeleteConfirm))),
+          getDocs(query(collection(db, 'analytics'), where('userId', '==', currentDeleteConfirm))),
+          getDocs(query(collection(db, 'fcm_tokens'), where('userId', '==', currentDeleteConfirm))),
+          getDocs(query(collection(db, 'notifications'), where('targetUserId', '==', currentDeleteConfirm)))
+        ]);
+        
         // 2. Delete orders
-        const ordersQuery = query(collection(db, 'orders'), where('userId', '==', currentDeleteConfirm));
-        const ordersSnap = await getDocs(ordersQuery);
         ordersSnap.forEach(d => batch.delete(d.ref));
         
         // 3. Delete movie requests created by this user
-        const requestsQuery = query(collection(db, 'movie_requests'), where('userId', '==', currentDeleteConfirm));
-        const requestsSnap = await getDocs(requestsQuery);
         requestsSnap.forEach(d => batch.delete(d.ref));
 
         // 3b. Remove user from other movie requests they joined
-        const joinedRequestsQuery = query(collection(db, 'movie_requests'), where('requestedBy', 'array-contains', currentDeleteConfirm));
-        const joinedRequestsSnap = await getDocs(joinedRequestsQuery);
         joinedRequestsSnap.forEach(d => {
           const data = d.data();
           if (data.userId !== currentDeleteConfirm) {
@@ -517,18 +537,12 @@ export default function UserManagement() {
         });
         
         // 4. Delete analytics
-        const analyticsQuery = query(collection(db, 'analytics'), where('userId', '==', currentDeleteConfirm));
-        const analyticsSnap = await getDocs(analyticsQuery);
         analyticsSnap.forEach(d => batch.delete(d.ref));
         
         // 5. Delete FCM tokens
-        const tokensQuery = query(collection(db, 'fcm_tokens'), where('userId', '==', currentDeleteConfirm));
-        const tokensSnap = await getDocs(tokensQuery);
         tokensSnap.forEach(d => batch.delete(d.ref));
 
         // 6. Delete notifications targeted to this user
-        const notificationsQuery = query(collection(db, 'notifications'), where('targetUserId', '==', currentDeleteConfirm));
-        const notificationsSnap = await getDocs(notificationsQuery);
         notificationsSnap.forEach(d => batch.delete(d.ref));
         
         await batch.commit();

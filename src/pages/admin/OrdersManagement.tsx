@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { db } from '../../firebase';
-import { collection, query, orderBy, onSnapshot, doc, updateDoc, getDoc, arrayUnion, deleteDoc } from 'firebase/firestore';
+import { collection, query, orderBy, onSnapshot, doc, updateDoc, getDoc, arrayUnion, deleteDoc, writeBatch } from 'firebase/firestore';
 import { Order, UserProfile } from '../../types';
 import { Check, X, Clock, Search, Filter, Eye, Loader2, Trash2 } from 'lucide-react';
 import { format } from 'date-fns';
@@ -30,6 +30,7 @@ export default function OrdersManagement() {
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [processingId, setProcessingId] = useState<string | null>(null);
   const [selectedUserPhone, setSelectedUserPhone] = useState<string | null>(null);
+  const [selectedUserExpiry, setSelectedUserExpiry] = useState<string | null>(null);
   const [userPhones, setUserPhones] = useState<Record<string, string>>(() => {
     const cached = localStorage.getItem(PHONES_CACHE_KEY);
     return cached ? JSON.parse(cached) : {};
@@ -54,43 +55,61 @@ export default function OrdersManagement() {
   useModalBehavior(!!selectedOrder, () => {
     setSelectedOrder(null);
     setSelectedUserPhone(null);
+    setSelectedUserExpiry(null);
+  });
+
+  const [userExpiries, setUserExpiries] = useState<Record<string, string>>(() => {
+    const cached = localStorage.getItem('user_expiries_cache');
+    return cached ? JSON.parse(cached) : {};
   });
 
   useEffect(() => {
+    localStorage.setItem('user_expiries_cache', JSON.stringify(userExpiries));
+  }, [userExpiries]);
+
+  useEffect(() => {
     if (orders.length > 0) {
-      const fetchUserPhones = async () => {
+      const fetchUserData = async () => {
         const newPhones: Record<string, string> = { ...userPhones };
-        const missingUserIds = Array.from(new Set(orders.map(o => o.userId))).filter(id => !newPhones[id]);
+        const newExpiries: Record<string, string> = { ...userExpiries };
+        const missingUserIds = Array.from(new Set(orders.map(o => o.userId))).filter(id => !newPhones[id] || !newExpiries[id]);
         
         if (missingUserIds.length === 0) return;
 
-        // Fetch missing phones in parallel
+        // Fetch missing data in parallel
         try {
           const results = await Promise.all(
             missingUserIds.map(async (userId) => {
               const userRef = doc(db, 'users', userId);
               const userSnap = await getDoc(userRef);
-              return { userId, phone: userSnap.exists() ? userSnap.data().phone || '' : '' };
+              if (userSnap.exists()) {
+                const data = userSnap.data();
+                return { userId, phone: data.phone || '', expiry: data.expiryDate || '' };
+              }
+              return { userId, phone: '', expiry: '' };
             })
           );
           
-          results.forEach(({ userId, phone }) => {
+          results.forEach(({ userId, phone, expiry }) => {
             newPhones[userId] = phone;
+            newExpiries[userId] = expiry;
           });
           setUserPhones(newPhones);
+          setUserExpiries(newExpiries);
         } catch (error) {
-          console.error("Error fetching user phones:", error);
+          console.error("Error fetching user data:", error);
         }
       };
-      fetchUserPhones();
+      fetchUserData();
     }
   }, [orders]);
 
   useEffect(() => {
     if (selectedOrder) {
       setSelectedUserPhone(userPhones[selectedOrder.userId] || null);
+      setSelectedUserExpiry(userExpiries[selectedOrder.userId] || null);
     }
-  }, [selectedOrder, userPhones]);
+  }, [selectedOrder, userPhones, userExpiries]);
 
   useEffect(() => {
     const q = query(collection(db, 'orders'), orderBy('createdAt', 'desc'));
@@ -160,6 +179,7 @@ export default function OrdersManagement() {
       }
 
       const userData = userSnap.data() as UserProfile;
+      const batch = writeBatch(db);
 
       if (order.type === 'membership') {
         const months = order.months || 1;
@@ -172,12 +192,13 @@ export default function OrdersManagement() {
         }
         newExpiryDate.setMonth(newExpiryDate.getMonth() + months);
 
-        await updateDoc(userRef, {
+        batch.update(userRef, {
           role: 'user', // Change to user if trial
           status: 'active',
           expiryDate: newExpiryDate.toISOString()
         });
       } else if (order.type === 'content' && order.items) {
+        const { arrayUnion } = await import('firebase/firestore');
         const contentIds = order.items.map(item => 
           item.type === 'season' ? `${item.contentId}:${item.seasonId}` : item.contentId
         );
@@ -192,13 +213,14 @@ export default function OrdersManagement() {
           updates.role = 'selected_content';
         }
 
-        await updateDoc(userRef, updates);
+        batch.update(userRef, updates);
       }
 
-      await updateDoc(doc(db, 'orders', order.id), {
+      batch.update(doc(db, 'orders', order.id), {
         status: 'approved'
       });
 
+      await batch.commit();
     } catch (error) {
       console.error('Error approving order:', error);
     } finally {
@@ -489,6 +511,14 @@ export default function OrdersManagement() {
                       </a>
                     )}</p>
                     <p><span className="text-zinc-500 inline-block w-20">Role:</span> <span className="uppercase text-xs text-emerald-500">{selectedOrder.userRole}</span></p>
+                    <p><span className="text-zinc-500 inline-block w-20">Expiry:</span> <span className={clsx(
+                      "text-xs font-medium",
+                      selectedUserExpiry === 'Lifetime' ? "text-emerald-500" : 
+                      selectedUserExpiry && new Date(selectedUserExpiry) < new Date() ? "text-red-500" : "text-zinc-700 dark:text-zinc-300"
+                    )}>
+                      {selectedUserExpiry === 'Lifetime' ? 'Lifetime' : 
+                       selectedUserExpiry ? format(new Date(selectedUserExpiry), 'MMM dd, yyyy') : 'N/A'}
+                    </span></p>
                     <p><span className="text-zinc-500 inline-block w-20">User ID:</span> <span className="font-mono text-xs">{selectedOrder.userId}</span></p>
                   </div>
                 </div>
