@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { useAuth } from '../contexts/AuthContext';
+import { useAuth, standardizePhone } from '../contexts/AuthContext';
 import { useSettings } from '../contexts/SettingsContext';
 import { Film, Mail, Phone, ArrowLeft, Eye, EyeOff, Lock, User as UserIcon } from 'lucide-react';
 import { LazyLoadImage } from 'react-lazy-load-image-component';
@@ -20,6 +20,7 @@ export default function Login() {
     findUsersByEmailOrPhone,
     updateUserPassword,
     updateUserProfileData,
+    isPhoneWhitelisted,
     clearError,
     authLoading, 
     error 
@@ -77,10 +78,7 @@ export default function Login() {
     const trimmed = input.trim();
     // If it looks like a phone number (contains digits, maybe starts with + or 0)
     if (/^[\d+]+$/.test(trimmed)) {
-      let cleaned = trimmed.replace(/[^\d+]/g, '');
-      if (cleaned.startsWith('+')) return cleaned;
-      if (cleaned.startsWith('0')) cleaned = cleaned.substring(1);
-      return '+92' + cleaned;
+      return standardizePhone(trimmed);
     }
     return trimmed.toLowerCase();
   };
@@ -128,7 +126,42 @@ export default function Login() {
           setStep('create_password');
         }
       } else {
-        // Not registered, allow to create account
+        // Not registered, check if it's a phone number and if it's whitelisted
+        const isEmail = identifier.includes('@');
+        if (!isEmail) {
+          const formattedPhone = formatIdentifier(identifier);
+          const isWhitelisted = await isPhoneWhitelisted(formattedPhone);
+          if (!isWhitelisted) {
+            setCustomError(
+              <div className="flex flex-col gap-3">
+                <p>This number is not authorized.</p>
+                <div className="flex flex-col gap-2 mt-2">
+                  <button 
+                    type="button"
+                    onClick={handleGoogleLogin}
+                    className="w-full bg-emerald-500 text-white py-2.5 rounded-lg font-medium hover:bg-emerald-600 transition-colors flex items-center justify-center gap-2 shadow-sm"
+                  >
+                    Use Google <span className="text-[10px] uppercase tracking-wider opacity-90 bg-white/20 px-1.5 py-0.5 rounded-md">(Recommended)</span>
+                  </button>
+                  <button 
+                    type="button"
+                    onClick={() => {
+                      const adminPhone = `92${settings?.supportNumber || '3363284466'}`;
+                      window.open(`https://wa.me/${adminPhone}?text=I want to register my number: ${formattedPhone}`, '_blank');
+                    }}
+                    className="w-full bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white border border-zinc-200 dark:border-zinc-700 py-2.5 rounded-lg font-medium hover:bg-zinc-50 dark:hover:bg-zinc-700 transition-colors"
+                  >
+                    Contact Admin
+                  </button>
+                </div>
+              </div>
+            );
+            setIsLoggingIn(false);
+            return;
+          }
+        }
+        
+        // Allow to create account
         setRegisteredUser(null);
         setStep('create_password');
       }

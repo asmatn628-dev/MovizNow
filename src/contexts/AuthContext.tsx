@@ -30,6 +30,7 @@ interface AuthContextType {
   signInWithEmail: (email: string, password: string) => Promise<void>;
   signUpWithEmail: (email: string, password: string, displayName: string, phone?: string) => Promise<void>;
   signUpWithPhoneAndPassword: (phone: string, password: string, displayName: string, email?: string) => Promise<void>;
+  isPhoneWhitelisted: (phone: string) => Promise<boolean>;
   findUsersByEmailOrPhone: (identifier: string) => Promise<UserProfile[]>;
   updateUserPassword: (newPassword: string) => Promise<void>;
   updateUserProfileData: (data: Partial<UserProfile>, newPassword?: string) => Promise<void>;
@@ -40,6 +41,24 @@ interface AuthContextType {
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
+
+export const standardizePhone = (phone: string) => {
+  const digits = phone.replace(/\D/g, '');
+  if (!digits) return '';
+  
+  // Pakistan specific standardization
+  let base = digits;
+  if (base.startsWith('92') && base.length >= 12) base = base.substring(2);
+  else if (base.startsWith('0') && base.length >= 11) base = base.substring(1);
+  
+  // If it's a 10-digit number (standard Pak mobile length without prefix)
+  if (base.length === 10) {
+    return `+92${base}`;
+  }
+  
+  // Fallback for other lengths or formats
+  return phone.startsWith('+') ? `+${digits}` : digits;
+};
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(auth.currentUser);
@@ -364,6 +383,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (phoneUsers.some(u => u.hasPassword)) {
           throw new Error("This phone number is already registered to another account.");
         }
+        
+        const isWhitelisted = await isPhoneWhitelisted(phone);
+        if (!isWhitelisted) {
+          throw new Error("This phone number is not authorized for new account creation.");
+        }
+      } else {
+        throw new Error("Phone number is required for new account creation.");
       }
 
       const userCredential = await createUserWithEmailAndPassword(auth, email, password);
@@ -398,6 +424,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         throw new Error("This account is already registered.");
       }
 
+      if (!isEmail) {
+        const isWhitelisted = await isPhoneWhitelisted(standardizedPhone);
+        if (!isWhitelisted) {
+          throw new Error("This phone number is not authorized for new account creation.");
+        }
+      }
+
       // Check if email is already in use
       if (email && email !== signupEmail) {
         const emailUsers = await findUsersByEmailOrPhone(email);
@@ -429,22 +462,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  const standardizePhone = (phone: string) => {
-    const digits = phone.replace(/\D/g, '');
-    if (!digits) return '';
-    
-    // Pakistan specific standardization
-    let base = digits;
-    if (base.startsWith('92') && base.length >= 12) base = base.substring(2);
-    else if (base.startsWith('0') && base.length >= 11) base = base.substring(1);
-    
-    // If it's a 10-digit number (standard Pak mobile length without prefix)
-    if (base.length === 10) {
-      return `+92${base}`;
-    }
-    
-    // Fallback for other lengths or formats
-    return phone.startsWith('+') ? `+${digits}` : digits;
+  const isPhoneWhitelisted = async (phone: string): Promise<boolean> => {
+    const standardizedPhone = standardizePhone(phone);
+    const docRef = doc(db, 'whitelisted_phones', standardizedPhone);
+    const docSnap = await getDoc(docRef);
+    return docSnap.exists();
   };
 
   const findUsersByEmailOrPhone = async (identifier: string): Promise<UserProfile[]> => {
@@ -654,6 +676,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       signInWithEmail,
       signUpWithEmail,
       signUpWithPhoneAndPassword,
+      isPhoneWhitelisted,
       findUsersByEmailOrPhone,
       updateUserPassword,
       updateUserProfileData,

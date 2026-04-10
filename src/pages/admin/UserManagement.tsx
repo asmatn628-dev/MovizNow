@@ -3,7 +3,7 @@ import { db } from '../../firebase';
 import { safeStorage } from '../../utils/safeStorage';
 import { collection, doc, updateDoc, onSnapshot, query, where, getDocs, writeBatch, deleteDoc, setDoc } from 'firebase/firestore';
 import { UserProfile, Role, Status, AnalyticsEvent } from '../../types';
-import { Edit2, MessageCircle, X, Check, Search, ArrowUp, ArrowDown, Clock, MousePointerClick, Film, Trash2, Tv, Plus, Loader2, ArrowRight, UserPlus, Calendar, Heart, Bookmark, Save, Lock, Layers } from 'lucide-react';
+import { Edit2, MessageCircle, X, Check, Search, ArrowUp, ArrowDown, Clock, MousePointerClick, Film, Trash2, Tv, Plus, Loader2, ArrowRight, UserPlus, Calendar, Heart, Bookmark, Save, Lock, Layers, Phone } from 'lucide-react';
 import { format, formatDistanceToNow } from 'date-fns';
 import clsx from 'clsx';
 import AlertModal from '../../components/AlertModal';
@@ -15,6 +15,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { smartSearch } from '../../utils/searchUtils';
 import { useModalBehavior } from '../../hooks/useModalBehavior';
 import { useSettings } from '../../contexts/SettingsContext';
+import { PhoneWhitelistManager } from '../../components/PhoneWhitelistManager';
 
 import { useLocation, useNavigate } from 'react-router-dom';
 
@@ -83,6 +84,7 @@ export default function UserManagement() {
   
   // Add User State
   const [isAddUserModalOpen, setIsAddUserModalOpen] = useState(false);
+  const [isWhitelistModalOpen, setIsWhitelistModalOpen] = useState(false);
   const [newUserForm, setNewUserForm] = useState({ email: '', phone: '', displayName: '', role: 'user' as Role, status: 'pending' as 'pending' | 'active', expiryDate: '' });
   const [foundUser, setFoundUser] = useState<UserProfile | null>(null);
   const [searchStatus, setSearchStatus] = useState<'idle' | 'searching' | 'found' | 'not_found'>('idle');
@@ -910,6 +912,15 @@ export default function UserManagement() {
         </div>
         { ((profile?.role as string) === 'user_manager' || (profile?.role as string) === 'manager' || profile?.role === 'admin' || profile?.role === 'owner') && (
           <div className="flex gap-2">
+            {(profile?.role === 'admin' || profile?.role === 'owner') && (
+              <Button
+                onClick={() => setIsWhitelistModalOpen(true)}
+                variant="secondary"
+                icon={<Phone className="w-5 h-5" />}
+              >
+                Phone Whitelist
+              </Button>
+            )}
             <Button
               onClick={() => setIsAddUserModalOpen(true)}
               variant="emerald"
@@ -1743,6 +1754,28 @@ export default function UserManagement() {
         loading={processing.delete}
       />
 
+      {/* Whitelist Modal */}
+      {isWhitelistModalOpen && (
+        <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4">
+          <div className="bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl w-full max-w-md overflow-hidden flex flex-col max-h-[90vh]">
+            <div className="p-4 md:p-6 border-b border-zinc-200 dark:border-zinc-800 flex justify-between items-center shrink-0">
+              <h2 className="text-xl font-bold">Manage Whitelist</h2>
+              <button onClick={() => setIsWhitelistModalOpen(false)} className="text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:text-white transition-colors">
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+            <div className="p-4 md:p-6 overflow-y-auto">
+              <PhoneWhitelistManager />
+            </div>
+            <div className="p-4 md:p-6 border-t border-zinc-200 dark:border-zinc-800 flex gap-3 shrink-0">
+              <Button onClick={() => setIsWhitelistModalOpen(false)} variant="secondary" className="w-full">
+                Close
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Add User Modal */}
       {isAddUserModalOpen && (
         <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4">
@@ -1756,7 +1789,7 @@ export default function UserManagement() {
             
             <div className="p-4 md:p-6 space-y-4 overflow-y-auto">
               {(profile?.role === 'admin' || profile?.role === 'owner' || searchStatus === 'found') ? (
-                <>
+                <div className="space-y-4">
                   {searchStatus === 'found' && foundUser ? (
                     <div className="bg-zinc-100 dark:bg-zinc-800 p-4 rounded-xl flex items-center gap-4">
                       <img src={foundUser.photoURL || 'https://ui-avatars.com/api/?name=' + foundUser.displayName} alt={foundUser.displayName} className="w-12 h-12 rounded-full" />
@@ -1770,44 +1803,38 @@ export default function UserManagement() {
                     <>
                       <div>
                         <label className="block text-sm font-medium text-zinc-500 dark:text-zinc-400 mb-1">WhatsApp / Phone Number *</label>
-                        <input
-                          type="text"
-                          value={newUserForm.phone}
-                          onChange={(e) => setNewUserForm({ ...newUserForm, phone: e.target.value })}
-                          placeholder="+923111222333"
-                          className="w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-2 focus:outline-none focus:border-emerald-500"
-                        />
+                        <div className="flex gap-2">
+                          <input
+                            type="text"
+                            value={newUserForm.phone}
+                            onChange={(e) => setNewUserForm({ ...newUserForm, phone: e.target.value })}
+                            className="flex-1 p-2 rounded-xl border border-zinc-300 dark:border-zinc-700 bg-transparent"
+                            placeholder="+92..."
+                          />
+                          <Button onClick={handleSearchUser} disabled={searchStatus === 'searching'}>
+                            {searchStatus === 'searching' ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Search'}
+                          </Button>
+                        </div>
                       </div>
                       <div>
-                        <label className="block text-sm font-medium text-zinc-500 dark:text-zinc-400 mb-1">Name (Optional)</label>
+                        <label className="block text-sm font-medium text-zinc-500 dark:text-zinc-400 mb-1">Display Name</label>
                         <input
                           type="text"
                           value={newUserForm.displayName}
                           onChange={(e) => setNewUserForm({ ...newUserForm, displayName: e.target.value })}
-                          placeholder="John Doe"
-                          className="w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-2 focus:outline-none focus:border-emerald-500"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-zinc-500 dark:text-zinc-400 mb-1">Email (Optional)</label>
-                        <input
-                          type="email"
-                          value={newUserForm.email}
-                          onChange={(e) => setNewUserForm({ ...newUserForm, email: e.target.value })}
-                          placeholder="user@example.com"
-                          className="w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-2 focus:outline-none focus:border-emerald-500"
-                          disabled={searchStatus === 'found' || (profile?.role as string) === 'user_manager' || (profile?.role as string) === 'manager'}
+                          className="w-full p-2 rounded-xl border border-zinc-300 dark:border-zinc-700 bg-transparent"
                         />
                       </div>
                     </>
                   )}
+
                   <div className="flex items-center gap-4">
                     <div className="flex-1">
                       <label className="block text-sm font-medium text-zinc-500 dark:text-zinc-400 mb-1">Role</label>
                       <select
                         value={newUserForm.role}
                         onChange={(e) => setNewUserForm({ ...newUserForm, role: e.target.value as Role })}
-                        className="w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-emerald-500"
+                        className="w-full p-2 rounded-xl border border-zinc-300 dark:border-zinc-700 bg-transparent"
                       >
                         <option value="user">User</option>
                         <option value="trial">Trial</option>
@@ -1827,7 +1854,7 @@ export default function UserManagement() {
                       <select
                         value={newUserForm.status}
                         onChange={(e) => setNewUserForm({ ...newUserForm, status: e.target.value as 'pending' | 'active' })}
-                        className="w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-emerald-500"
+                        className="w-full p-2 rounded-xl border border-zinc-300 dark:border-zinc-700 bg-transparent"
                       >
                         <option value="pending">Pending</option>
                         <option value="active">Active</option>
@@ -1835,38 +1862,30 @@ export default function UserManagement() {
                     </div>
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-zinc-500 dark:text-zinc-400 mb-1">Expiry Date (Optional)</label>
+                    <label className="block text-sm font-medium text-zinc-500 dark:text-zinc-400 mb-1">Expiry Date</label>
                     <input
                       type="date"
                       value={newUserForm.expiryDate}
                       onChange={(e) => setNewUserForm({ ...newUserForm, expiryDate: e.target.value })}
-                      className="w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-2 focus:outline-none focus:border-emerald-500"
+                      className="w-full p-2 rounded-xl border border-zinc-300 dark:border-zinc-700 bg-transparent"
                     />
                   </div>
-                </>
+                </div>
               ) : (
-                <>
+                <div className="space-y-4">
                   <div>
-                    <label className="block text-sm font-medium text-zinc-500 dark:text-zinc-400 mb-1">WhatsApp / Phone Number</label>
-                    <input
-                      type="text"
-                      value={newUserForm.phone}
-                      onChange={(e) => setNewUserForm({ ...newUserForm, phone: e.target.value })}
-                      placeholder="+923111222333"
-                      className="w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-2 focus:outline-none focus:border-emerald-500"
-                    />
+                    <label className="block text-sm font-medium text-zinc-500 dark:text-zinc-400 mb-1">WhatsApp / Phone Number *</label>
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        value={newUserForm.phone}
+                        onChange={(e) => setNewUserForm({ ...newUserForm, phone: e.target.value })}
+                        className="flex-1 p-2 rounded-xl border border-zinc-300 dark:border-zinc-700 bg-transparent"
+                        placeholder="+92..."
+                      />
+                    </div>
                   </div>
-                  <div>
-                    <label className="block text-sm font-medium text-zinc-500 dark:text-zinc-400 mb-1">Email</label>
-                    <input
-                      type="email"
-                      value={newUserForm.email}
-                      onChange={(e) => setNewUserForm({ ...newUserForm, email: e.target.value })}
-                      placeholder="user@example.com"
-                      className="w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-2 focus:outline-none focus:border-emerald-500"
-                    />
-                  </div>
-                </>
+                </div>
               )}
             </div>
 
