@@ -7,6 +7,7 @@ import { formatContentTitle } from '../../utils/contentUtils';
 import { NotificationMenu } from '../../components/NotificationMenu';
 import { UserProfileMenu } from '../../components/UserProfileMenu';
 import { AdminButtons } from '../../components/AdminButtons';
+import { CartButton } from '../../components/CartButton';
 import { LazyLoadImage } from 'react-lazy-load-image-component';
 import ContentCard from '../../components/ContentCard';
 
@@ -45,6 +46,7 @@ export default function Favorites() {
           <div className="flex items-center gap-4">
             {profile && <NotificationMenu />}
             <AdminButtons profile={profile} />
+            <CartButton />
             <UserProfileMenu />
           </div>
         </div>

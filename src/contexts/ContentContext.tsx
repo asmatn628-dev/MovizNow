@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { db, auth } from '../firebase';
+import { safeStorage } from '../utils/safeStorage';
 import { collection, onSnapshot, query, where, getDoc, getDocs, doc, setDoc, orderBy, limit } from 'firebase/firestore';
 import { onAuthStateChanged } from 'firebase/auth';
 import { Content, Genre, Language, Quality } from '../types';
@@ -37,10 +38,10 @@ export function ContentProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     // Load from cache initially
-    const cachedContent = localStorage.getItem('content_cache');
-    const cachedGenres = localStorage.getItem('genres_cache');
-    const cachedLanguages = localStorage.getItem('languages_cache');
-    const cachedQualities = localStorage.getItem('qualities_cache');
+    const cachedContent = safeStorage.getItem('content_cache');
+    const cachedGenres = safeStorage.getItem('genres_cache');
+    const cachedLanguages = safeStorage.getItem('languages_cache');
+    const cachedQualities = safeStorage.getItem('qualities_cache');
     
     if (cachedContent) setContentList(JSON.parse(cachedContent));
     if (cachedGenres) setGenres(JSON.parse(cachedGenres));
@@ -72,12 +73,10 @@ export function ContentProvider({ children }: { children: React.ReactNode }) {
       }
 
       if (isAdminOrEditor) {
-        // Admin/Editor: Load all content and keep search_index updated
         const q = collection(db, 'content');
         unsubContent = onSnapshot(q, (snapshot) => {
           const rawContent = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() } as Content));
           
-          // Update search_index
           const searchIndex = rawContent.filter(c => c.status === 'published').map(c => {
             let seasons: any[] = [];
             if (c.seasons) {
@@ -116,7 +115,7 @@ export function ContentProvider({ children }: { children: React.ReactNode }) {
                 seasons: minimalSeasons.length > 0 ? minimalSeasons : undefined
               };
             });
-            localStorage.setItem('content_cache', JSON.stringify(sanitizedContent));
+            safeStorage.setItem('content_cache', JSON.stringify(sanitizedContent));
           } catch (e) {
             console.error("Failed to save content cache", e);
           }
@@ -126,19 +125,16 @@ export function ContentProvider({ children }: { children: React.ReactNode }) {
         }, (error) => {
           console.error("Content snapshot error:", error);
           setLoading(false);
-          // Don't error out if offline, just use cache
           if (navigator.onLine) {
             handleFirestoreError(error, OperationType.LIST, 'content');
           }
         });
       } else {
-        // Regular User: Load from search_index in real-time
         unsubContent = onSnapshot(doc(db, 'metadata', 'search_index'), async (indexDoc) => {
           if (indexDoc.exists()) {
             const data = indexDoc.data().data as string[];
             const parsedContent: Content[] = data.map(item => {
               const [id, title, year, posterUrl, type, qualityId, langIds, genreIds, createdAt, order, seasonsInfo] = item.split('|');
-              
               const seasons = seasonsInfo ? seasonsInfo.split(',').map(s => {
                 const [sNum, lastEp] = s.split(':');
                 return {
@@ -149,38 +145,25 @@ export function ContentProvider({ children }: { children: React.ReactNode }) {
               }) : [];
 
               return {
-                id,
-                title,
-                year,
-                posterUrl,
-                type: type as 'movie' | 'series',
-                qualityId,
+                id, title, year, posterUrl, type: type as 'movie' | 'series', qualityId,
                 languageIds: langIds ? langIds.split(',') : [],
                 genreIds: genreIds ? genreIds.split(',') : [],
-                createdAt,
-                order: order ? parseInt(order, 10) : undefined,
-                seasons,
-                status: 'published',
-                description: '',
-                trailerUrl: '',
-                cast: [],
-                updatedAt: createdAt
+                createdAt, order: order ? parseInt(order, 10) : undefined,
+                seasons, status: 'published', description: '', trailerUrl: '', cast: [], updatedAt: createdAt
               } as unknown as Content;
             });
             try {
-              localStorage.setItem('content_cache', JSON.stringify(parsedContent));
+              safeStorage.setItem('content_cache', JSON.stringify(parsedContent));
             } catch (e) {
               console.error("Failed to save content cache", e);
             }
             setContentList(parsedContent);
             setLoading(false);
           } else {
-            // Fallback if search_index doesn't exist
             try {
               const q = query(collection(db, 'content'), where('status', '==', 'published'), orderBy('createdAt', 'desc'), limit(50));
               const snapshot = await getDocs(q);
               const rawContent = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() } as Content));
-              
               const sanitizedContent = rawContent.map(c => {
                 let minimalSeasons: any[] = [];
                 if (c.seasons) {
@@ -193,16 +176,12 @@ export function ContentProvider({ children }: { children: React.ReactNode }) {
                   } catch (e) {}
                 }
                 return {
-                  ...c,
-                  movieLinks: undefined,
-                  fullSeasonZip: undefined,
-                  fullSeasonMkv: undefined,
+                  ...c, movieLinks: undefined, fullSeasonZip: undefined, fullSeasonMkv: undefined,
                   seasons: minimalSeasons.length > 0 ? minimalSeasons : undefined
                 };
               });
-              
               try {
-                localStorage.setItem('content_cache', JSON.stringify(sanitizedContent));
+                safeStorage.setItem('content_cache', JSON.stringify(sanitizedContent));
               } catch (e) {
                 console.error("Failed to save content cache", e);
               }
@@ -234,7 +213,7 @@ export function ContentProvider({ children }: { children: React.ReactNode }) {
           if (b.order !== undefined) return 1;
           return a.name.localeCompare(b.name);
         });
-        localStorage.setItem('genres_cache', JSON.stringify(genresData));
+        safeStorage.setItem('genres_cache', JSON.stringify(genresData));
         setGenres(genresData);
       });
 
@@ -246,7 +225,7 @@ export function ContentProvider({ children }: { children: React.ReactNode }) {
           if (b.order !== undefined) return 1;
           return a.name.localeCompare(b.name);
         });
-        localStorage.setItem('languages_cache', JSON.stringify(langsData));
+        safeStorage.setItem('languages_cache', JSON.stringify(langsData));
         setLanguages(langsData);
       });
 
@@ -258,7 +237,7 @@ export function ContentProvider({ children }: { children: React.ReactNode }) {
           if (b.order !== undefined) return 1;
           return a.name.localeCompare(b.name);
         });
-        localStorage.setItem('qualities_cache', JSON.stringify(qualitiesData));
+        safeStorage.setItem('qualities_cache', JSON.stringify(qualitiesData));
         setQualities(qualitiesData);
       });
     };
@@ -287,4 +266,4 @@ export const useContent = () => {
     throw new Error('useContent must be used within a ContentProvider');
   }
   return context;
-};
+}

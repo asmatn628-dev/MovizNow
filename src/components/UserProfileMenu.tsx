@@ -4,10 +4,9 @@ import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { 
   User, Settings, LogOut, Heart, Clock, MessageCircle, 
-  Sun, Moon, Monitor, LayoutDashboard, Film, Users, ShoppingCart
+  Sun, Moon, Monitor, LayoutDashboard, Film, Users
 } from 'lucide-react';
 import { clsx } from 'clsx';
-import { useCart } from '../contexts/CartContext';
 import { format } from 'date-fns';
 import ConfirmModal from './ConfirmModal';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -15,7 +14,6 @@ import { motion, AnimatePresence } from 'framer-motion';
 export function UserProfileMenu({ onOpenLogoutModal }: { onOpenLogoutModal?: () => void }) {
   const { profile, logout } = useAuth();
   const { theme, setTheme } = useTheme();
-  const { cart } = useCart();
   const navigate = useNavigate();
   const [isOpen, setIsOpen] = useState(false);
   const [isLogoutModalOpen, setIsLogoutModalOpen] = useState(false);
@@ -177,19 +175,6 @@ export function UserProfileMenu({ onOpenLogoutModal }: { onOpenLogoutModal?: () 
                 <Heart className="w-4 h-4 text-zinc-400" /> Favorites
               </Link>
               
-              {((profile?.role === 'selected_content' && profile?.status !== 'expired') || profile?.status === 'pending') && (
-                <Link to="/cart" onClick={() => setIsOpen(false)} className="flex items-center justify-between px-3 py-2 rounded-xl text-sm font-medium text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors">
-                  <div className="flex items-center gap-3">
-                    <ShoppingCart className="w-4 h-4 text-zinc-400" /> Cart
-                  </div>
-                  {cart.length > 0 && (
-                    <span className="bg-red-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full">
-                      {cart.length}
-                    </span>
-                  )}
-                </Link>
-              )}
-
               {profile?.role !== 'manager' && profile?.role !== 'content_manager' && (
                 <Link to="/requests" onClick={() => setIsOpen(false)} className="flex items-center gap-3 px-3 py-2 rounded-xl text-sm font-medium text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors">
                   <MessageCircle className="w-4 h-4 text-zinc-400" /> Movie Requests

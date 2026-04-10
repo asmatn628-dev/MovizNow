@@ -19,6 +19,7 @@ import { useModalBehavior } from '../../hooks/useModalBehavior';
 import { NotificationMenu } from '../../components/NotificationMenu';
 import { UserProfileMenu } from '../../components/UserProfileMenu';
 import { AdminButtons } from '../../components/AdminButtons';
+import { CartButton } from '../../components/CartButton';
 
 import { ThemeToggle } from '../../components/ThemeToggle';
 import { useSettings } from '../../contexts/SettingsContext';
@@ -328,6 +329,7 @@ export default function Home({ onOpenMediaModal }: { onOpenMediaModal: () => voi
           <div className="flex items-center gap-2">
             <AdminButtons profile={profile} />
             {profile && <NotificationMenu />}
+            <CartButton />
             <UserProfileMenu onOpenLogoutModal={() => setIsLogoutModalOpen(true)} />
           </div>
         </div>

@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { db } from '../../firebase';
+import { safeStorage } from '../../utils/safeStorage';
 import { collection, doc, updateDoc, onSnapshot, query, where, getDocs, writeBatch, deleteDoc, setDoc } from 'firebase/firestore';
 import { UserProfile, Role, Status, AnalyticsEvent } from '../../types';
 import { Edit2, MessageCircle, X, Check, Search, ArrowUp, ArrowDown, Clock, MousePointerClick, Film, Trash2, Tv, Plus, Loader2, ArrowRight, UserPlus, Calendar, Heart, Bookmark, Save, Lock, Layers } from 'lucide-react';
@@ -138,7 +139,7 @@ export default function UserManagement() {
 
   useEffect(() => {
     const cacheKey = `cached_users_${profile?.uid}_${managedByFilter || 'all'}`;
-    const cached = localStorage.getItem(cacheKey);
+    const cached = safeStorage.getItem(cacheKey);
     if (cached) {
       try {
         setUsers(JSON.parse(cached));
@@ -226,7 +227,7 @@ export default function UserManagement() {
 
       // Update cache
       const cacheKey = `cached_users_${profile?.uid}_${managedByFilter || 'all'}`;
-      localStorage.setItem(cacheKey, JSON.stringify(users));
+      safeStorage.setItem(cacheKey, JSON.stringify(users));
     };
 
     const timer = setTimeout(runAutoUpdates, 3000); // Wait 3s after load/change

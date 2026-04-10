@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { db } from '../../firebase';
+import { safeStorage } from '../../utils/safeStorage';
 import { collection, query, orderBy, onSnapshot, doc, updateDoc, getDoc, arrayUnion, deleteDoc, writeBatch } from 'firebase/firestore';
 import { Order, UserProfile } from '../../types';
 import { Check, X, Clock, Search, Filter, Eye, Loader2, Trash2 } from 'lucide-react';
@@ -16,7 +17,7 @@ const PHONES_CACHE_KEY = 'admin_user_phones_cache';
 export default function OrdersManagement() {
   const { settings } = useSettings();
   const [orders, setOrders] = useState<Order[]>(() => {
-    const cached = localStorage.getItem(CACHE_KEY);
+    const cached = safeStorage.getItem(CACHE_KEY);
     return cached ? JSON.parse(cached) : [];
   });
   const [loading, setLoading] = useState(orders.length === 0);
@@ -32,12 +33,12 @@ export default function OrdersManagement() {
   const [selectedUserPhone, setSelectedUserPhone] = useState<string | null>(null);
   const [selectedUserExpiry, setSelectedUserExpiry] = useState<string | null>(null);
   const [userPhones, setUserPhones] = useState<Record<string, string>>(() => {
-    const cached = localStorage.getItem(PHONES_CACHE_KEY);
+    const cached = safeStorage.getItem(PHONES_CACHE_KEY);
     return cached ? JSON.parse(cached) : {};
   });
 
   useEffect(() => {
-    localStorage.setItem(PHONES_CACHE_KEY, JSON.stringify(userPhones));
+    safeStorage.setItem(PHONES_CACHE_KEY, JSON.stringify(userPhones));
   }, [userPhones]);
   const [confirmModal, setConfirmModal] = useState<{
     isOpen: boolean;
@@ -59,12 +60,12 @@ export default function OrdersManagement() {
   });
 
   const [userExpiries, setUserExpiries] = useState<Record<string, string>>(() => {
-    const cached = localStorage.getItem('user_expiries_cache');
+    const cached = safeStorage.getItem('user_expiries_cache');
     return cached ? JSON.parse(cached) : {};
   });
 
   useEffect(() => {
-    localStorage.setItem('user_expiries_cache', JSON.stringify(userExpiries));
+    safeStorage.setItem('user_expiries_cache', JSON.stringify(userExpiries));
   }, [userExpiries]);
 
   useEffect(() => {
@@ -119,7 +120,7 @@ export default function OrdersManagement() {
         ...doc.data()
       })) as Order[];
       
-      localStorage.setItem(CACHE_KEY, JSON.stringify(ordersData));
+      safeStorage.setItem(CACHE_KEY, JSON.stringify(ordersData));
       setOrders(ordersData);
       setLoading(false);
     });

@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useEffect, useState, useRef } from 'react';
 import { auth, db } from '../firebase';
+import { safeStorage } from '../utils/safeStorage';
 import { 
   onAuthStateChanged, 
   User, 
@@ -64,8 +65,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (isOnline && user) {
       const syncPendingActions = async () => {
-        const pendingFavorites = JSON.parse(localStorage.getItem('pending_favorites') || '[]');
-        const pendingWatchLater = JSON.parse(localStorage.getItem('pending_watch_later') || '[]');
+        const pendingFavorites = JSON.parse(safeStorage.getItem('pending_favorites') || '[]');
+        const pendingWatchLater = JSON.parse(safeStorage.getItem('pending_watch_later') || '[]');
 
         if (pendingFavorites.length > 0 || pendingWatchLater.length > 0) {
           const userRef = doc(db, 'users', user.uid);
@@ -97,8 +98,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 watchLater: newWatchLater
               });
 
-              localStorage.removeItem('pending_favorites');
-              localStorage.removeItem('pending_watch_later');
+              safeStorage.removeItem('pending_favorites');
+              safeStorage.removeItem('pending_watch_later');
             }
           } catch (error) {
             console.error("Background sync failed:", error);
@@ -129,7 +130,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     // Load from cache initially
-    const cachedProfile = localStorage.getItem('profile_cache');
+    const cachedProfile = safeStorage.getItem('profile_cache');
     if (cachedProfile) {
       setProfile(JSON.parse(cachedProfile));
       setLoading(false);
@@ -163,7 +164,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           try {
             if (docSnap.exists()) {
               const data = docSnap.data() as UserProfile;
-              localStorage.setItem('profile_cache', JSON.stringify(data));
+              safeStorage.setItem('profile_cache', JSON.stringify(data));
               
               const isOwner = currentUser.email === 'asmatn628@gmail.com';
               const isAdmin = currentUser.email === 'asmatullah9327@gmail.com';
@@ -242,7 +243,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               } catch (err) {
                 console.error("Failed to create user profile:", err);
               }
-              localStorage.setItem('profile_cache', JSON.stringify(newProfile));
+              safeStorage.setItem('profile_cache', JSON.stringify(newProfile));
               setProfile(newProfile);
             }
           } catch (error) {
@@ -260,7 +261,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           unsubProfile();
           unsubProfile = undefined;
         }
-        localStorage.removeItem('profile_cache');
+        safeStorage.removeItem('profile_cache');
         setProfile(null);
         setLoading(false);
         
@@ -595,7 +596,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // Optimistic update
     const updatedProfile = { ...profile, favorites: newFavorites };
     setProfile(updatedProfile);
-    localStorage.setItem('profile_cache', JSON.stringify(updatedProfile));
+    safeStorage.setItem('profile_cache', JSON.stringify(updatedProfile));
 
     if (isOnline) {
       try {
@@ -603,14 +604,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       } catch (err) {
         console.error("Failed to update favorites online:", err);
         // If it failed despite being online, queue it
-        const pending = JSON.parse(localStorage.getItem('pending_favorites') || '[]');
+        const pending = JSON.parse(safeStorage.getItem('pending_favorites') || '[]');
         pending.push(contentId);
-        localStorage.setItem('pending_favorites', JSON.stringify(pending));
+        safeStorage.setItem('pending_favorites', JSON.stringify(pending));
       }
     } else {
-      const pending = JSON.parse(localStorage.getItem('pending_favorites') || '[]');
+      const pending = JSON.parse(safeStorage.getItem('pending_favorites') || '[]');
       pending.push(contentId);
-      localStorage.setItem('pending_favorites', JSON.stringify(pending));
+      safeStorage.setItem('pending_favorites', JSON.stringify(pending));
     }
   };
 
@@ -624,21 +625,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // Optimistic update
     const updatedProfile = { ...profile, watchLater: newWatchLater };
     setProfile(updatedProfile);
-    localStorage.setItem('profile_cache', JSON.stringify(updatedProfile));
+    safeStorage.setItem('profile_cache', JSON.stringify(updatedProfile));
 
     if (isOnline) {
       try {
         await updateDoc(doc(db, 'users', user.uid), { watchLater: newWatchLater });
       } catch (err) {
         console.error("Failed to update watch later online:", err);
-        const pending = JSON.parse(localStorage.getItem('pending_watch_later') || '[]');
+        const pending = JSON.parse(safeStorage.getItem('pending_watch_later') || '[]');
         pending.push(contentId);
-        localStorage.setItem('pending_watch_later', JSON.stringify(pending));
+        safeStorage.setItem('pending_watch_later', JSON.stringify(pending));
       }
     } else {
-      const pending = JSON.parse(localStorage.getItem('pending_watch_later') || '[]');
+      const pending = JSON.parse(safeStorage.getItem('pending_watch_later') || '[]');
       pending.push(contentId);
-      localStorage.setItem('pending_watch_later', JSON.stringify(pending));
+      safeStorage.setItem('pending_watch_later', JSON.stringify(pending));
     }
   };
 
