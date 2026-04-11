@@ -46,10 +46,10 @@ export const SettingsProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           accountTitle: 'Asmat Ullah',
           accountNumber: '03416286423',
           bankAccounts: [
-            { id: '1', name: 'Easypaisa', color: '#00c652', labelColor: '#00c652', textColor: '#ffffff', iconUrl: '' },
-            { id: '2', name: 'JazzCash', color: '#ed1c24', labelColor: '#ed1c24', textColor: '#ffffff', iconUrl: '' },
-            { id: '3', name: 'NayaPay', color: '#ff6b00', labelColor: '#ff6b00', textColor: '#ffffff', iconUrl: '' },
-            { id: '4', name: 'SadaPay', color: '#00e6b8', labelColor: '#00e6b8', textColor: '#ffffff', iconUrl: '' }
+            { id: '1', name: 'Easypaisa', accountNumber: '', accountTitle: '', color: '#00c652', labelColor: '#00c652', textColor: '#ffffff', iconUrl: '' },
+            { id: '2', name: 'JazzCash', accountNumber: '', accountTitle: '', color: '#ed1c24', labelColor: '#ed1c24', textColor: '#ffffff', iconUrl: '' },
+            { id: '3', name: 'NayaPay', accountNumber: '', accountTitle: '', color: '#ff6b00', labelColor: '#ff6b00', textColor: '#ffffff', iconUrl: '' },
+            { id: '4', name: 'SadaPay', accountNumber: '', accountTitle: '', color: '#00e6b8', labelColor: '#00e6b8', textColor: '#ffffff', iconUrl: '' }
           ],
           adminTabsOrder: [
             'Dashboard', 'Analytics', 'Orders', 'Content', 'Users', 

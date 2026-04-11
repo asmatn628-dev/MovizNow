@@ -197,6 +197,8 @@ export interface Order {
 export interface BankAccount {
   id: string;
   name: string;
+  accountNumber: string;
+  accountTitle: string;
   color: string;
   labelColor?: string;
   textColor?: string;

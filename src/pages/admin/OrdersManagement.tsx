@@ -112,6 +112,25 @@ export default function OrdersManagement() {
     }
   }, [selectedOrder, userPhones, userExpiries]);
 
+  const isIBAN = (value: string) => {
+    return /^[A-Z]{2}[0-9]{2}[A-Z0-9]{4,30}$/i.test(value.replace(/\s/g, ''));
+  };
+
+  const getPaymentDetailsString = () => {
+    if (settings?.paymentDetails) return settings.paymentDetails;
+    
+    if (settings?.bankAccounts && settings.bankAccounts.length > 0) {
+      return settings.bankAccounts.map(b => {
+        const type = b.accountNumber && isIBAN(b.accountNumber) ? 'IBAN' : 'Account Number';
+        const accNo = b.accountNumber || settings?.accountNumber || '03416286423';
+        const accTitle = b.accountTitle || settings?.accountTitle || 'Asmat Ullah';
+        return `*${b.name}*\n*${type}:* ${accNo}\n*Title:* ${accTitle}`;
+      }).join('\n');
+    }
+    
+    return `*Banks :* Easypaisa, Jazzcash, NayaPay, SadaPay \n*Account Number :* ${settings?.accountNumber || '03416286423'}\n*Account Title :* ${settings?.accountTitle || 'Asmat Ullah'}`;
+  };
+
   useEffect(() => {
     const q = query(collection(db, 'orders'), orderBy('createdAt', 'desc'));
     const unsubscribe = onSnapshot(q, (snapshot) => {
@@ -499,7 +518,7 @@ export default function OrdersManagement() {
                       <a 
                         href={`https://wa.me/${selectedUserPhone.replace(/\D/g, '')}?text=${encodeURIComponent(
                           selectedOrder.status === 'pending' 
-                            ? `*Ap ke Order ka Shukriya!*\nAp ke Order ${selectedOrder.id} ki total payment Rs ${selectedOrder.amount} hai. Order ke Approval ke liye Payment kar ke Screenshot bhej dain.\n\n*Payment Details:*\n${settings?.paymentDetails || `*Banks :* ${settings?.bankAccounts.map(b => b.name).join(', ') || 'Easypaisa, Jazzcash, NayaPay, SadaPay'} \n*Account Number :* ${settings?.accountNumber || '03416286423'}\n*Account Title :* ${settings?.accountTitle || 'Asmat Ullah'}`}`
+                            ? `*Ap ke Order ka Shukriya!*\nAp ke Order ${selectedOrder.id} ki total payment Rs ${selectedOrder.amount} hai. Order ke Approval ke liye Payment kar ke Screenshot bhej dain.\n\n*Payment Details:*\n${getPaymentDetailsString()}`
                             : selectedOrder.status === 'approved'
                             ? `Thanks for your Payment, Your order ${selectedOrder.id} has been approved.\n🍿 Enjoy watching on ${settings?.headerText || 'MovizNow'}!`
                             : ""

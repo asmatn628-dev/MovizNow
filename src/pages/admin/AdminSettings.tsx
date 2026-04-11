@@ -24,10 +24,10 @@ export default function AdminSettings() {
     accountTitle: 'Asmat Ullah',
     accountNumber: '03416286423',
     bankAccounts: [
-      { id: '1', name: 'Easypaisa', color: '#00c652', labelColor: '#00c652', textColor: '#ffffff', iconUrl: '' },
-      { id: '2', name: 'JazzCash', color: '#ed1c24', labelColor: '#ed1c24', textColor: '#ffffff', iconUrl: '' },
-      { id: '3', name: 'NayaPay', color: '#ff6b00', labelColor: '#ff6b00', textColor: '#ffffff', iconUrl: '' },
-      { id: '4', name: 'SadaPay', color: '#00e6b8', labelColor: '#00e6b8', textColor: '#ffffff', iconUrl: '' }
+      { id: '1', name: 'Easypaisa', accountNumber: '', accountTitle: '', color: '#00c652', labelColor: '#00c652', textColor: '#ffffff', iconUrl: '' },
+      { id: '2', name: 'JazzCash', accountNumber: '', accountTitle: '', color: '#ed1c24', labelColor: '#ed1c24', textColor: '#ffffff', iconUrl: '' },
+      { id: '3', name: 'NayaPay', accountNumber: '', accountTitle: '', color: '#ff6b00', labelColor: '#ff6b00', textColor: '#ffffff', iconUrl: '' },
+      { id: '4', name: 'SadaPay', accountNumber: '', accountTitle: '', color: '#00e6b8', labelColor: '#00e6b8', textColor: '#ffffff', iconUrl: '' }
     ],
     adminTabsOrder: [
       'Dashboard', 'Analytics', 'Orders', 'Content', 'Users', 
@@ -95,6 +95,8 @@ export default function AdminSettings() {
     const newBank: BankAccount = {
       id: Date.now().toString(),
       name: 'New Bank',
+      accountNumber: '',
+      accountTitle: '',
       color: '#3b82f6',
       labelColor: '#3b82f6',
       textColor: '#ffffff',
@@ -118,6 +120,11 @@ export default function AdminSettings() {
       ...settings,
       bankAccounts: settings.bankAccounts.map(b => b.id === id ? { ...b, [field]: value } : b)
     });
+  };
+
+  const isIBAN = (value: string) => {
+    // Basic IBAN regex: 2 letters followed by 2 digits, then up to 30 alphanumeric characters
+    return /^[A-Z]{2}[0-9]{2}[A-Z0-9]{4,30}$/i.test(value.replace(/\s/g, ''));
   };
 
   if (profile?.role !== 'owner') {
@@ -348,6 +355,29 @@ export default function AdminSettings() {
                         className="w-full px-3 py-2 bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-700 rounded-lg text-sm focus:ring-2 focus:ring-emerald-500 outline-none"
                         placeholder="Bank Name"
                       />
+                      <div className="grid grid-cols-2 gap-2">
+                        <input
+                          type="text"
+                          value={bank.accountTitle || ''}
+                          onChange={(e) => updateBankAccount(bank.id, 'accountTitle', e.target.value)}
+                          className="w-full px-3 py-2 bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-700 rounded-lg text-sm focus:ring-2 focus:ring-emerald-500 outline-none"
+                          placeholder="Account Title"
+                        />
+                        <div className="relative">
+                          <input
+                            type="text"
+                            value={bank.accountNumber || ''}
+                            onChange={(e) => updateBankAccount(bank.id, 'accountNumber', e.target.value)}
+                            className="w-full px-3 py-2 bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-700 rounded-lg text-sm focus:ring-2 focus:ring-emerald-500 outline-none pr-12"
+                            placeholder="Account No / IBAN"
+                          />
+                          {bank.accountNumber && (
+                            <div className="absolute right-2 top-1/2 -translate-y-1/2 px-1.5 py-0.5 rounded bg-zinc-100 dark:bg-zinc-800 text-[8px] font-bold uppercase text-zinc-500">
+                              {isIBAN(bank.accountNumber) ? 'IBAN' : 'ACC'}
+                            </div>
+                          )}
+                        </div>
+                      </div>
                       <input
                         type="text"
                         value={bank.iconUrl || ''}
