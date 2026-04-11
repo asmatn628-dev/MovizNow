@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
@@ -11,7 +11,7 @@ import { format } from 'date-fns';
 import ConfirmModal from './ConfirmModal';
 import { motion, AnimatePresence } from 'framer-motion';
 
-export function UserProfileMenu({ onOpenLogoutModal }: { onOpenLogoutModal?: () => void }) {
+export const UserProfileMenu = React.memo(({ onOpenLogoutModal }: { onOpenLogoutModal?: () => void }) => {
   const { profile, logout } = useAuth();
   const { theme, setTheme } = useTheme();
   const navigate = useNavigate();
@@ -220,4 +220,4 @@ export function UserProfileMenu({ onOpenLogoutModal }: { onOpenLogoutModal?: () 
       />
     </div>
   );
-}
+});

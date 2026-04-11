@@ -135,9 +135,9 @@ const ContentCard = React.memo(({
   };
 
   return (
-    <div className="group relative rounded-2xl p-[0.5px] transition-all hover:scale-[1.02] bg-gradient-to-br from-black to-white/20 dark:bg-black flex flex-col h-full">
+    <div className="group relative rounded-2xl p-[0.5px] transition-all hover:scale-[1.02] bg-gradient-to-br from-black to-white/20 dark:bg-black flex flex-col h-full transform-gpu">
       {/* Blur black to white gradient background outside of content */}
-      <div className="absolute -inset-[1px] bg-gradient-to-br from-black to-white/20 dark:from-black dark:to-black blur-md rounded-2xl z-0 transition-all duration-300"></div>
+      <div className="absolute -inset-[1px] bg-gradient-to-br from-black to-white/20 dark:from-black dark:to-black rounded-2xl z-0 transition-all duration-300 group-hover:blur-sm"></div>
 
       {/* Color Gradient Layer (1px) */}
       <div className="relative rounded-[15.5px] p-[1px] bg-[linear-gradient(to_bottom_right,#ff0000,#ef4444,#f97316,#facc15,#4ade80,#06b6d4,#3b82f6,#a855f7)] z-10 flex flex-col h-full">
@@ -151,6 +151,8 @@ const ContentCard = React.memo(({
             <LazyLoadImage
             src={content.posterUrl || settings?.defaultAppImage || 'https://picsum.photos/seed/movie/400/600'}
             alt={content.title}
+            effect="blur"
+            threshold={300}
             className="w-full h-full object-cover"
             referrerPolicy="no-referrer"
             wrapperClassName="w-full h-full bg-zinc-100 dark:bg-zinc-800"

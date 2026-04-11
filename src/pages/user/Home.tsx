@@ -6,7 +6,7 @@ import { Content, Role } from '../../types';
 import { useAuth } from '../../contexts/AuthContext';
 import { useContent } from '../../contexts/ContentContext';
 import { useCart } from '../../contexts/CartContext';
-import { Film, Search, Filter, MessageCircle, Clock, Heart, LogOut, User, Users, Lock, LayoutDashboard, X, ShoppingCart, Plus } from 'lucide-react';
+import { Film, Search, Filter, MessageCircle, Clock, Heart, LogOut, User, Users, Lock, LayoutDashboard, X, ShoppingCart, Plus, ChevronLeft, ChevronRight } from 'lucide-react';
 import { clsx } from 'clsx';
 import { format } from 'date-fns';
 import ConfirmModal from '../../components/ConfirmModal';
@@ -32,20 +32,29 @@ export default function Home({ onOpenMediaModal }: { onOpenMediaModal: () => voi
   const navigate = useNavigate();
   
   const [search, setSearch] = useState(() => sessionStorage.getItem('home_search') || '');
+  const [debouncedSearch, setDebouncedSearch] = useState(search);
   const [showSuggestions, setShowSuggestions] = useState(false);
+  
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(search);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [search]);
+
   const searchInputRef = useRef<HTMLInputElement>(null);
   const suggestionsRef = useRef<HTMLDivElement>(null);
   
   // ... (rest of the component)
 
   const searchSuggestions = useMemo(() => {
-    if (!search.trim()) return [];
-    return smartSearch(contentList, search).slice(0, 5);
-  }, [search, contentList]);
+    if (!debouncedSearch.trim()) return [];
+    return smartSearch(contentList, debouncedSearch).slice(0, 5);
+  }, [debouncedSearch, contentList]);
 
   useEffect(() => {
-    sessionStorage.setItem('home_search', search);
-  }, [search]);
+    sessionStorage.setItem('home_search', debouncedSearch);
+  }, [debouncedSearch]);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -134,14 +143,20 @@ export default function Home({ onOpenMediaModal }: { onOpenMediaModal: () => voi
   };
 
   useEffect(() => {
+    let timeoutId: number | null = null;
     const handleScroll = () => {
-      sessionStorage.setItem('homeScrollPosition', window.scrollY.toString());
+      if (timeoutId) return;
+      timeoutId = window.setTimeout(() => {
+        sessionStorage.setItem('homeScrollPosition', window.scrollY.toString());
+        timeoutId = null;
+      }, 500); // Throttle to every 500ms
     };
 
     window.addEventListener('scroll', handleScroll, { passive: true });
     
     return () => {
       window.removeEventListener('scroll', handleScroll);
+      if (timeoutId) clearTimeout(timeoutId);
     };
   }, []);
 
@@ -238,8 +253,8 @@ export default function Home({ onOpenMediaModal }: { onOpenMediaModal: () => voi
       });
     }
 
-    if (search) {
-      result = smartSearch(result, search);
+    if (debouncedSearch) {
+      result = smartSearch(result, debouncedSearch);
     }
     if (selectedType) {
       result = result.filter(c => c.type === selectedType);
@@ -266,7 +281,7 @@ export default function Home({ onOpenMediaModal }: { onOpenMediaModal: () => voi
       });
     }
 
-    if (!search) {
+    if (!debouncedSearch) {
       result.sort((a, b) => {
         // For selected_content users, prioritize assigned content
         if (profile?.role === 'selected_content') {
@@ -291,7 +306,7 @@ export default function Home({ onOpenMediaModal }: { onOpenMediaModal: () => voi
     }
 
     return result;
-  }, [contentList, search, sort, selectedType, selectedGenre, selectedLanguage, selectedQuality, selectedYear, profile]);
+  }, [contentList, debouncedSearch, sort, selectedType, selectedGenre, selectedLanguage, selectedQuality, selectedYear, profile]);
 
   const totalPages = Math.ceil(filteredAndSortedContent.length / ITEMS_PER_PAGE);
   const paginatedContent = useMemo(() => {
@@ -307,7 +322,7 @@ export default function Home({ onOpenMediaModal }: { onOpenMediaModal: () => voi
       return;
     }
     setCurrentPage(1);
-  }, [search, sort, selectedType, selectedGenre, selectedLanguage, selectedQuality, selectedYear]);
+  }, [debouncedSearch, sort, selectedType, selectedGenre, selectedLanguage, selectedQuality, selectedYear]);
 
   // Ensure current page is within bounds
   useEffect(() => {
@@ -404,12 +419,14 @@ export default function Home({ onOpenMediaModal }: { onOpenMediaModal: () => voi
                     <Link
                       key={content.id}
                       to={`/movie/${content.id}`}
-                      className="flex-none w-[80px] sm:w-[100px] snap-start group/card relative rounded-xl overflow-hidden bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 hover:border-emerald-500/50 transition-all duration-300 shadow-md"
+                      className="flex-none w-[80px] sm:w-[100px] snap-start group/card relative rounded-xl overflow-hidden bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 hover:border-emerald-500/50 transition-all duration-300 shadow-md transform-gpu"
                     >
                       <div className="aspect-[2/3] relative">
                         <LazyLoadImage
                           src={content.posterUrl || settings?.defaultAppImage || 'https://images.unsplash.com/photo-1440404653325-ab127d49abc1?auto=format&fit=crop&w=300&q=80'}
                           alt={content.title}
+                          effect="blur"
+                          threshold={300}
                           className="w-full h-full object-cover transition-transform duration-500 group-hover/card:scale-110"
                           wrapperClassName="w-full h-full"
                           referrerPolicy="no-referrer"
@@ -612,26 +629,27 @@ export default function Home({ onOpenMediaModal }: { onOpenMediaModal: () => voi
             {/* Pagination */}
             {totalPages > 1 && (
               <div className="mt-12 flex flex-col items-center gap-4">
-                <div className="flex items-center gap-2">
+                <div className="flex items-center justify-center gap-1 sm:gap-2 flex-wrap">
                   <button
                     onClick={() => {
                       setCurrentPage(prev => Math.max(1, prev - 1));
                       window.scrollTo({ top: 0, behavior: 'smooth' });
                     }}
                     disabled={currentPage === 1}
-                    className="px-4 py-2 rounded-xl bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 text-sm font-medium hover:bg-zinc-200 dark:hover:bg-zinc-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                    className="h-9 sm:h-10 px-3 sm:px-4 rounded-xl bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 text-sm font-medium hover:bg-zinc-200 dark:hover:bg-zinc-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-1"
                   >
-                    Previous
+                    <ChevronLeft className="w-4 h-4" />
+                    <span className="hidden sm:inline">Previous</span>
                   </button>
                   
                   <div className="flex items-center gap-1">
                     {Array.from({ length: totalPages }, (_, i) => i + 1).map(page => {
                       // Show limited page numbers for better UI
-                      if (
-                        page === 1 || 
-                        page === totalPages || 
-                        (page >= currentPage - 1 && page <= currentPage + 1)
-                      ) {
+                      const isFirst = page === 1;
+                      const isLast = page === totalPages;
+                      const isNear = page >= currentPage - 1 && page <= currentPage + 1;
+                      
+                      if (isFirst || isLast || isNear) {
                         return (
                           <button
                             key={page}
@@ -640,7 +658,7 @@ export default function Home({ onOpenMediaModal }: { onOpenMediaModal: () => voi
                               window.scrollTo({ top: 0, behavior: 'smooth' });
                             }}
                             className={clsx(
-                              "w-10 h-10 rounded-xl text-sm font-medium transition-colors",
+                              "w-9 h-9 sm:w-10 sm:h-10 rounded-xl text-sm font-medium transition-colors",
                               currentPage === page 
                                 ? "bg-emerald-500 text-white" 
                                 : "bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 text-zinc-500 dark:text-zinc-400 hover:bg-zinc-200 dark:hover:bg-zinc-800"
@@ -653,7 +671,7 @@ export default function Home({ onOpenMediaModal }: { onOpenMediaModal: () => voi
                         page === currentPage - 2 || 
                         page === currentPage + 2
                       ) {
-                        return <span key={page} className="text-zinc-600 px-1">...</span>;
+                        return <span key={page} className="text-zinc-400 dark:text-zinc-600 px-0.5 sm:px-1">...</span>;
                       }
                       return null;
                     })}
@@ -665,12 +683,13 @@ export default function Home({ onOpenMediaModal }: { onOpenMediaModal: () => voi
                       window.scrollTo({ top: 0, behavior: 'smooth' });
                     }}
                     disabled={currentPage === totalPages}
-                    className="px-4 py-2 rounded-xl bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 text-sm font-medium hover:bg-zinc-200 dark:hover:bg-zinc-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                    className="h-9 sm:h-10 px-3 sm:px-4 rounded-xl bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 text-sm font-medium hover:bg-zinc-200 dark:hover:bg-zinc-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-1"
                   >
-                    Next
+                    <span className="hidden sm:inline">Next</span>
+                    <ChevronRight className="w-4 h-4" />
                   </button>
                 </div>
-                <p className="text-xs text-zinc-500">
+                <p className="text-[10px] sm:text-xs text-zinc-500 font-medium">
                   Showing {(currentPage - 1) * ITEMS_PER_PAGE + 1} to {Math.min(currentPage * ITEMS_PER_PAGE, filteredAndSortedContent.length)} of {filteredAndSortedContent.length} contents
                 </p>
               </div>

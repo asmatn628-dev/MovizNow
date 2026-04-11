@@ -10,7 +10,7 @@ import { useModalBehavior } from '../hooks/useModalBehavior';
 
 interface NotificationMenuProps {}
 
-export const NotificationMenu: React.FC<NotificationMenuProps> = () => {
+export const NotificationMenu = React.memo(() => {
   const { profile } = useAuth();
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [isOpen, setIsOpen] = useState(false);
@@ -176,4 +176,4 @@ export const NotificationMenu: React.FC<NotificationMenuProps> = () => {
       )}
     </>
   );
-};
+});

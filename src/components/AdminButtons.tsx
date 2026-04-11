@@ -1,8 +1,9 @@
+import React from 'react';
 import { Link } from 'react-router-dom';
 import { LayoutDashboard, Film, Users } from 'lucide-react';
 import { UserProfile } from '../types';
 
-export function AdminButtons({ profile }: { profile: UserProfile | null }) {
+export const AdminButtons = React.memo(({ profile }: { profile: UserProfile | null }) => {
   if (!profile) return null;
 
   return (
@@ -24,4 +25,4 @@ export function AdminButtons({ profile }: { profile: UserProfile | null }) {
       )}
     </div>
   );
-}
+});

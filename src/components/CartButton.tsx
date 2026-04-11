@@ -1,9 +1,10 @@
+import React from 'react';
 import { Link } from 'react-router-dom';
 import { ShoppingCart } from 'lucide-react';
 import { useCart } from '../contexts/CartContext';
 import { useAuth } from '../contexts/AuthContext';
 
-export function CartButton() {
+export const CartButton = React.memo(() => {
   const { cart } = useCart();
   const { profile } = useAuth();
 
@@ -28,4 +29,4 @@ export function CartButton() {
       )}
     </Link>
   );
-}
+});

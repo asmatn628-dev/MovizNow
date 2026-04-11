@@ -4,6 +4,7 @@ import {HelmetProvider} from 'react-helmet-async';
 import App from './App.tsx';
 import ErrorBoundary from './components/ErrorBoundary.tsx';
 import './index.css';
+import 'react-lazy-load-image-component/src/effects/blur.css';
 
 // Register service worker for PWA and FCM
 if ('serviceWorker' in navigator) {
