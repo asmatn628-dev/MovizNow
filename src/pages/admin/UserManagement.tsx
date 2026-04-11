@@ -274,7 +274,8 @@ export default function UserManagement() {
     const fetchContent = async () => {
       try {
         const snapshot = await getDocs(collection(db, 'content'));
-        setAllContent(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+        const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as any));
+        setAllContent(data.sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime()));
       } catch (error) {
         console.error("Error fetching content:", error);
       }
@@ -1710,7 +1711,7 @@ export default function UserManagement() {
             
             <div className="flex-1 overflow-y-auto p-6">
               <div className="space-y-2">
-                {smartSearch(allContent, contentSearchTerm)
+                {(contentSearchTerm.trim() ? smartSearch(allContent, contentSearchTerm) : allContent)
                   .map((content) => {
                     const isSeries = content.type === 'series';
                     const seasons = isSeries && content.seasons ? (typeof content.seasons === 'string' ? JSON.parse(content.seasons || '[]') : content.seasons) : [];

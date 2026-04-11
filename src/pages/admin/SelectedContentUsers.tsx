@@ -82,7 +82,7 @@ export default function SelectedContentUsers() {
     const q = query(collection(db, 'content'));
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const data = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() } as Content));
-      setContentList(data.sort((a, b) => a.title.localeCompare(b.title)));
+      setContentList(data.sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime()));
     }, (error) => {
       console.error("Content fetch error:", error);
       handleFirestoreError(error, OperationType.LIST, 'content');
