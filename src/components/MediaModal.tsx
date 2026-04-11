@@ -239,13 +239,61 @@ export const MediaModal: React.FC<MediaModalProps> = ({ isOpen, onClose, initial
 
     try {
       if (searchImdbId.trim()) {
-        const match = searchImdbId.trim().match(/tt\d+/);
-        const imdbID = match ? match[0] : searchImdbId.trim();
-        const found = await findTMDBByImdb(imdbID);
-        if (found) {
-          await fetchFullDetails(found.item.id, found.type);
+        const idStr = searchImdbId.trim();
+        const isNumeric = /^\d+$/.test(idStr);
+        
+        if (isNumeric) {
+          // Try fetching as movie first
+          try {
+            const movieRes = await fetch(`${TMDB_BASE}/movie/${idStr}?api_key=${TMDB_API_KEY}`);
+            if (movieRes.ok) {
+              await fetchFullDetails(idStr, 'movie');
+              return;
+            }
+          } catch (e) {}
+          
+          // Try fetching as tv
+          try {
+            const tvRes = await fetch(`${TMDB_BASE}/tv/${idStr}?api_key=${TMDB_API_KEY}`);
+            if (tvRes.ok) {
+              await fetchFullDetails(idStr, 'tv');
+              return;
+            }
+          } catch (e) {}
+          
+          // If not found by TMDB ID, fall back to title search if title is provided
+          if (searchTitle.trim()) {
+            const results = await searchTMDBByTitle(searchTitle.trim(), searchYear.trim());
+            if (results && results.length > 1) {
+              setSearchResults(results);
+              return;
+            } else if (results && results.length === 1) {
+              await fetchFullDetails(results[0].item.id, results[0].type);
+              return;
+            }
+          }
+          throw new Error(`No TMDB entry found for ID: ${idStr}`);
         } else {
-          throw new Error(`No TMDB entry found for IMDb ID: ${imdbID}`);
+          const match = idStr.match(/tt\d+/);
+          const imdbID = match ? match[0] : idStr;
+          const found = await findTMDBByImdb(imdbID);
+          if (found) {
+            await fetchFullDetails(found.item.id, found.type);
+            return;
+          } else {
+            // If not found by IMDb ID, fall back to title search if title is provided
+            if (searchTitle.trim()) {
+              const results = await searchTMDBByTitle(searchTitle.trim(), searchYear.trim());
+              if (results && results.length > 1) {
+                setSearchResults(results);
+                return;
+              } else if (results && results.length === 1) {
+                await fetchFullDetails(results[0].item.id, results[0].type);
+                return;
+              }
+            }
+            throw new Error(`No TMDB entry found for IMDb ID: ${imdbID}`);
+          }
         }
       } else if (searchTitle.trim()) {
         const results = await searchTMDBByTitle(searchTitle.trim(), searchYear.trim());
@@ -257,7 +305,7 @@ export const MediaModal: React.FC<MediaModalProps> = ({ isOpen, onClose, initial
           throw new Error('No movie or series found with that title/year.');
         }
       } else {
-        throw new Error('Please provide either an IMDb ID or a title.');
+        throw new Error('Please provide either an ID or a title.');
       }
     } catch (err: any) {
       setError(err.message);
@@ -421,7 +469,7 @@ export const MediaModal: React.FC<MediaModalProps> = ({ isOpen, onClose, initial
         
         <div className="p-4 border-b border-zinc-100 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-950/50 transition-colors duration-300">
           <div className="flex flex-wrap gap-3 items-center">
-            <input type="text" value={imdbId} onChange={e => setImdbId(e.target.value)} placeholder="IMDb ID (e.g., tt21842982)" className="flex-1 min-w-[140px] p-2 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg text-sm text-zinc-900 dark:text-white focus:outline-none focus:border-emerald-500 transition-colors duration-300" />
+            <input type="text" value={imdbId} onChange={e => setImdbId(e.target.value)} placeholder="TMDB ID or IMDb ID (e.g., tt21842982)" className="flex-1 min-w-[140px] p-2 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg text-sm text-zinc-900 dark:text-white focus:outline-none focus:border-emerald-500 transition-colors duration-300" />
             <span className="text-zinc-500 font-medium text-sm">OR</span>
             <input type="text" value={title} onChange={e => setTitle(e.target.value)} placeholder="Movie/Series title" className="flex-1 min-w-[140px] p-2 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg text-sm text-zinc-900 dark:text-white focus:outline-none focus:border-emerald-500 transition-colors duration-300" />
             <input type="text" value={year} onChange={e => setYear(e.target.value)} placeholder="Year" className="w-24 p-2 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg text-sm text-zinc-900 dark:text-white focus:outline-none focus:border-emerald-500 transition-colors duration-300" />

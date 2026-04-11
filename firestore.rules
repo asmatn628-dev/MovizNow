@@ -58,7 +58,7 @@ service cloud.firestore {
              data.phone is string && data.phone.size() < 20 &&
              data.displayName is string && data.displayName.size() < 100 &&
              data.role in ['admin', 'owner', 'manager', 'user_manager', 'content_manager', 'user', 'trial', 'selected_content'] &&
-             data.status in ['active', 'pending', 'suspended'];
+             data.status in ['active', 'pending', 'suspended', 'expired'];
     }
 
     function isPendingOwner(userId, resourceData) {

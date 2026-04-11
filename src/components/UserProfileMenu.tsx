@@ -4,7 +4,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { 
   User, Settings, LogOut, Heart, Clock, MessageCircle, 
-  Sun, Moon, Monitor, LayoutDashboard, Film, Users
+  Sun, Moon, Monitor, LayoutDashboard, Film, Users, Plus
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { format } from 'date-fns';
@@ -122,8 +122,20 @@ export function UserProfileMenu({ onOpenLogoutModal }: { onOpenLogoutModal?: () 
               </div>
 
               {profile.role !== 'owner' && profile.expiryDate && (
-                <div className="text-xs text-zinc-500 mt-2">
-                  Expiry: <span className="font-medium text-zinc-900 dark:text-white">{profile.expiryDate === 'Lifetime' ? 'Lifetime' : format(new Date(profile.expiryDate), 'MMM dd, yyyy')}</span>
+                <div className="text-xs text-zinc-500 mt-2 flex items-center justify-between">
+                  <div>
+                    Expiry: <span className="font-medium text-zinc-900 dark:text-white">{profile.expiryDate === 'Lifetime' ? 'Lifetime' : format(new Date(profile.expiryDate), 'MMM dd, yyyy')}</span>
+                  </div>
+                  <button 
+                    onClick={() => {
+                      setIsOpen(false);
+                      navigate('/top-up');
+                    }}
+                    className="p-1 rounded-full bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500/20 transition-colors"
+                    title="Renew or Extend Membership"
+                  >
+                    <Plus className="w-3 h-3" />
+                  </button>
                 </div>
               )}
             </div>

@@ -292,9 +292,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (auth.currentUser && sessionStartTimeRef.current) {
         updateTimeSpent(auth.currentUser.uid, 1);
         
-        // Update lastActive every 5 minutes
+        // Update lastActive every 2 minutes
         const minutesSinceStart = Math.floor((Date.now() - sessionStartTimeRef.current) / 60000);
-        if (minutesSinceStart % 5 === 0) {
+        if (minutesSinceStart % 2 === 0) {
           updateDoc(doc(db, 'users', auth.currentUser.uid), { lastActive: new Date().toISOString() }).catch(console.error);
         }
       }

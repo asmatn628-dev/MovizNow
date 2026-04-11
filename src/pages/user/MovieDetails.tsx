@@ -58,8 +58,36 @@ export default function MovieDetails() {
   const [isTrailerSelectionOpen, setIsTrailerSelectionOpen] = useState(false);
   const [activeTrailerUrl, setActiveTrailerUrl] = useState<string | null>(null);
   const [isMediaModalOpen, setIsMediaModalOpen] = useState(false);
+  const [lockedContentInfo, setLockedContentInfo] = useState<{ 
+    id: string; 
+    type: 'movie' | 'season'; 
+    seasonId?: string; 
+    seasonNumber?: number; 
+    title: string;
+    price: number;
+  } | null>(null);
   const [expandedEpisodes, setExpandedEpisodes] = useState<Record<string, boolean>>({});
-  const [cachedMetadata, setCachedMetadata] = useState<Partial<Content>>({});
+  const [cachedMetadata, setCachedMetadata] = useState<{id: string, data: Partial<Content>}>(() => {
+    const cachedMeta = localStorage.getItem(`content_cache_${id}`);
+    let data = {};
+    if (cachedMeta) {
+      try {
+        data = JSON.parse(cachedMeta);
+      } catch (e) {}
+    }
+    return { id: id || '', data };
+  });
+
+  if (cachedMetadata.id !== id) {
+    const cachedMeta = localStorage.getItem(`content_cache_${id}`);
+    let data = {};
+    if (cachedMeta) {
+      try {
+        data = JSON.parse(cachedMeta);
+      } catch (e) {}
+    }
+    setCachedMetadata({ id: id || '', data });
+  }
   const [isReporting, setIsReporting] = useState(false);
   const [imdbData, setImdbData] = useState<any>(null);
   const [fetchingImdb, setFetchingImdb] = useState(false);
@@ -82,29 +110,60 @@ export default function MovieDetails() {
     window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
   }, [id]);
 
-  // Load cache from sessionStorage
-  useEffect(() => {
+  const [fullContent, setFullContent] = useState<Content | null>(() => {
     if (id) {
-      const cached = sessionStorage.getItem(`content_cache_${id}`);
+      const cached = localStorage.getItem(`movie_details_${id}`);
       if (cached) {
         try {
-          setCachedMetadata(JSON.parse(cached));
-        } catch (e) {
-          console.error("Error parsing cached metadata:", e);
-        }
+          const parsed = JSON.parse(cached);
+          if (parsed.id === id) return parsed;
+        } catch (e) {}
       }
     }
-  }, [id]);
-
-  const [fullContent, setFullContent] = useState<Content | null>(null);
+    return null;
+  });
   const [fetchFailed, setFetchFailed] = useState(false);
+  const hasFetchedFull = useRef<Record<string, boolean>>({});
 
-  // Reset state on ID change
+  // Reset state and load cache on ID change
   useEffect(() => {
-    setFullContent(null);
+    if (id) {
+      // Load full content cache
+      const cachedFull = localStorage.getItem(`movie_details_${id}`);
+      if (cachedFull) {
+        try {
+          const parsed = JSON.parse(cachedFull);
+          if (parsed.id === id) {
+            setFullContent(parsed);
+          } else {
+            setFullContent(null);
+          }
+        } catch (e) {
+          setFullContent(null);
+        }
+      } else {
+        setFullContent(null);
+      }
+
+      // Load metadata cache
+      const cachedMeta = localStorage.getItem(`content_cache_${id}`);
+      if (cachedMeta) {
+        try {
+          setCachedMetadata({ id: id || '', data: JSON.parse(cachedMeta) });
+        } catch (e) {
+          setCachedMetadata({ id: id || '', data: {} });
+        }
+      } else {
+        setCachedMetadata({ id: id || '', data: {} });
+      }
+    } else {
+      setFullContent(null);
+      setCachedMetadata({ id: '', data: {} });
+    }
     setFetchFailed(false);
-    setCachedMetadata({});
     hasLoggedView.current = false;
+    hasAttemptedRatingFetch.current = {};
+    hasAttemptedStaticFetch.current = {};
   }, [id]);
 
   const [recentlyViewed, setRecentlyViewed] = useState<Content[]>([]);
@@ -120,19 +179,24 @@ export default function MovieDetails() {
     }
   }, []);
 
+  const isMinimal = useMemo(() => {
+    if (!content) return true;
+    let parsedSeasons: any[] = [];
+    try {
+      parsedSeasons = content.type === 'series' && content.seasons ? (Array.isArray(content.seasons) ? content.seasons : JSON.parse(content.seasons as string)) : [];
+    } catch (e) {}
+    
+    const hasFullSeasons = content.type === 'series' && 
+      parsedSeasons.length > 0 && 
+      parsedSeasons.some((s: any) => s.episodes && s.episodes.length > 1);
+
+    return (content.type === 'movie' && !content.movieLinks) || 
+           (content.type === 'series' && !hasFullSeasons);
+  }, [content]);
+
   useEffect(() => {
-    // A series is minimal if it has no seasons or if seasons episodes are placeholders (id: 'last')
-    const hasFullSeasons = content?.type === 'series' && 
-      content.seasons && 
-      Array.isArray(content.seasons) && 
-      content.seasons.some(s => s.episodes && s.episodes.length > 1);
-
-    const isMinimal = content && (
-      (content.type === 'movie' && !content.movieLinks) || 
-      (content.type === 'series' && !hasFullSeasons)
-    );
-
-    if ((!content || isMinimal) && !fullContent && id && !fetchFailed && !isOffline) {
+    if (isMinimal && id && !fetchFailed && !isOffline && !hasFetchedFull.current[id]) {
+      hasFetchedFull.current[id] = true;
       const fetchFullContent = async () => {
         try {
           const docRef = doc(db, 'content', id);
@@ -140,7 +204,7 @@ export default function MovieDetails() {
           if (docSnap.exists()) {
             const data = { id: docSnap.id, ...docSnap.data() } as Content;
             setFullContent(data);
-            sessionStorage.setItem(`content_cache_${id}`, JSON.stringify(data));
+            localStorage.setItem(`movie_details_${id}`, JSON.stringify(data));
           } else {
             setFetchFailed(true);
           }
@@ -151,17 +215,18 @@ export default function MovieDetails() {
       };
       fetchFullContent();
     }
-  }, [content, fullContent, id, fetchFailed, isOffline]);
+  }, [isMinimal, id, fetchFailed, isOffline]);
 
   const mergedContent = useMemo(() => {
     if (!content && !fullContent) return null;
-    // Prioritize fullContent, then cachedMetadata, then basic content from list
+    // Prioritize cachedMetadata (TMDB updates/local edits), then fresh fullContent from DB, then partial content from list
+    const metadata = cachedMetadata.id === id ? cachedMetadata.data : {};
     return {
       ...(content || {}),
-      ...cachedMetadata,
-      ...(fullContent || {})
+      ...(fullContent || {}),
+      ...metadata
     } as Content;
-  }, [content, cachedMetadata, fullContent]);
+  }, [content, cachedMetadata, fullContent, id]);
 
   const seasons = useMemo(() => {
     if (!mergedContent || mergedContent.type !== 'series' || !mergedContent.seasons) return [] as Season[];
@@ -314,34 +379,92 @@ export default function MovieDetails() {
 
   // Removed buggy popstate logic for popups
 
-  const hasAttemptedFetch = useRef<Record<string, boolean>>({});
+  const hasAttemptedStaticFetch = useRef<Record<string, boolean>>({});
+  const hasAttemptedRatingFetch = useRef<Record<string, boolean>>({});
 
+  // Fetch Live IMDb Rating independently
   useEffect(() => {
-    if (!mergedContent || !id || hasAttemptedFetch.current[id] || isOffline) return;
+    if (!mergedContent || !id || hasAttemptedRatingFetch.current[id] || isOffline) return;
 
-    const fetchMissingData = async () => {
-      const seasons = mergedContent.type === 'series' && mergedContent.seasons ? (Array.isArray(mergedContent.seasons) ? mergedContent.seasons : JSON.parse(mergedContent.seasons || '[]')) : [];
-      const needsEpisodeData = mergedContent.type === 'series' && seasons.some((s: any) => s.episodes?.some((ep: any) => !ep.description || !ep.duration));
-      
-      const needsStaticData = !mergedContent.runtime || !mergedContent.description || !mergedContent.cast || !mergedContent.releaseDate || !mergedContent.posterUrl || needsEpisodeData;
+    const fetchRating = async () => {
       const ratingCacheKey = `imdb_rating_${id}`;
       const hasLiveRating = sessionStorage.getItem(ratingCacheKey);
-      const needsRating = !hasLiveRating;
-
-      if (!needsStaticData && !needsRating) {
-        // If we already have a cached rating, just display it
-        if (hasLiveRating && mergedContent.imdbRating !== hasLiveRating) {
-          setImdbData(prev => ({ ...prev, rating: hasLiveRating, isFetched: true }));
+      
+      // Show cached immediately if available
+      if (hasLiveRating) {
+        setImdbData(prev => ({ ...prev, rating: hasLiveRating, isFetched: true }));
+        if (mergedContent.imdbRating !== hasLiveRating) {
+          setCachedMetadata(prev => {
+            const newCache = { ...prev.data, imdbRating: hasLiveRating };
+            localStorage.setItem(`content_cache_${id}`, JSON.stringify(newCache));
+            return { ...prev, data: newCache };
+          });
         }
+      }
+
+      let imdbId = mergedContent.imdbLink?.match(/tt\d+/)?.[0];
+      if (!imdbId) {
+        // If no IMDb ID, we might need to wait for static fetch to find it.
+        // Don't mark as attempted so it can run again when imdbLink is updated.
+        return; 
+      }
+
+      hasAttemptedRatingFetch.current[id] = true;
+      setFetchingImdb(true);
+      try {
+        const OMDB_API_KEY = import.meta.env.VITE_OMDB_API_KEY || '19daa310';
+        const omdbRes = await fetch(`https://www.omdbapi.com/?i=${imdbId}&apikey=${OMDB_API_KEY}`);
+        const omdbData = await omdbRes.json();
+        if (omdbData.imdbRating && omdbData.imdbRating !== 'N/A') {
+          const newRating = `${omdbData.imdbRating}/10`;
+          sessionStorage.setItem(ratingCacheKey, newRating);
+          setImdbData(prev => ({ ...prev, rating: newRating, isFetched: true }));
+          
+          if (mergedContent.imdbRating !== newRating) {
+            setCachedMetadata(prev => {
+              const newCache = { ...prev.data, imdbRating: newRating };
+              localStorage.setItem(`content_cache_${id}`, JSON.stringify(newCache));
+              return { ...prev, data: newCache };
+            });
+          }
+        }
+      } catch (err) {
+        console.error("Failed to fetch live IMDb rating:", err);
+      } finally {
+        setFetchingImdb(false);
+      }
+    };
+
+    fetchRating();
+  }, [mergedContent?.id, mergedContent?.imdbLink, id, isOffline]);
+
+  useEffect(() => {
+    if (!mergedContent || !id || hasAttemptedStaticFetch.current[id] || isOffline) return;
+
+    // If we are currently fetching the full document from Firebase, wait for it
+    if (isMinimal && !fullContent && !fetchFailed) return;
+
+    const fetchMissingData = async () => {
+      let seasons: any[] = [];
+      try {
+        // Prioritize seasons from database (fullContent) to ensure links are preserved
+        const seasonsSource = (fullContent?.type === 'series' && fullContent.seasons) ? fullContent.seasons : mergedContent?.seasons;
+        seasons = mergedContent?.type === 'series' && seasonsSource ? (Array.isArray(seasonsSource) ? seasonsSource : JSON.parse(seasonsSource || '[]')) : [];
+      } catch (e) {
+        console.error("Error parsing seasons in fetchMissingData:", e);
+      }
+      const needsEpisodeData = mergedContent?.type === 'series' && seasons.some((s: any) => !s.episodes || s.episodes.length <= 1 || s.episodes.some((ep: any) => !ep.description || !ep.duration));
+      
+      const needsStaticData = !mergedContent.runtime || !mergedContent.description || (!mergedContent.cast || mergedContent.cast.length === 0) || !mergedContent.releaseDate || !mergedContent.posterUrl || !mergedContent.country || !mergedContent.trailerUrl || !mergedContent.imdbLink || (!mergedContent.genreIds || mergedContent.genreIds.length === 0) || needsEpisodeData;
+
+      if (!needsStaticData) {
         return;
       }
 
-      hasAttemptedFetch.current[id] = true;
-      setFetchingImdb(true);
+      hasAttemptedStaticFetch.current[id] = true;
 
       try {
         const TMDB_API_KEY = import.meta.env.VITE_TMDB_API_KEY || 'f71c2391161526fa9d19bd0b2759efaf';
-        const OMDB_API_KEY = import.meta.env.VITE_OMDB_API_KEY || '19daa310';
         
         let tmdbData: any = null;
         let imdbId = mergedContent.imdbLink?.match(/tt\d+/)?.[0];
@@ -440,24 +563,44 @@ export default function MovieDetails() {
 
               for (let i = 0; i < currentSeasons.length; i++) {
                 const season = currentSeasons[i];
-                const missingEpData = season.episodes?.some((ep: any) => !ep.description || !ep.duration);
+                const missingEpData = !season.episodes || season.episodes.length <= 1 || season.episodes.some((ep: any) => !ep.description || !ep.duration) || !season.year;
 
                 if (missingEpData) {
                   const seasonRes = await fetch(`https://api.themoviedb.org/3/tv/${tmdbData.id}/season/${season.seasonNumber}?api_key=${TMDB_API_KEY}`);
                   const seasonData = await seasonRes.json();
 
+                  if (seasonData.air_date && !season.year) {
+                    season.year = parseInt(seasonData.air_date.split('-')[0]);
+                    seasonsUpdated = true;
+                  }
+
                   if (seasonData.episodes) {
-                    season.episodes = season.episodes.map((ep: any) => {
-                      const tmdbEp = seasonData.episodes.find((te: any) => te.episode_number === ep.episodeNumber);
-                      if (tmdbEp) {
+                    const existingEpisodes = season.episodes || [];
+                    
+                    // Map TMDB episodes to our format, preserving existing links if they exist
+                    const mergedEpisodes = seasonData.episodes.map((tmdbEp: any) => {
+                      const existingEp = existingEpisodes.find((ep: any) => ep.episodeNumber === tmdbEp.episode_number);
+                      if (existingEp) {
                         return {
-                          ...ep,
-                          description: ep.description || tmdbEp.overview,
-                          duration: ep.duration || (tmdbEp.runtime ? `${tmdbEp.runtime} min` : undefined)
+                          ...existingEp,
+                          description: existingEp.description || tmdbEp.overview || '',
+                          duration: existingEp.duration || (tmdbEp.runtime ? `${tmdbEp.runtime} min` : '')
                         };
                       }
-                      return ep;
+                      return {
+                        id: `e${tmdbEp.episode_number}`,
+                        episodeNumber: tmdbEp.episode_number,
+                        title: tmdbEp.name || `Episode ${tmdbEp.episode_number}`,
+                        description: tmdbEp.overview || '',
+                        duration: tmdbEp.runtime ? `${tmdbEp.runtime} min` : '',
+                        links: []
+                      };
                     });
+                    
+                    // Add any existing episodes that weren't in TMDB (just in case)
+                    const existingOnly = existingEpisodes.filter((ep: any) => !seasonData.episodes.some((te: any) => te.episode_number === ep.episodeNumber));
+                    
+                    season.episodes = [...mergedEpisodes, ...existingOnly].sort((a, b) => a.episodeNumber - b.episodeNumber);
                     seasonsUpdated = true;
                   }
                 }
@@ -473,26 +616,14 @@ export default function MovieDetails() {
           }
         }
 
-        // Fetch Live IMDb Rating
-        if (imdbId && needsRating) {
-          const omdbRes = await fetch(`https://www.omdbapi.com/?i=${imdbId}&apikey=${OMDB_API_KEY}`);
-          const omdbData = await omdbRes.json();
-          if (omdbData.imdbRating && omdbData.imdbRating !== 'N/A') {
-            const newRating = `${omdbData.imdbRating}/10`;
-            sessionStorage.setItem(ratingCacheKey, newRating);
-            setImdbData(prev => ({ ...prev, rating: newRating, isFetched: true }));
-            if (mergedContent.imdbRating !== newRating) {
-              updates.imdbRating = newRating;
-              hasUpdates = true;
-            }
-          }
-        }
-
         if (hasUpdates) {
           // Instead of updating Firestore, we update local cache only
-          const newCache = { ...cachedMetadata, ...updates };
-          setCachedMetadata(newCache);
-          sessionStorage.setItem(`content_cache_${id}`, JSON.stringify(newCache));
+          setCachedMetadata(prev => {
+            if (prev.id !== id) return prev;
+            const newCache = { ...prev.data, ...updates };
+            localStorage.setItem(`content_cache_${id}`, JSON.stringify(newCache));
+            return { ...prev, data: newCache };
+          });
         }
 
       } catch (err) {
@@ -542,7 +673,7 @@ export default function MovieDetails() {
   const canPlay = profile?.role === 'admin' || profile?.role === 'owner' || profile?.role === 'content_manager' || profile?.role === 'manager' || (profile?.status === 'active' && (!(isSelectedContent || content.status === 'selected_content') || isAssigned));
 
   const allowedSeasons = profile?.assignedContent?.filter(id => id.startsWith(`${content.id}:`)).map(id => id.split(':')[1]) || [];
-  const hasFullAccess = profile?.role === 'admin' || profile?.role === 'owner' || profile?.role === 'content_manager' || profile?.role === 'manager' || (!(isSelectedContent || content.status === 'selected_content')) || profile?.assignedContent?.includes(content.id);
+  const hasFullAccess = profile?.role === 'admin' || profile?.role === 'owner' || profile?.role === 'content_manager' || profile?.role === 'manager' || (profile && profile.status === 'active' && (!(isSelectedContent || content.status === 'selected_content'))) || profile?.assignedContent?.includes(content.id);
 
   const toggleWatchLater = async () => {
     if (!profile) return;
@@ -579,7 +710,7 @@ export default function MovieDetails() {
     }
   };
 
-  const handlePlayClick = (url: string, linkName?: string, linkId?: string, isZip?: boolean, tinyUrl?: string) => {
+  const handlePlayClick = (url: string, linkName?: string, linkId?: string, isZip?: boolean, tinyUrl?: string, isLocked?: boolean, seasonInfo?: { id: string; number: number; title?: string }) => {
     // Check eligibility before opening links
     const checkEligibility = () => {
       if (linkId === 'sample') return true;
@@ -587,7 +718,28 @@ export default function MovieDetails() {
         setShowLoginPrompt(true);
         return false;
       }
-      if (!canPlay) {
+      if (!canPlay || isLocked) {
+        // Set locked content info for the alert modal
+        if (mergedContent) {
+          if (seasonInfo) {
+            setLockedContentInfo({
+              id: mergedContent.id,
+              type: 'season',
+              seasonId: seasonInfo.id,
+              seasonNumber: seasonInfo.number,
+              title: `${mergedContent.title} - Season ${seasonInfo.number}${seasonInfo.title ? ` (${seasonInfo.title})` : ''}`,
+              price: settings?.seasonFee || 100
+            });
+          } else if (mergedContent.type === 'movie') {
+            setLockedContentInfo({
+              id: mergedContent.id,
+              type: 'movie',
+              title: mergedContent.title,
+              price: settings?.movieFee || 50
+            });
+          }
+        }
+
         if (isPending) {
           setAlertConfig({ 
             isOpen: true, 
@@ -855,7 +1007,7 @@ export default function MovieDetails() {
   const contentGenres = genres.filter(g => content.genreIds?.includes(g.id)).map(g => g.name).join(', ');
   const contentLangs = languages.filter(l => content.languageIds?.includes(l.id)).map(l => l.name).join(', ');
 
-  const renderLinks = (links: QualityLinks, isZip?: boolean, contextName?: string) => {
+  const renderLinks = (links: QualityLinks, isZip?: boolean, contextName?: string, isLocked?: boolean, seasonInfo?: { id: string; number: number; title?: string }) => {
     if (!Array.isArray(links)) return null;
 
     const validLinks = links.filter(l => l && l.url);
@@ -873,21 +1025,21 @@ export default function MovieDetails() {
         {sortedLinks.map((link) => {
           const fullName = contextName ? `${contextName} - ${link.name}` : link.name;
           return (
-            <div key={link.id} className="flex flex-col sm:flex-row items-stretch sm:items-center bg-zinc-100 dark:bg-zinc-800 rounded-xl overflow-hidden border border-zinc-300 dark:border-zinc-700 flex-1 min-w-[200px] max-w-sm">
+            <div key={link.id} className={`flex flex-col sm:flex-row items-stretch sm:items-center bg-zinc-100 dark:bg-zinc-800 rounded-xl overflow-hidden border border-zinc-300 dark:border-zinc-700 flex-1 min-w-[200px] max-w-sm ${isLocked ? 'opacity-60 grayscale-[0.5]' : ''}`}>
               <button
-                onClick={() => handlePlayClick(link.url, fullName, link.id, isZip, link.tinyUrl)}
+                onClick={() => handlePlayClick(link.url, fullName, link.id, isZip, link.tinyUrl, isLocked, seasonInfo)}
                 className="flex-1 flex items-center justify-center gap-2 hover:bg-zinc-300 dark:hover:bg-zinc-700 text-zinc-900 dark:text-white px-6 py-3 text-sm sm:text-base font-medium transition-colors border-b sm:border-b-0 sm:border-r border-zinc-300 dark:border-zinc-700"
-                title="Play"
+                title={isLocked ? "Locked" : "Play"}
               >
-                <Play className="w-5 h-5 shrink-0" />
+                {isLocked ? <Lock className="w-5 h-5 shrink-0 text-amber-500" /> : <Play className="w-5 h-5 shrink-0" />}
                 <span className="truncate">Play {link.name}</span>
               </button>
               <button
-                onClick={() => handlePlayClick(link.url, fullName, link.id, isZip, link.tinyUrl)}
+                onClick={() => handlePlayClick(link.url, fullName, link.id, isZip, link.tinyUrl, isLocked, seasonInfo)}
                 className="flex items-center justify-center gap-2 hover:bg-zinc-300 dark:hover:bg-zinc-700 text-zinc-900 dark:text-white px-6 py-3 text-sm sm:text-base font-medium transition-colors shrink-0"
-                title="Download"
+                title={isLocked ? "Locked" : "Download"}
               >
-                <Download className="w-5 h-5 shrink-0" />
+                {isLocked ? <Lock className="w-5 h-5 shrink-0 text-amber-500" /> : <Download className="w-5 h-5 shrink-0" />}
                 <span className="text-zinc-500 dark:text-zinc-400">({link.size} {link.unit})</span>
               </button>
             </div>
@@ -1153,7 +1305,7 @@ export default function MovieDetails() {
                 <a href={`https://wa.me/92${settings?.supportNumber || '3363284466'}`} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 bg-red-500/20 px-6 py-3 text-sm sm:text-base rounded-xl font-medium hover:bg-red-500/30 transition-colors">
                   <MessageCircle className="w-5 h-5" /> Contact Admin ({settings?.supportNumber || '03363284466'})
                 </a>
-                {((profile?.role === 'selected_content' || profile?.role === 'user') && !isExpired || isPending) && mergedContent?.type === 'movie' && (
+                {(((profile?.role === 'selected_content' || profile?.role === 'user') && !isExpired) || isPending) && mergedContent?.type === 'movie' && (
                   cart.some(item => item.contentId === mergedContent.id) ? (
                     <Link
                       to="/cart"
@@ -1357,7 +1509,7 @@ export default function MovieDetails() {
                 (() => {
                   try {
                     const links = Array.isArray(mergedContent.movieLinks) ? mergedContent.movieLinks : JSON.parse(mergedContent.movieLinks || '[]');
-                    const rendered = renderLinks(links);
+                    const rendered = renderLinks(links, false, undefined, !canPlay);
                     if (!rendered) return null;
                     return (
                       <div className="bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-6">
@@ -1398,10 +1550,10 @@ export default function MovieDetails() {
                             <div className="flex flex-wrap items-center gap-3">
                               {(!isAccessible && profile) && (
                                 <>
-                                  <span className="bg-red-500/10 text-red-500 px-3 py-1 rounded-full text-sm font-bold flex items-center gap-2">
-                                    <Lock className="w-4 h-4" /> Restricted
+                                  <span className={`${isPending ? 'bg-amber-500/10 text-amber-500' : 'bg-red-500/10 text-red-500'} px-3 py-1 rounded-full text-sm font-bold flex items-center gap-2`}>
+                                    <Lock className="w-4 h-4" /> {isPending ? 'Pending' : 'Restricted'}
                                   </span>
-                                  {((profile?.role === 'selected_content' || profile?.role === 'user') && profile?.status !== 'expired' || profile?.status === 'pending') && (
+                                  {(((profile?.role === 'selected_content' || profile?.role === 'user') && profile?.status !== 'expired') || profile?.status === 'pending') && (
                                     cart.some(item => item.contentId === mergedContent.id && item.seasonId === season.id) ? (
                                       <Link
                                         to="/cart"
@@ -1454,13 +1606,13 @@ export default function MovieDetails() {
                                   {zipLinks.length > 0 && (
                                     <div>
                                       <h4 className="font-semibold text-zinc-500 dark:text-zinc-400 mb-3 text-sm uppercase tracking-wider">Full Season Zip</h4>
-                                      {renderLinks(zipLinks, true, `S${season.seasonNumber} Zip`)}
+                                      {renderLinks(zipLinks, true, `S${season.seasonNumber} Zip`, !isAccessible, { id: season.id, number: season.seasonNumber, title: season.title })}
                                     </div>
                                   )}
                                   {mkvLinks.length > 0 && (
                                     <div>
                                       <h4 className="font-semibold text-zinc-500 dark:text-zinc-400 mb-3 text-sm uppercase tracking-wider">Full Season MKV</h4>
-                                      {renderLinks(mkvLinks, false, `S${season.seasonNumber} MKV`)}
+                                      {renderLinks(mkvLinks, false, `S${season.seasonNumber} MKV`, !isAccessible, { id: season.id, number: season.seasonNumber, title: season.title })}
                                     </div>
                                   )}
                                   
@@ -1496,9 +1648,11 @@ export default function MovieDetails() {
                                               )}
                                             </div>
                                             
-                                            <div className="flex justify-center">
-                                              {renderLinks(ep.links, false, `S${season.seasonNumber} E${ep.episodeNumber}`)}
-                                            </div>
+                                            {ep.links && ep.links.length > 0 && (
+                                              <div className="flex justify-center">
+                                                {renderLinks(ep.links, false, `S${season.seasonNumber} E${ep.episodeNumber}`, !isAccessible, { id: season.id, number: season.seasonNumber, title: season.title })}
+                                              </div>
+                                            )}
                                           </div>
                                         ))}
                                       </div>
@@ -1553,13 +1707,6 @@ export default function MovieDetails() {
           </div>
         </div>
       </div>
-
-      <AlertModal
-        isOpen={alertConfig.isOpen}
-        title={alertConfig.title}
-        message={alertConfig.message}
-        onClose={() => setAlertConfig({ ...alertConfig, isOpen: false })}
-      />
 
       <ConfirmModal
         isOpen={!!deleteId}
@@ -1805,19 +1952,50 @@ export default function MovieDetails() {
       />
       <AlertModal
         isOpen={alertConfig.isOpen}
-        onClose={() => setAlertConfig(prev => ({ ...prev, isOpen: false }))}
+        onClose={() => {
+          setAlertConfig(prev => ({ ...prev, isOpen: false }));
+          setLockedContentInfo(null);
+        }}
         title={alertConfig.title}
         message={alertConfig.message}
       >
-        {isPending && (
+        {(alertConfig.title === 'Account Pending' || alertConfig.title === 'Trial Expired' || alertConfig.title === 'Membership Expired' || alertConfig.title === 'Content Locked') && (
           <div className="flex flex-col gap-3">
-            {(profile?.role === 'trial' || profile?.role === 'user') && (
+            {lockedContentInfo && !isExpired && (
+              cart.some(item => 
+                item.contentId === lockedContentInfo.id && 
+                (lockedContentInfo.type === 'movie' || item.seasonId === lockedContentInfo.seasonId)
+              ) ? (
+                <Link to="/cart" className="flex items-center justify-center gap-2 bg-emerald-500 text-white px-6 py-3 text-sm sm:text-base rounded-xl font-bold hover:bg-emerald-400 transition-all shadow-lg shadow-emerald-500/20">
+                  <ShoppingCart className="w-5 h-5 fill-current" /> View Cart
+                </Link>
+              ) : (
+                <button
+                  onClick={() => {
+                    addToCart({
+                      contentId: lockedContentInfo.id,
+                      title: lockedContentInfo.title,
+                      type: lockedContentInfo.type,
+                      seasonId: lockedContentInfo.seasonId,
+                      seasonNumber: lockedContentInfo.seasonNumber,
+                      price: lockedContentInfo.price
+                    });
+                    setLockedContentInfo(null);
+                    setAlertConfig(prev => ({ ...prev, isOpen: false }));
+                  }}
+                  className="flex items-center justify-center gap-2 bg-emerald-500 text-white px-6 py-3 text-sm sm:text-base rounded-xl font-bold hover:bg-emerald-400 transition-all shadow-lg shadow-emerald-500/20"
+                >
+                  <ShoppingCart className="w-5 h-5" /> Add to Cart (Rs {lockedContentInfo.price})
+                </button>
+              )
+            )}
+            {(profile?.role === 'trial' || profile?.role === 'user' || isExpired) && (
               <Link to="/top-up" className="flex items-center justify-center gap-2 bg-emerald-500 text-white px-6 py-3 text-sm sm:text-base rounded-xl font-bold hover:bg-emerald-400 transition-all shadow-lg shadow-emerald-500/20">
-                Get Membership
+                {isExpired ? (profile?.role === 'trial' ? 'Buy Membership' : 'Renew Now') : 'Get Membership'}
               </Link>
             )}
             {(profile?.role === 'selected_content' || profile?.role === 'user') && !isExpired && (
-              <Link to="/cart" className="flex items-center justify-center gap-2 bg-emerald-500 text-white px-6 py-3 text-sm sm:text-base rounded-xl font-bold hover:bg-emerald-400 transition-all shadow-lg shadow-emerald-500/20">
+              <Link to="/cart" className="flex items-center justify-center gap-2 bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-white px-6 py-3 text-sm sm:text-base rounded-xl font-bold hover:bg-zinc-300 dark:hover:bg-zinc-700 transition-all">
                 <ShoppingCart className="w-5 h-5" /> Cart
               </Link>
             )}
@@ -1839,7 +2017,12 @@ export default function MovieDetails() {
               
               // Handle seasons if they are in the data
               if (data.seasons && Array.isArray(data.seasons)) {
-                const currentSeasons = JSON.parse(mergedContent.seasons || '[]');
+                let currentSeasons: any[] = [];
+                try {
+                  currentSeasons = JSON.parse(mergedContent.seasons || '[]');
+                } catch (e) {
+                  console.error("Error parsing seasons in onApply:", e);
+                }
                 
                 data.seasons.forEach((fetchedSeason: any) => {
                   const existingSeasonIndex = currentSeasons.findIndex((s: any) => s.seasonNumber === fetchedSeason.seasonNumber);
@@ -1899,6 +2082,24 @@ export default function MovieDetails() {
               }
 
               await updateDoc(contentRef, updateData);
+              
+              if (fullContent) {
+                const updatedFullContent = { ...fullContent, ...updateData };
+                setFullContent(updatedFullContent);
+                localStorage.setItem(`movie_details_${id}`, JSON.stringify(updatedFullContent));
+              } else if (content) {
+                const updatedContent = { ...content, ...updateData };
+                localStorage.setItem(`movie_details_${id}`, JSON.stringify(updatedContent));
+              }
+              
+              // Update cachedMetadata with the new data to prevent flickering before onSnapshot fires
+              setCachedMetadata(prev => {
+                const newCache = { ...prev.data, ...updateData };
+                localStorage.setItem(`content_cache_${id}`, JSON.stringify(newCache));
+                return { ...prev, data: newCache };
+              });
+              sessionStorage.removeItem(`content_cache_${id}`);
+              
               setIsMediaModalOpen(false);
               setAlertConfig({ isOpen: true, title: 'Success', message: 'Content updated successfully' });
             } catch (error) {

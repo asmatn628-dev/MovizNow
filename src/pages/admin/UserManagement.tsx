@@ -90,6 +90,20 @@ export default function UserManagement() {
   const [searchStatus, setSearchStatus] = useState<'idle' | 'searching' | 'found' | 'not_found'>('idle');
   const [managers, setManagers] = useState<Record<string, string>>({});
   const [processing, setProcessing] = useState<Record<string, boolean>>({});
+  const [tick, setTick] = useState(0);
+
+  useEffect(() => {
+    const timer = setInterval(() => setTick(t => t + 1), 30000); // Re-render every 30s to keep relative times fresh
+    return () => clearInterval(timer);
+  }, []);
+
+  const isUserOnline = (lastActive?: string) => {
+    if (!lastActive) return false;
+    const lastActiveDate = new Date(lastActive);
+    const now = new Date();
+    const diffMinutes = (now.getTime() - lastActiveDate.getTime()) / 60000;
+    return diffMinutes < 4; // Consider online if active in last 4 minutes (heartbeat is 2m)
+  };
 
   const handleSearchUser = async () => {
     if (!newUserForm.phone && !newUserForm.email) {
@@ -484,6 +498,7 @@ export default function UserManagement() {
       setSelectedUser(null);
     } catch (error) {
       console.error('Error updating user:', error);
+      handleFirestoreError(error, OperationType.UPDATE, `users/${editingId}`);
       setAlertConfig({ isOpen: true, title: 'Error', message: 'Failed to update user' });
     } finally {
       setProcessing(prev => ({ ...prev, save: false }));
@@ -777,6 +792,7 @@ export default function UserManagement() {
       await batch.commit();
     } catch (error) {
       console.error('Error updating users:', error);
+      handleFirestoreError(error, OperationType.UPDATE, 'users/bulk');
       setAlertConfig({ isOpen: true, title: 'Error', message: 'Failed to update users' });
     } finally {
       setProcessing(prev => ({ ...prev, bulk: false }));
@@ -1138,9 +1154,24 @@ export default function UserManagement() {
                     </span>
                   </td>
                   <td className="px-4 md:px-6 py-4">
-                    <span className="text-zinc-500 dark:text-zinc-400 text-xs">
-                      {user.lastActive ? formatDistanceToNow(new Date(user.lastActive), { addSuffix: true }) : 'Never'}
-                    </span>
+                    <div className="flex flex-col gap-1">
+                      <div className="flex items-center gap-2">
+                        {isUserOnline(user.lastActive) && (
+                          <span className="relative flex h-2 w-2">
+                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                            <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                          </span>
+                        )}
+                        <span className={`text-xs font-medium ${isUserOnline(user.lastActive) ? 'text-emerald-500' : 'text-zinc-500 dark:text-zinc-400'}`}>
+                          {isUserOnline(user.lastActive) ? 'Online' : (user.lastActive ? formatDistanceToNow(new Date(user.lastActive), { addSuffix: true }) : 'Never')}
+                        </span>
+                      </div>
+                      {isUserOnline(user.lastActive) && user.lastActive && (
+                        <span className="text-[10px] text-zinc-500 dark:text-zinc-500">
+                          Active {formatDistanceToNow(new Date(user.lastActive), { addSuffix: true })}
+                        </span>
+                      )}
+                    </div>
                   </td>
                   {(profile?.role === 'admin' || profile?.role === 'owner') && (
                     <td className="px-4 md:px-6 py-4">
@@ -1519,8 +1550,16 @@ export default function UserManagement() {
                               <span className="text-xs font-medium">Last Active</span>
                             </div>
                             <div className="text-right">
-                              <div className="font-bold text-zinc-900 dark:text-white text-xs">
-                                {selectedUser.lastActive ? format(new Date(selectedUser.lastActive), 'MMM dd, HH:mm') : 'Never'}
+                              <div className="flex items-center justify-end gap-2">
+                                {isUserOnline(selectedUser.lastActive) && (
+                                  <span className="relative flex h-2 w-2">
+                                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                                    <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                                  </span>
+                                )}
+                                <div className={`font-bold text-xs ${isUserOnline(selectedUser.lastActive) ? 'text-emerald-500' : 'text-zinc-900 dark:text-white'}`}>
+                                  {isUserOnline(selectedUser.lastActive) ? 'Online' : (selectedUser.lastActive ? format(new Date(selectedUser.lastActive), 'MMM dd, HH:mm') : 'Never')}
+                                </div>
                               </div>
                               {selectedUser.lastActive && (
                                 <div className="text-[10px] text-zinc-500">
