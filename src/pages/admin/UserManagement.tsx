@@ -19,7 +19,7 @@ import { PhoneWhitelistManager } from '../../components/PhoneWhitelistManager';
 
 import { useLocation, useNavigate } from 'react-router-dom';
 
-type SortField = 'createdAt' | 'displayName' | 'phone' | 'expiryDate';
+type SortField = 'createdAt' | 'displayName' | 'phone' | 'expiryDate' | 'lastActive';
 type SortOrder = 'asc' | 'desc';
 
 const standardizePhone = (phone: string) => {
@@ -271,6 +271,7 @@ export default function UserManagement() {
   const fetchUserAnalytics = async (user: UserProfile) => {
     setIsAnalyticsLoading(true);
     setUserAnalytics({ moviesClicked: 0, linksClicked: 0, viewedMovies: [], clickedLinks: [] });
+    // Note: movie requests and assigned content titles are still fetched here as they are part of the detailed view
     setUserRequests([]);
     setAssignedContentTitles([]);
     try {
@@ -350,7 +351,10 @@ export default function UserManagement() {
     
     setSelectedUser(user);
     setAssignedIds(new Set(user.assignedContent || []));
-    fetchUserAnalytics(user);
+    // Reset analytics state but don't fetch automatically
+    setUserAnalytics({ moviesClicked: 0, linksClicked: 0, viewedMovies: [], clickedLinks: [] });
+    setUserRequests([]);
+    setAssignedContentTitles([]);
   };
 
   const handleEdit = (user: UserProfile) => {
@@ -819,6 +823,11 @@ export default function UserManagement() {
             const dateB = b.expiryDate ? new Date(b.expiryDate).getTime() : 0;
             comparison = dateA - dateB;
             break;
+          case 'lastActive':
+            const activeA = a.lastActive ? new Date(a.lastActive).getTime() : 0;
+            const activeB = b.lastActive ? new Date(b.lastActive).getTime() : 0;
+            comparison = activeA - activeB;
+            break;
         }
         return sortOrder === 'asc' ? comparison : -comparison;
       });
@@ -1046,7 +1055,9 @@ export default function UserManagement() {
                 <th className="px-4 md:px-6 py-4 cursor-pointer hover:text-zinc-900 dark:text-white transition-colors whitespace-nowrap" onClick={() => toggleSort('expiryDate')}>
                   Expiry Date <SortIcon field="expiryDate" />
                 </th>
-                <th className="px-4 md:px-6 py-4 whitespace-nowrap">Last Active</th>
+                <th className="px-4 md:px-6 py-4 cursor-pointer hover:text-zinc-900 dark:text-white transition-colors whitespace-nowrap" onClick={() => toggleSort('lastActive')}>
+                  Last Active <SortIcon field="lastActive" />
+                </th>
                 {(profile?.role === 'admin' || profile?.role === 'owner') && (
                   <th className="px-4 md:px-6 py-4 whitespace-nowrap">Managed By</th>
                 )}
@@ -1483,7 +1494,17 @@ export default function UserManagement() {
 
                       <div className="border-t border-zinc-200 dark:border-zinc-800 pt-6">
                         <div className="flex items-center justify-between mb-4">
-                          <h4 className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Activity Overview</h4>
+                          <div className="flex items-center gap-3">
+                            <h4 className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Activity Overview</h4>
+                            <button 
+                              onClick={() => selectedUser && fetchUserAnalytics(selectedUser)}
+                              disabled={isAnalyticsLoading}
+                              className="p-1 text-emerald-500 hover:bg-emerald-500/10 rounded-lg transition-colors disabled:opacity-50"
+                              title="Scan Activity"
+                            >
+                              <Search className={clsx("w-4 h-4", isAnalyticsLoading && "animate-pulse")} />
+                            </button>
+                          </div>
                           {isAnalyticsLoading && (
                             <div className="flex items-center gap-2 text-emerald-500">
                               <Loader2 className="w-3 h-3 animate-spin" />
@@ -1497,9 +1518,16 @@ export default function UserManagement() {
                               <Calendar className="w-4 h-4 text-emerald-500" />
                               <span className="text-xs font-medium">Last Active</span>
                             </div>
-                            <span className="font-bold text-zinc-900 dark:text-white text-xs">
-                              {selectedUser.lastActive ? format(new Date(selectedUser.lastActive), 'MMM dd, HH:mm') : 'Never'}
-                            </span>
+                            <div className="text-right">
+                              <div className="font-bold text-zinc-900 dark:text-white text-xs">
+                                {selectedUser.lastActive ? format(new Date(selectedUser.lastActive), 'MMM dd, HH:mm') : 'Never'}
+                              </div>
+                              {selectedUser.lastActive && (
+                                <div className="text-[10px] text-zinc-500">
+                                  {formatDistanceToNow(new Date(selectedUser.lastActive), { addSuffix: true })}
+                                </div>
+                              )}
+                            </div>
                           </div>
                           <div className="flex items-center justify-between bg-white dark:bg-zinc-950 p-3 rounded-xl border border-zinc-200 dark:border-zinc-800">
                             <div className="flex items-center gap-3 text-zinc-600 dark:text-zinc-300">
