@@ -17,17 +17,22 @@ const SettingsContext = createContext<SettingsContextType>({
 export const useSettings = () => useContext(SettingsContext);
 
 export const SettingsProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [settings, setSettings] = useState<AppSettings | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [settings, setSettings] = useState<AppSettings | null>(() => {
+    const cached = localStorage.getItem('settings_cache');
+    return cached ? JSON.parse(cached) : null;
+  });
+  const [loading, setLoading] = useState(() => !localStorage.getItem('settings_cache'));
 
   useEffect(() => {
     const docRef = doc(db, 'settings', 'app_settings');
     const unsubscribe = onSnapshot(docRef, (docSnap) => {
       if (docSnap.exists()) {
-        setSettings(docSnap.data() as AppSettings);
+        const data = docSnap.data() as AppSettings;
+        setSettings(data);
+        localStorage.setItem('settings_cache', JSON.stringify(data));
       } else {
         // Default settings if document doesn't exist
-        setSettings({
+        const defaultSettings = {
           headerText: 'MovizNow',
           membershipFee: 200,
           movieFee: 50,
@@ -51,7 +56,9 @@ export const SettingsProvider: React.FC<{ children: React.ReactNode }> = ({ chil
             'UserManagers', 'SelectedContent', 
             'Income', 'ErrorLinks', 'ReportedLinks', 'Notifications', 'Requests'
           ]
-        });
+        };
+        setSettings(defaultSettings);
+        localStorage.setItem('settings_cache', JSON.stringify(defaultSettings));
       }
       setLoading(false);
     }, (error) => {

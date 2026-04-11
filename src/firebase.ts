@@ -39,7 +39,7 @@ export const requestNotificationPermission = async () => {
       // Register service worker explicitly to ensure it's the right one
       let registration;
       if ('serviceWorker' in navigator) {
-        registration = await navigator.serviceWorker.register('/firebase-messaging-sw.js?v=4');
+        registration = await navigator.serviceWorker.register('/sw.js');
       }
 
       const vapidKey = import.meta.env.VITE_FCM_VAPID_KEY;

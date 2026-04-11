@@ -62,8 +62,11 @@ export const standardizePhone = (phone: string) => {
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(auth.currentUser);
-  const [profile, setProfile] = useState<UserProfile | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [profile, setProfile] = useState<UserProfile | null>(() => {
+    const cached = safeStorage.getItem('profile_cache');
+    return cached ? JSON.parse(cached) : null;
+  });
+  const [loading, setLoading] = useState(() => !safeStorage.getItem('profile_cache'));
   const [authLoading, setAuthLoading] = useState(!auth.currentUser);
   const [error, setError] = useState<string | null>(null);
   const [isOnline, setIsOnline] = useState(navigator.onLine);
@@ -148,13 +151,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [isOnline, user]);
 
   useEffect(() => {
-    // Load from cache initially
-    const cachedProfile = safeStorage.getItem('profile_cache');
-    if (cachedProfile) {
-      setProfile(JSON.parse(cachedProfile));
-      setLoading(false);
-    }
-
     let unsubProfile: (() => void) | undefined;
 
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {

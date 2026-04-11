@@ -18,11 +18,29 @@ interface ContentContextType {
 const ContentContext = createContext<ContentContextType | undefined>(undefined);
 
 export function ContentProvider({ children }: { children: React.ReactNode }) {
-  const [contentList, setContentList] = useState<Content[]>([]);
-  const [genres, setGenres] = useState<Genre[]>([]);
-  const [languages, setLanguages] = useState<Language[]>([]);
-  const [qualities, setQualities] = useState<Quality[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [contentList, setContentList] = useState<Content[]>(() => {
+    const cached = safeStorage.getItem('content_cache');
+    return cached ? JSON.parse(cached) : [];
+  });
+  const [genres, setGenres] = useState<Genre[]>(() => {
+    const cached = safeStorage.getItem('genres_cache');
+    return cached ? JSON.parse(cached) : [];
+  });
+  const [languages, setLanguages] = useState<Language[]>(() => {
+    const cached = safeStorage.getItem('languages_cache');
+    return cached ? JSON.parse(cached) : [];
+  });
+  const [qualities, setQualities] = useState<Quality[]>(() => {
+    const cached = safeStorage.getItem('qualities_cache');
+    return cached ? JSON.parse(cached) : [];
+  });
+  const [loading, setLoading] = useState(() => {
+    const hasCache = safeStorage.getItem('content_cache') || 
+                     safeStorage.getItem('genres_cache') || 
+                     safeStorage.getItem('languages_cache') || 
+                     safeStorage.getItem('qualities_cache');
+    return !hasCache;
+  });
   const [isOffline, setIsOffline] = useState(!navigator.onLine);
 
   useEffect(() => {
@@ -37,19 +55,6 @@ export function ContentProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   useEffect(() => {
-    // Load from cache initially
-    const cachedContent = safeStorage.getItem('content_cache');
-    const cachedGenres = safeStorage.getItem('genres_cache');
-    const cachedLanguages = safeStorage.getItem('languages_cache');
-    const cachedQualities = safeStorage.getItem('qualities_cache');
-    
-    if (cachedContent) setContentList(JSON.parse(cachedContent));
-    if (cachedGenres) setGenres(JSON.parse(cachedGenres));
-    if (cachedLanguages) setLanguages(JSON.parse(cachedLanguages));
-    if (cachedQualities) setQualities(JSON.parse(cachedQualities));
-    
-    if (cachedContent || cachedGenres || cachedLanguages || cachedQualities) setLoading(false);
-
     let unsubContent: () => void;
     const unsubAuth = onAuthStateChanged(auth, async (user) => {
       if (unsubContent) unsubContent();

@@ -11,6 +11,7 @@ import { Loader2 } from 'lucide-react';
 import { SystemNotificationWrapper } from './components/SystemNotificationWrapper';
 import { MediaModal } from './components/MediaModal';
 import { useModalBehavior } from './hooks/useModalBehavior';
+import { OfflineBanner } from './components/OfflineBanner';
 
 // Pages
 const Login = lazy(() => import('./pages/Login'));
@@ -68,6 +69,7 @@ export default function App() {
           <ContentProvider>
             <CartProvider>
               <PWAProvider>
+                <OfflineBanner />
                 <SystemNotificationWrapper />
                 <BrowserRouter>
                 <MediaModalController isOpen={isMediaModalOpen} onClose={() => setIsMediaModalOpen(false)} />

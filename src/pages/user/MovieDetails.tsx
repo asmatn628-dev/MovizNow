@@ -98,6 +98,15 @@ export default function MovieDetails() {
 
   const [fullContent, setFullContent] = useState<Content | null>(null);
   const [fetchFailed, setFetchFailed] = useState(false);
+
+  // Reset state on ID change
+  useEffect(() => {
+    setFullContent(null);
+    setFetchFailed(false);
+    setCachedMetadata({});
+    hasLoggedView.current = false;
+  }, [id]);
+
   const [recentlyViewed, setRecentlyViewed] = useState<Content[]>([]);
 
   useEffect(() => {
@@ -112,9 +121,15 @@ export default function MovieDetails() {
   }, []);
 
   useEffect(() => {
+    // A series is minimal if it has no seasons or if seasons episodes are placeholders (id: 'last')
+    const hasFullSeasons = content?.type === 'series' && 
+      content.seasons && 
+      Array.isArray(content.seasons) && 
+      content.seasons.some(s => s.episodes && s.episodes.length > 1);
+
     const isMinimal = content && (
       (content.type === 'movie' && !content.movieLinks) || 
-      (content.type === 'series' && (!content.seasons || Array.isArray(content.seasons)))
+      (content.type === 'series' && !hasFullSeasons)
     );
 
     if ((!content || isMinimal) && !fullContent && id && !fetchFailed && !isOffline) {
@@ -140,17 +155,19 @@ export default function MovieDetails() {
 
   const mergedContent = useMemo(() => {
     if (!content && !fullContent) return null;
+    // Prioritize fullContent, then cachedMetadata, then basic content from list
     return {
       ...(content || {}),
-      ...(fullContent || {}),
-      ...cachedMetadata
+      ...cachedMetadata,
+      ...(fullContent || {})
     } as Content;
   }, [content, cachedMetadata, fullContent]);
 
   const seasons = useMemo(() => {
     if (!mergedContent || mergedContent.type !== 'series' || !mergedContent.seasons) return [] as Season[];
     try {
-      return (Array.isArray(mergedContent.seasons) ? mergedContent.seasons : JSON.parse(mergedContent.seasons || '[]')) as Season[];
+      const sData = mergedContent.seasons;
+      return (Array.isArray(sData) ? sData : JSON.parse(sData || '[]')) as Season[];
     } catch (e) {
       console.error("Error parsing seasons:", e);
       return [] as Season[];
@@ -1136,7 +1153,7 @@ export default function MovieDetails() {
                 <a href={`https://wa.me/92${settings?.supportNumber || '3363284466'}`} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 bg-red-500/20 px-6 py-3 text-sm sm:text-base rounded-xl font-medium hover:bg-red-500/30 transition-colors">
                   <MessageCircle className="w-5 h-5" /> Contact Admin ({settings?.supportNumber || '03363284466'})
                 </a>
-                {((profile?.role === 'selected_content' && !isExpired) || isPending) && mergedContent?.type === 'movie' && (
+                {((profile?.role === 'selected_content' || profile?.role === 'user') && !isExpired || isPending) && mergedContent?.type === 'movie' && (
                   cart.some(item => item.contentId === mergedContent.id) ? (
                     <Link
                       to="/cart"
@@ -1384,7 +1401,7 @@ export default function MovieDetails() {
                                   <span className="bg-red-500/10 text-red-500 px-3 py-1 rounded-full text-sm font-bold flex items-center gap-2">
                                     <Lock className="w-4 h-4" /> Restricted
                                   </span>
-                                  {((profile?.role === 'selected_content' && profile?.status !== 'expired') || profile?.status === 'pending') && (
+                                  {((profile?.role === 'selected_content' || profile?.role === 'user') && profile?.status !== 'expired' || profile?.status === 'pending') && (
                                     cart.some(item => item.contentId === mergedContent.id && item.seasonId === season.id) ? (
                                       <Link
                                         to="/cart"

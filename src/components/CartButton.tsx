@@ -22,8 +22,8 @@ export function CartButton() {
     >
       <ShoppingCart className="w-5 h-5" />
       {cart.length > 0 && (
-        <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] font-bold min-w-[18px] h-[18px] flex items-center justify-center rounded-full border-2 border-white dark:border-zinc-950 px-1">
-          {cart.length}
+        <span className="absolute top-0 right-0 w-4 h-4 bg-red-500 rounded-full text-[10px] font-bold flex items-center justify-center text-white border-2 border-white dark:border-zinc-950">
+          {cart.length > 99 ? '99+' : cart.length}
         </span>
       )}
     </Link>
