@@ -3,7 +3,7 @@ import { db } from '../../firebase';
 import { safeStorage } from '../../utils/safeStorage';
 import { collection, doc, updateDoc, onSnapshot, query, where, getDocs, writeBatch, deleteDoc, setDoc } from 'firebase/firestore';
 import { UserProfile, Role, Status, AnalyticsEvent } from '../../types';
-import { Edit2, MessageCircle, X, Check, Search, ArrowUp, ArrowDown, Clock, MousePointerClick, Film, Trash2, Tv, Plus, Loader2, ArrowRight, UserPlus, Calendar, Heart, Bookmark, Save, Lock, Layers, Phone } from 'lucide-react';
+import { Edit2, MessageCircle, X, Check, Search, ArrowUp, ArrowDown, Clock, Film, Trash2, Tv, Plus, Loader2, ArrowRight, UserPlus, Calendar, Heart, Bookmark, Save, Lock, Layers, Phone } from 'lucide-react';
 import { format, formatDistanceToNow } from 'date-fns';
 import clsx from 'clsx';
 import AlertModal from '../../components/AlertModal';
@@ -71,7 +71,7 @@ export default function UserManagement() {
   const [selectedUser, setSelectedUser] = useState<UserProfile | null>(null);
   const [isEditingOverlay, setIsEditingOverlay] = useState(false);
   const [isAnalyticsLoading, setIsAnalyticsLoading] = useState(false);
-  const [userAnalytics, setUserAnalytics] = useState<{ moviesClicked: number, linksClicked: number, viewedMovies: string[], clickedLinks: string[], timeSpent: number, favoritesCount: number, watchLaterCount: number, lastActive: string | null, hasScanned: boolean }>({ moviesClicked: 0, linksClicked: 0, viewedMovies: [], clickedLinks: [], timeSpent: 0, favoritesCount: 0, watchLaterCount: 0, lastActive: null, hasScanned: false });
+  const [userAnalytics, setUserAnalytics] = useState<{ timeSpent: number, favoritesCount: number, watchLaterCount: number, lastActive: string | null, hasScanned: boolean }>({ timeSpent: 0, favoritesCount: 0, watchLaterCount: 0, lastActive: null, hasScanned: false });
   const [userRequests, setUserRequests] = useState<any[]>([]);
   const [assignedContentTitles, setAssignedContentTitles] = useState<string[]>([]);
   const [allContent, setAllContent] = useState<any[]>([]);
@@ -294,9 +294,8 @@ export default function UserManagement() {
     setAssignedContentTitles([]);
     try {
       // Parallelize all analytics fetches
-      const [requestsSnapshot, analyticsSnapshot, contentSnapshot] = await Promise.all([
+      const [requestsSnapshot, contentSnapshot] = await Promise.all([
         getDocs(query(collection(db, 'movie_requests'), where('userId', '==', user.uid))),
-        getDocs(query(collection(db, 'analytics'), where('userId', '==', user.uid))),
         user.role === 'selected_content' && user.assignedContent && user.assignedContent.length > 0
           ? getDocs(collection(db, 'content'))
           : Promise.resolve(null)
@@ -306,40 +305,8 @@ export default function UserManagement() {
       const requestsData = requestsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       setUserRequests(requestsData);
 
-      // Process Analytics
-      let movies = 0;
-      let links = 0;
-      const events: AnalyticsEvent[] = [];
-      analyticsSnapshot.forEach(doc => {
-        events.push(doc.data() as AnalyticsEvent);
-      });
-
-      // Sort events by timestamp descending to get latest first
-      events.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
-
-      const viewedMovies = new Set<string>();
-      const clickedLinks = new Set<string>();
-
-      events.forEach(data => {
-        if (data.type === 'content_click') {
-          movies++;
-          if (data.contentTitle && viewedMovies.size < 5) {
-            viewedMovies.add(data.contentTitle);
-          }
-        }
-        if (data.type === 'link_click') {
-          links++;
-          if (data.contentTitle && clickedLinks.size < 5) {
-            const linkName = data.linkName || 'Link';
-            clickedLinks.add(`${data.contentTitle} - ${linkName}`);
-          }
-        }
-      });
+      // Process Analytics (Migrated to GA4)
       const newAnalytics = { 
-        moviesClicked: movies, 
-        linksClicked: links, 
-        viewedMovies: Array.from(viewedMovies), 
-        clickedLinks: Array.from(clickedLinks),
         timeSpent: user.timeSpent || 0,
         favoritesCount: (user.favorites || []).length,
         watchLaterCount: (user.watchLater || []).length,
@@ -382,10 +349,10 @@ export default function UserManagement() {
       try {
         setUserAnalytics(JSON.parse(cached));
       } catch (e) {
-        setUserAnalytics({ moviesClicked: 0, linksClicked: 0, viewedMovies: [], clickedLinks: [], timeSpent: 0, favoritesCount: 0, watchLaterCount: 0, lastActive: null, hasScanned: false });
+        setUserAnalytics({ timeSpent: 0, favoritesCount: 0, watchLaterCount: 0, lastActive: null, hasScanned: false });
       }
     } else {
-      setUserAnalytics({ moviesClicked: 0, linksClicked: 0, viewedMovies: [], clickedLinks: [], timeSpent: 0, favoritesCount: 0, watchLaterCount: 0, lastActive: null, hasScanned: false });
+      setUserAnalytics({ timeSpent: 0, favoritesCount: 0, watchLaterCount: 0, lastActive: null, hasScanned: false });
     }
     
     setUserRequests([]);
@@ -552,14 +519,12 @@ export default function UserManagement() {
           ordersSnap,
           requestsSnap,
           joinedRequestsSnap,
-          analyticsSnap,
           tokensSnap,
           notificationsSnap
         ] = await Promise.all([
           getDocs(query(collection(db, 'orders'), where('userId', '==', currentDeleteConfirm))),
           getDocs(query(collection(db, 'movie_requests'), where('userId', '==', currentDeleteConfirm))),
           getDocs(query(collection(db, 'movie_requests'), where('requestedBy', 'array-contains', currentDeleteConfirm))),
-          getDocs(query(collection(db, 'analytics'), where('userId', '==', currentDeleteConfirm))),
           getDocs(query(collection(db, 'fcm_tokens'), where('userId', '==', currentDeleteConfirm))),
           getDocs(query(collection(db, 'notifications'), where('targetUserId', '==', currentDeleteConfirm)))
         ]);
@@ -582,13 +547,10 @@ export default function UserManagement() {
           }
         });
         
-        // 4. Delete analytics
-        analyticsSnap.forEach(d => batch.delete(d.ref));
-        
-        // 5. Delete FCM tokens
+        // 4. Delete FCM tokens
         tokensSnap.forEach(d => batch.delete(d.ref));
 
-        // 6. Delete notifications targeted to this user
+        // 5. Delete notifications targeted to this user
         notificationsSnap.forEach(d => batch.delete(d.ref));
         
         await batch.commit();
@@ -1589,34 +1551,6 @@ export default function UserManagement() {
                               <span className="text-xs font-medium">Time in App</span>
                             </div>
                             <span className="font-bold text-zinc-900 dark:text-white text-xs">{userAnalytics.timeSpent || 0} mins</span>
-                          </div>
-                          <div className="bg-white dark:bg-zinc-950 p-3 rounded-xl border border-zinc-200 dark:border-zinc-800">
-                            <div className="flex items-center justify-between mb-1">
-                              <div className="flex items-center gap-3 text-zinc-600 dark:text-zinc-300">
-                                <Film className="w-4 h-4 text-emerald-500" />
-                                <span className="text-xs font-medium">Movies Clicked</span>
-                              </div>
-                              <span className="font-bold text-zinc-900 dark:text-white text-xs">{userAnalytics.moviesClicked}</span>
-                            </div>
-                            {userAnalytics.viewedMovies.length > 0 && (
-                              <div className="text-[10px] text-zinc-500 mt-1 pl-7 line-clamp-2">
-                                {userAnalytics.viewedMovies.join(', ')}
-                              </div>
-                            )}
-                          </div>
-                          <div className="bg-white dark:bg-zinc-950 p-3 rounded-xl border border-zinc-200 dark:border-zinc-800">
-                            <div className="flex items-center justify-between mb-1">
-                              <div className="flex items-center gap-3 text-zinc-600 dark:text-zinc-300">
-                                <MousePointerClick className="w-4 h-4 text-emerald-500" />
-                                <span className="text-xs font-medium">Links Clicked</span>
-                              </div>
-                              <span className="font-bold text-zinc-900 dark:text-white text-xs">{userAnalytics.linksClicked}</span>
-                            </div>
-                            {userAnalytics.clickedLinks.length > 0 && (
-                              <div className="text-[10px] text-zinc-500 mt-1 pl-7 line-clamp-2">
-                                {userAnalytics.clickedLinks.join(', ')}
-                              </div>
-                            )}
                           </div>
                           <div className="bg-white dark:bg-zinc-950 p-3 rounded-xl border border-zinc-200 dark:border-zinc-800">
                             <div className="flex items-center justify-between mb-1">

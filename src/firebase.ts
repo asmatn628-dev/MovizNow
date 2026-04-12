@@ -3,6 +3,7 @@ import { getAuth } from 'firebase/auth';
 import { initializeFirestore, doc, getDocFromServer, setDoc, collection, enableIndexedDbPersistence } from 'firebase/firestore';
 import { getStorage } from 'firebase/storage';
 import { getMessaging, getToken, onMessage } from 'firebase/messaging';
+import { getAnalytics, isSupported } from 'firebase/analytics';
 import firebaseConfig from '../firebase-applet-config.json';
 
 const app = initializeApp(firebaseConfig);
@@ -15,6 +16,15 @@ export const db = initializeFirestore(app, {
 export const auth = getAuth(app);
 export const storage = getStorage(app);
 export const messaging = typeof window !== 'undefined' ? getMessaging(app) : null;
+
+export let analytics: any = null;
+if (typeof window !== 'undefined') {
+  isSupported().then(yes => {
+    if (yes) {
+      analytics = getAnalytics(app);
+    }
+  });
+}
 
 // Enable offline persistence
 if (typeof window !== 'undefined') {

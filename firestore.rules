@@ -61,6 +61,15 @@ service cloud.firestore {
              data.status in ['active', 'pending', 'suspended', 'expired'];
     }
 
+    function protectedUserFieldsUnchanged() {
+      return request.resource.data.role == resource.data.role &&
+             request.resource.data.status == resource.data.status &&
+             request.resource.data.get('expiryDate', '') == resource.data.get('expiryDate', '') &&
+             request.resource.data.get('managedBy', '') == resource.data.get('managedBy', '') &&
+             request.resource.data.get('permissions', []) == resource.data.get('permissions', []) &&
+             request.resource.data.get('assignedContent', []) == resource.data.get('assignedContent', []);
+    }
+
     function isPendingOwner(userId, resourceData) {
       return isAuthenticated() && 
              userId.startsWith('pending_') && 
@@ -87,7 +96,7 @@ service cloud.firestore {
                        (isUserManager() && request.resource.data.managedBy == request.auth.uid && request.resource.data.role in ['user', 'trial', 'selected_content'] && request.resource.data.status != 'suspended' && isValidUser(request.resource.data)) ||
                        (isManager() && request.resource.data.managedBy == request.auth.uid && request.resource.data.role in ['user', 'trial', 'selected_content'] && request.resource.data.status != 'suspended' && isValidUser(request.resource.data));
       allow update: if (isAdmin() && isValidUser(request.resource.data)) || 
-                       (isOwner(userId) && request.resource.data.role == resource.data.role && request.resource.data.status == resource.data.status && isValidUser(request.resource.data)) ||
+                       (isOwner(userId) && protectedUserFieldsUnchanged() && isValidUser(request.resource.data)) ||
                        (isUserManager() && resource.data.managedBy == request.auth.uid && request.resource.data.managedBy == request.auth.uid && request.resource.data.role in ['user', 'trial', 'selected_content'] && request.resource.data.status != 'suspended' && isValidUser(request.resource.data)) ||
                        (isUserManager() && resource.data.status == 'pending' && request.resource.data.managedBy == request.auth.uid && request.resource.data.role in ['user', 'trial', 'selected_content'] && request.resource.data.status != 'suspended' && isValidUser(request.resource.data)) ||
                        (isManager() && resource.data.managedBy == request.auth.uid && request.resource.data.managedBy == request.auth.uid && request.resource.data.role in ['user', 'trial', 'selected_content'] && request.resource.data.status != 'suspended' && isValidUser(request.resource.data)) ||

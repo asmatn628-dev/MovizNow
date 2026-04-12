@@ -1,55 +1,33 @@
 import { useState, useEffect } from 'react';
-import { collection, query, getDocs, orderBy, limit, where } from 'firebase/firestore';
+import { collection, getDocs } from 'firebase/firestore';
 import { db } from '../../firebase';
-import { AnalyticsEvent, UserProfile } from '../../types';
-import { BarChart3, Film, Link as LinkIcon, Users, Clock, Activity } from 'lucide-react';
+import { UserProfile } from '../../types';
+import { BarChart3, Users, Clock, ExternalLink, Info } from 'lucide-react';
 import { handleFirestoreError, OperationType } from '../../utils/firestoreErrorHandler';
 
 export default function Analytics() {
-  const [events, setEvents] = useState<AnalyticsEvent[]>([]);
   const [users, setUsers] = useState<UserProfile[]>([]);
   const [loading, setLoading] = useState(true);
-  const [timeRange, setTimeRange] = useState<'day' | 'week' | 'month' | 'year'>('week');
 
   useEffect(() => {
     const fetchData = async () => {
       setLoading(true);
       try {
-        // Fetch events
-        const eventsRef = collection(db, 'analytics');
-        
-        const now = new Date();
-        let startDate = new Date();
-        if (timeRange === 'day') startDate.setDate(now.getDate() - 1);
-        if (timeRange === 'week') startDate.setDate(now.getDate() - 7);
-        if (timeRange === 'month') startDate.setMonth(now.getMonth() - 1);
-        if (timeRange === 'year') startDate.setFullYear(now.getFullYear() - 1);
-
-        const q = query(
-          eventsRef,
-          where('timestamp', '>=', startDate.toISOString()),
-          orderBy('timestamp', 'desc')
-        );
-        
-        const snapshot = await getDocs(q);
-        const eventsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as AnalyticsEvent));
-        setEvents(eventsData);
-
-        // Fetch users for top users
+        // Fetch users for top users (based on lifetime stats stored in user profiles)
         const usersRef = collection(db, 'users');
         const usersSnapshot = await getDocs(usersRef);
         const usersData = usersSnapshot.docs.map(doc => ({ uid: doc.id, ...doc.data() } as UserProfile));
         setUsers(usersData);
       } catch (error) {
         console.error('Error fetching analytics:', error);
-        handleFirestoreError(error, OperationType.LIST, 'analytics/users');
+        handleFirestoreError(error, OperationType.LIST, 'users');
       } finally {
         setLoading(false);
       }
     };
 
     fetchData();
-  }, [timeRange]);
+  }, []);
 
   if (loading) {
     return (
@@ -59,72 +37,15 @@ export default function Analytics() {
     );
   }
 
-  // Process data
-  const contentClicks = events.filter(e => e.type === 'content_click');
-  const linkClicks = events.filter(e => e.type === 'link_click');
-  const sessionStarts = events.filter(e => e.type === 'session_start');
-  const timeSpentEvents = events.filter(e => e.type === 'time_spent');
-
-  // Top Content
-  const contentCounts = contentClicks.reduce((acc, event) => {
-    if (event.contentId && event.contentTitle) {
-      acc[event.contentId] = {
-        id: event.contentId,
-        title: event.contentTitle,
-        count: (acc[event.contentId]?.count || 0) + 1
-      };
-    }
-    return acc;
-  }, {} as Record<string, { id: string, title: string, count: number }>);
-  
-  const topContent = (Object.values(contentCounts) as { id: string, title: string, count: number }[])
-    .sort((a, b) => b.count - a.count)
-    .slice(0, 10);
-
-  // Top Links
-  const linkCounts = linkClicks.reduce((acc, event) => {
-    if (event.linkId && event.linkName && event.contentTitle) {
-      const key = `${event.contentId}_${event.linkId}`;
-      acc[key] = {
-        id: key,
-        contentTitle: event.contentTitle,
-        linkName: event.linkName,
-        count: (acc[key]?.count || 0) + 1
-      };
-    }
-    return acc;
-  }, {} as Record<string, { id: string, contentTitle: string, linkName: string, count: number }>);
-
-  const topLinks = (Object.values(linkCounts) as { id: string, contentTitle: string, linkName: string, count: number }[])
-    .sort((a, b) => b.count - a.count)
-    .slice(0, 10);
-
-  // Calculate sessions and time spent per user in the selected period
-  const userStats = users.map(user => {
-    const userSessions = sessionStarts.filter(e => e.userId === user.uid).length;
-    const userTimeSpent = timeSpentEvents
-      .filter(e => e.userId === user.uid)
-      .reduce((total, e) => total + (e.duration || 0), 0);
-      
-    return {
-      ...user,
-      periodSessions: userSessions,
-      periodTimeSpent: userTimeSpent
-    };
-  });
-
-  // Top Users by sessions and time spent in period
-  const topUsersBySessions = [...userStats]
-    .sort((a, b) => b.periodSessions - a.periodSessions)
+  // Top Users by lifetime sessions
+  const topUsersBySessions = [...users]
+    .sort((a, b) => (b.sessionsCount || 0) - (a.sessionsCount || 0))
     .slice(0, 10);
     
-  const topUsersByTime = [...userStats]
-    .sort((a, b) => b.periodTimeSpent - a.periodTimeSpent)
+  // Top Users by lifetime time spent
+  const topUsersByTime = [...users]
+    .sort((a, b) => (b.timeSpent || 0) - (a.timeSpent || 0))
     .slice(0, 10);
-
-  const totalTimeSpent = timeSpentEvents.reduce((total, e) => total + (e.duration || 0), 0);
-  const activeUsersCount = userStats.filter(u => u.periodSessions > 0 || u.periodTimeSpent > 0).length;
-  const avgTimePerUser = activeUsersCount > 0 ? Math.round(totalTimeSpent / activeUsersCount) : 0;
 
   return (
     <div className="space-y-8">
@@ -136,135 +57,38 @@ export default function Analytics() {
           </h1>
           <p className="text-zinc-500 dark:text-zinc-400 mt-1 transition-colors duration-300">Track usage, content popularity, and user engagement.</p>
         </div>
-        
-        <div className="flex bg-zinc-100 dark:bg-zinc-900 rounded-xl p-1 border border-zinc-200 dark:border-zinc-800 transition-colors duration-300">
-          {(['day', 'week', 'month', 'year'] as const).map((range) => (
-            <button
-              key={range}
-              onClick={() => setTimeRange(range)}
-              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors capitalize ${
-                timeRange === range 
-                  ? 'bg-emerald-500 text-white' 
-                  : 'text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-200 dark:hover:bg-zinc-800'
-              }`}
-            >
-              {range}
-            </button>
-          ))}
-        </div>
       </div>
 
-      {/* Overview Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-6 transition-colors duration-300">
-          <div className="flex items-center gap-4 mb-4">
-            <div className="p-3 bg-emerald-500/10 text-emerald-500 rounded-xl">
-              <Activity className="w-6 h-6" />
-            </div>
-            <div>
-              <p className="text-zinc-500 dark:text-zinc-400 text-sm font-medium transition-colors duration-300">App Sessions</p>
-              <h3 className="text-2xl font-bold text-zinc-900 dark:text-white transition-colors duration-300">{sessionStarts.length}</h3>
-            </div>
-          </div>
+      {/* GA4 Migration Notice */}
+      <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-2xl p-6 flex items-start gap-4">
+        <div className="p-3 bg-blue-100 dark:bg-blue-800/50 text-blue-600 dark:text-blue-400 rounded-xl shrink-0">
+          <Info className="w-6 h-6" />
         </div>
-        
-        <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-6 transition-colors duration-300">
-          <div className="flex items-center gap-4 mb-4">
-            <div className="p-3 bg-blue-500/10 text-blue-500 rounded-xl">
-              <Film className="w-6 h-6" />
-            </div>
-            <div>
-              <p className="text-zinc-500 dark:text-zinc-400 text-sm font-medium transition-colors duration-300">Content Views</p>
-              <h3 className="text-2xl font-bold text-zinc-900 dark:text-white transition-colors duration-300">{contentClicks.length}</h3>
-            </div>
-          </div>
-        </div>
-        
-        <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-6 transition-colors duration-300">
-          <div className="flex items-center gap-4 mb-4">
-            <div className="p-3 bg-purple-500/10 text-purple-500 rounded-xl">
-              <LinkIcon className="w-6 h-6" />
-            </div>
-            <div>
-              <p className="text-zinc-500 dark:text-zinc-400 text-sm font-medium transition-colors duration-300">Link Clicks</p>
-              <h3 className="text-2xl font-bold text-zinc-900 dark:text-white transition-colors duration-300">{linkClicks.length}</h3>
-            </div>
-          </div>
-        </div>
-        
-        <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-6 transition-colors duration-300">
-          <div className="flex items-center gap-4 mb-4">
-            <div className="p-3 bg-orange-500/10 text-orange-500 rounded-xl">
-              <Clock className="w-6 h-6" />
-            </div>
-            <div>
-              <p className="text-zinc-500 dark:text-zinc-400 text-sm font-medium transition-colors duration-300">Avg Time / User</p>
-              <h3 className="text-2xl font-bold text-zinc-900 dark:text-white transition-colors duration-300">
-                {avgTimePerUser} min
-              </h3>
-            </div>
-          </div>
+        <div>
+          <h3 className="text-lg font-bold text-blue-900 dark:text-blue-100 mb-2">Analytics Migrated to Google Analytics (GA4)</h3>
+          <p className="text-blue-800 dark:text-blue-200 mb-4">
+            To save on database costs and improve scalability, detailed event tracking (like content views and link clicks) has been migrated to Google Analytics. You can view comprehensive, real-time reports directly in the Firebase Console.
+          </p>
+          <a 
+            href="https://console.firebase.google.com/" 
+            target="_blank" 
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors"
+          >
+            Open Firebase Console <ExternalLink className="w-4 h-4" />
+          </a>
         </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-        {/* Top Content */}
-        <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-6 transition-colors duration-300">
-          <h2 className="text-xl font-bold text-zinc-900 dark:text-white mb-6 flex items-center gap-2 transition-colors duration-300">
-            <Film className="w-5 h-5 text-emerald-500" />
-            Top Movies & Series
-          </h2>
-          <div className="space-y-4">
-            {topContent.length > 0 ? topContent.map((item, index) => (
-              <div key={item.id} className="flex items-center justify-between p-4 bg-zinc-50 dark:bg-zinc-950 rounded-xl border border-zinc-200 dark:border-zinc-800 transition-colors duration-300">
-                <div className="flex items-center gap-4">
-                  <span className="text-xl font-bold text-zinc-500 dark:text-zinc-400 dark:text-zinc-600 w-6 transition-colors duration-300">{index + 1}</span>
-                  <span className="font-medium text-zinc-900 dark:text-white transition-colors duration-300">{item.title}</span>
-                </div>
-                <span className="bg-emerald-500/10 text-emerald-500 px-3 py-1 rounded-full text-sm font-medium">
-                  {item.count} views
-                </span>
-              </div>
-            )) : (
-              <p className="text-zinc-500 dark:text-zinc-400 text-center py-4 transition-colors duration-300">No content views in this period.</p>
-            )}
-          </div>
-        </div>
-
-        {/* Top Links */}
-        <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-6 transition-colors duration-300">
-          <h2 className="text-xl font-bold text-zinc-900 dark:text-white mb-6 flex items-center gap-2 transition-colors duration-300">
-            <LinkIcon className="w-5 h-5 text-emerald-500" />
-            Top Links Clicked
-          </h2>
-          <div className="space-y-4">
-            {topLinks.length > 0 ? topLinks.map((item, index) => (
-              <div key={item.id} className="flex items-center justify-between p-4 bg-zinc-50 dark:bg-zinc-950 rounded-xl border border-zinc-200 dark:border-zinc-800 transition-colors duration-300">
-                <div className="flex items-center gap-4">
-                  <span className="text-xl font-bold text-zinc-500 dark:text-zinc-400 dark:text-zinc-600 w-6 transition-colors duration-300">{index + 1}</span>
-                  <div>
-                    <p className="font-medium text-zinc-900 dark:text-white transition-colors duration-300">{item.contentTitle}</p>
-                    <p className="text-sm text-zinc-500 dark:text-zinc-400 transition-colors duration-300">{item.linkName}</p>
-                  </div>
-                </div>
-                <span className="bg-emerald-500/10 text-emerald-500 px-3 py-1 rounded-full text-sm font-medium">
-                  {item.count} clicks
-                </span>
-              </div>
-            )) : (
-              <p className="text-zinc-500 dark:text-zinc-400 text-center py-4 transition-colors duration-300">No link clicks in this period.</p>
-            )}
-          </div>
-        </div>
-
         {/* Top Users by Sessions */}
         <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-6 transition-colors duration-300">
           <h2 className="text-xl font-bold text-zinc-900 dark:text-white mb-6 flex items-center gap-2 transition-colors duration-300">
             <Users className="w-5 h-5 text-emerald-500" />
-            Most Active Users (Sessions)
+            Most Active Users (Lifetime Sessions)
           </h2>
           <div className="space-y-4">
-            {topUsersBySessions.filter(u => u.periodSessions > 0).length > 0 ? topUsersBySessions.filter(u => u.periodSessions > 0).map((user, index) => (
+            {topUsersBySessions.filter(u => (u.sessionsCount || 0) > 0).length > 0 ? topUsersBySessions.filter(u => (u.sessionsCount || 0) > 0).map((user, index) => (
               <div key={user.uid} className="flex items-center justify-between p-4 bg-zinc-50 dark:bg-zinc-950 rounded-xl border border-zinc-200 dark:border-zinc-800 transition-colors duration-300">
                 <div className="flex items-center gap-4">
                   <span className="text-xl font-bold text-zinc-500 dark:text-zinc-400 dark:text-zinc-600 w-6 transition-colors duration-300">{index + 1}</span>
@@ -283,7 +107,7 @@ export default function Analytics() {
                   </div>
                 </div>
                 <span className="bg-emerald-500/10 text-emerald-500 px-3 py-1 rounded-full text-sm font-medium">
-                  {user.periodSessions} sessions
+                  {user.sessionsCount} sessions
                 </span>
               </div>
             )) : (
@@ -296,10 +120,10 @@ export default function Analytics() {
         <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-6 transition-colors duration-300">
           <h2 className="text-xl font-bold text-zinc-900 dark:text-white mb-6 flex items-center gap-2 transition-colors duration-300">
             <Clock className="w-5 h-5 text-emerald-500" />
-            Most Active Users (Time Spent)
+            Most Active Users (Lifetime Time Spent)
           </h2>
           <div className="space-y-4">
-            {topUsersByTime.filter(u => u.periodTimeSpent > 0).length > 0 ? topUsersByTime.filter(u => u.periodTimeSpent > 0).map((user, index) => (
+            {topUsersByTime.filter(u => (u.timeSpent || 0) > 0).length > 0 ? topUsersByTime.filter(u => (u.timeSpent || 0) > 0).map((user, index) => (
               <div key={user.uid} className="flex items-center justify-between p-4 bg-zinc-50 dark:bg-zinc-950 rounded-xl border border-zinc-200 dark:border-zinc-800 transition-colors duration-300">
                 <div className="flex items-center gap-4">
                   <span className="text-xl font-bold text-zinc-500 dark:text-zinc-400 dark:text-zinc-600 w-6 transition-colors duration-300">{index + 1}</span>
@@ -318,7 +142,7 @@ export default function Analytics() {
                   </div>
                 </div>
                 <span className="bg-emerald-500/10 text-emerald-500 px-3 py-1 rounded-full text-sm font-medium">
-                  {user.periodTimeSpent} min
+                  {user.timeSpent} min
                 </span>
               </div>
             )) : (
