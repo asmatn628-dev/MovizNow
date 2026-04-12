@@ -109,9 +109,6 @@ export const smartSearch = <T extends Record<string, any>>(
       
       // Boost for match ratio
       score += matchRatio * 500;
-      
-      // Tie-breaker: shorter searchable text first if scores are equal
-      score -= searchableText.length * 0.1;
     }
 
     return { item, score, isMatch };
@@ -119,6 +116,24 @@ export const smartSearch = <T extends Record<string, any>>(
 
   return scoredItems
     .filter(si => si.isMatch)
-    .sort((a, b) => b.score - a.score)
+    .sort((a, b) => {
+      // Primary sort by score descending
+      if (Math.abs(b.score - a.score) > 0.001) {
+        return b.score - a.score;
+      }
+      
+      // Secondary sort by 'order' field ascending (if available)
+      const orderA = a.item.order !== undefined ? a.item.order : Infinity;
+      const orderB = b.item.order !== undefined ? b.item.order : Infinity;
+      
+      if (orderA !== orderB) {
+        return orderA - orderB;
+      }
+
+      // Tertiary sort by createdAt descending (if available)
+      const dateA = a.item.createdAt ? new Date(a.item.createdAt).getTime() : 0;
+      const dateB = b.item.createdAt ? new Date(b.item.createdAt).getTime() : 0;
+      return dateB - dateA;
+    })
     .map(si => si.item);
 };

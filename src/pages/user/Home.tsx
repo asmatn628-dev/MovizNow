@@ -281,7 +281,7 @@ export default function Home({ onOpenMediaModal }: { onOpenMediaModal: () => voi
       });
     }
 
-    if (!debouncedSearch) {
+    if (!debouncedSearch || sort === 'default') {
       result.sort((a, b) => {
         // For selected_content users, prioritize assigned content
         if (profile?.role === 'selected_content') {

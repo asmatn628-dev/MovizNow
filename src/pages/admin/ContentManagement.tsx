@@ -2042,7 +2042,7 @@ export default function ContentManagement() {
       result = smartSearch(result, searchTerm);
     }
     
-    if (!searchTerm) {
+    if (!searchTerm || filterSort === 'default') {
       result.sort((a, b) => {
         if (filterSort === 'default') {
           if (a.order !== undefined && b.order !== undefined) return a.order - b.order;
