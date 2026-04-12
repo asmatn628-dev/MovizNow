@@ -106,7 +106,8 @@ export default function Notifications() {
         phone: doc.data().phone,
         role: doc.data().role,
         status: doc.data().status,
-        createdAt: doc.data().createdAt
+        createdAt: doc.data().createdAt,
+        assignedContent: doc.data().assignedContent || []
       } as UserProfile));
       
       setAllUsers(users);
@@ -292,6 +293,55 @@ export default function Notifications() {
     } finally {
       setProcessing(prev => ({ ...prev, send: false }));
     }
+  };
+
+  const handleBulkSelect = (criteria: string) => {
+    let usersToAdd: UserProfile[] = [];
+    
+    switch (criteria) {
+      case 'pending':
+        usersToAdd = allUsers.filter(u => u.status === 'pending');
+        break;
+      case 'expiry':
+        usersToAdd = allUsers.filter(u => u.status === 'expired');
+        break;
+      case 'active':
+        usersToAdd = allUsers.filter(u => u.status === 'active');
+        break;
+      case 'user':
+        usersToAdd = allUsers.filter(u => u.role === 'user');
+        break;
+      case 'selected_content':
+        usersToAdd = allUsers.filter(u => u.assignedContent && u.assignedContent.length > 0);
+        break;
+    }
+
+    if (usersToAdd.length === 0) return;
+
+    const newIds = new Set(sendForm.targetUserIds);
+    const newNamesMap = new Map(sendForm.targetUserIds.map((id, idx) => [id, sendForm.targetUserNames[idx]]));
+
+    let allAlreadySelected = usersToAdd.every(u => newIds.has(u.uid));
+
+    if (allAlreadySelected) {
+      // Unselect them
+      usersToAdd.forEach(u => {
+        newIds.delete(u.uid);
+        newNamesMap.delete(u.uid);
+      });
+    } else {
+      // Select them
+      usersToAdd.forEach(u => {
+        newIds.add(u.uid);
+        newNamesMap.set(u.uid, u.displayName || u.email);
+      });
+    }
+
+    setSendForm(prev => ({
+      ...prev,
+      targetUserIds: Array.from(newIds),
+      targetUserNames: Array.from(newIds).map(id => newNamesMap.get(id) || '')
+    }));
   };
 
   const filteredNotifications = notifications.filter(
@@ -574,8 +624,48 @@ export default function Notifications() {
 
           {sendForm.targetType === 'specific' && (
             <div className="space-y-2">
-              <label className="text-xs font-bold text-zinc-500 uppercase">Target Users ({sendForm.targetUserIds.length})</label>
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-bold text-zinc-500 uppercase">Target Users ({sendForm.targetUserIds.length})</label>
+              </div>
               
+              <div className="flex flex-wrap gap-2 mb-2">
+                <button
+                  type="button"
+                  onClick={() => handleBulkSelect('pending')}
+                  className="px-2 py-1 text-[10px] font-bold uppercase tracking-wider rounded-lg bg-yellow-500/10 text-yellow-600 dark:text-yellow-400 border border-yellow-500/20 hover:bg-yellow-500/20 transition-colors"
+                >
+                  Pending
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleBulkSelect('expiry')}
+                  className="px-2 py-1 text-[10px] font-bold uppercase tracking-wider rounded-lg bg-red-500/10 text-red-600 dark:text-red-400 border border-red-500/20 hover:bg-red-500/20 transition-colors"
+                >
+                  Expiry
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleBulkSelect('active')}
+                  className="px-2 py-1 text-[10px] font-bold uppercase tracking-wider rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/20 transition-colors"
+                >
+                  Active
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleBulkSelect('user')}
+                  className="px-2 py-1 text-[10px] font-bold uppercase tracking-wider rounded-lg bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20 hover:bg-blue-500/20 transition-colors"
+                >
+                  User
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleBulkSelect('selected_content')}
+                  className="px-2 py-1 text-[10px] font-bold uppercase tracking-wider rounded-lg bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20 hover:bg-purple-500/20 transition-colors"
+                >
+                  Selected Content
+                </button>
+              </div>
+
               {sendForm.targetUserIds.length > 0 && (
                 <div className="flex flex-wrap gap-2 p-3 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl max-h-32 overflow-y-auto">
                   {sendForm.targetUserIds.map((uid, idx) => (

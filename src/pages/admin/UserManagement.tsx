@@ -71,7 +71,7 @@ export default function UserManagement() {
   const [selectedUser, setSelectedUser] = useState<UserProfile | null>(null);
   const [isEditingOverlay, setIsEditingOverlay] = useState(false);
   const [isAnalyticsLoading, setIsAnalyticsLoading] = useState(false);
-  const [userAnalytics, setUserAnalytics] = useState<{ moviesClicked: number, linksClicked: number, viewedMovies: string[], clickedLinks: string[] }>({ moviesClicked: 0, linksClicked: 0, viewedMovies: [], clickedLinks: [] });
+  const [userAnalytics, setUserAnalytics] = useState<{ moviesClicked: number, linksClicked: number, viewedMovies: string[], clickedLinks: string[], timeSpent: number, favoritesCount: number, watchLaterCount: number, lastActive: string | null, hasScanned: boolean }>({ moviesClicked: 0, linksClicked: 0, viewedMovies: [], clickedLinks: [], timeSpent: 0, favoritesCount: 0, watchLaterCount: 0, lastActive: null, hasScanned: false });
   const [userRequests, setUserRequests] = useState<any[]>([]);
   const [assignedContentTitles, setAssignedContentTitles] = useState<string[]>([]);
   const [allContent, setAllContent] = useState<any[]>([]);
@@ -151,7 +151,11 @@ export default function UserManagement() {
   useModalBehavior(!!deleteConfirm, () => setDeleteConfirm(null));
   useModalBehavior(isContentPickerOpen, () => setIsContentPickerOpen(false));
   useModalBehavior(isAddUserModalOpen, () => setIsAddUserModalOpen(false));
-  useModalBehavior(!!selectedUser, () => setSelectedUser(null));
+  useModalBehavior(!!selectedUser, () => {
+    setSelectedUser(null);
+    setIsEditingOverlay(false);
+    setEditingId(null);
+  });
 
   useEffect(() => {
     const cacheKey = `cached_users_${profile?.uid}_${managedByFilter || 'all'}`;
@@ -285,7 +289,6 @@ export default function UserManagement() {
 
   const fetchUserAnalytics = async (user: UserProfile) => {
     setIsAnalyticsLoading(true);
-    setUserAnalytics({ moviesClicked: 0, linksClicked: 0, viewedMovies: [], clickedLinks: [] });
     // Note: movie requests and assigned content titles are still fetched here as they are part of the detailed view
     setUserRequests([]);
     setAssignedContentTitles([]);
@@ -332,12 +335,19 @@ export default function UserManagement() {
           }
         }
       });
-      setUserAnalytics({ 
+      const newAnalytics = { 
         moviesClicked: movies, 
         linksClicked: links, 
         viewedMovies: Array.from(viewedMovies), 
-        clickedLinks: Array.from(clickedLinks) 
-      });
+        clickedLinks: Array.from(clickedLinks),
+        timeSpent: user.timeSpent || 0,
+        favoritesCount: (user.favorites || []).length,
+        watchLaterCount: (user.watchLater || []).length,
+        lastActive: user.lastActive || null,
+        hasScanned: true
+      };
+      setUserAnalytics(newAnalytics);
+      safeStorage.setItem(`user_analytics_${user.uid}`, JSON.stringify(newAnalytics));
 
       // Process Assigned Content Titles
       if (contentSnapshot) {
@@ -366,8 +376,18 @@ export default function UserManagement() {
     
     setSelectedUser(user);
     setAssignedIds(new Set(user.assignedContent || []));
-    // Reset analytics state but don't fetch automatically
-    setUserAnalytics({ moviesClicked: 0, linksClicked: 0, viewedMovies: [], clickedLinks: [] });
+    
+    const cached = safeStorage.getItem(`user_analytics_${user.uid}`);
+    if (cached) {
+      try {
+        setUserAnalytics(JSON.parse(cached));
+      } catch (e) {
+        setUserAnalytics({ moviesClicked: 0, linksClicked: 0, viewedMovies: [], clickedLinks: [], timeSpent: 0, favoritesCount: 0, watchLaterCount: 0, lastActive: null, hasScanned: false });
+      }
+    } else {
+      setUserAnalytics({ moviesClicked: 0, linksClicked: 0, viewedMovies: [], clickedLinks: [], timeSpent: 0, favoritesCount: 0, watchLaterCount: 0, lastActive: null, hasScanned: false });
+    }
+    
     setUserRequests([]);
     setAssignedContentTitles([]);
   };
@@ -496,7 +516,10 @@ export default function UserManagement() {
 
       setEditingId(null);
       setIsEditingOverlay(false);
-      setSelectedUser(null);
+      setSelectedUser({
+        ...selectedUser,
+        ...updateData
+      });
     } catch (error) {
       console.error('Error updating user:', error);
       handleFirestoreError(error, OperationType.UPDATE, `users/${editingId}`);
@@ -753,7 +776,7 @@ export default function UserManagement() {
       setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
     } else {
       setSortField(field);
-      setSortOrder('asc');
+      setSortOrder(field === 'lastActive' ? 'desc' : 'asc');
     }
   };
 
@@ -836,9 +859,17 @@ export default function UserManagement() {
             comparison = (a.phone || '').localeCompare(b.phone || '');
             break;
           case 'expiryDate':
-            const dateA = a.expiryDate ? new Date(a.expiryDate).getTime() : 0;
-            const dateB = b.expiryDate ? new Date(b.expiryDate).getTime() : 0;
-            comparison = dateA - dateB;
+            const hasA = !!a.expiryDate;
+            const hasB = !!b.expiryDate;
+            if (!hasA && !hasB) {
+              comparison = 0;
+            } else if (!hasA) {
+              comparison = sortOrder === 'asc' ? 1 : -1;
+            } else if (!hasB) {
+              comparison = sortOrder === 'asc' ? -1 : 1;
+            } else {
+              comparison = new Date(a.expiryDate!).getTime() - new Date(b.expiryDate!).getTime();
+            }
             break;
           case 'lastActive':
             const activeA = a.lastActive ? new Date(a.lastActive).getTime() : 0;
@@ -1027,15 +1058,17 @@ export default function UserManagement() {
                 <option value="expired">Expired</option>
               </select>
               
-              {(searchTerm || filterRole !== 'all' || filterStatus !== 'all') && (
+              {(searchTerm || filterRole !== 'all' || filterStatus !== 'all' || sortField !== 'createdAt' || sortOrder !== 'desc') && (
                 <button
                   onClick={() => {
                     setSearchTerm('');
                     setFilterRole('all');
                     setFilterStatus('all');
+                    setSortField('createdAt');
+                    setSortOrder('desc');
                   }}
                   className="p-1.5 text-zinc-500 hover:text-red-500 hover:bg-red-500/10 rounded-lg transition-colors shrink-0"
-                  title="Reset Filters"
+                  title="Reset Filters & Sorting"
                 >
                   <X className="w-4 h-4" />
                 </button>
@@ -1057,7 +1090,7 @@ export default function UserManagement() {
             <table className="w-full text-left text-sm">
               <thead className="bg-white/50 dark:bg-zinc-950/50 text-zinc-500 dark:text-zinc-400 uppercase font-semibold">
                 <tr>
-                  <th className="px-4 py-4 w-12 whitespace-nowrap">
+                  <th className="px-3 md:px-4 py-4 w-12 whitespace-nowrap">
                     <input 
                       type="checkbox" 
                       checked={selectedUsers.length === filteredAndSortedUsers.length && filteredAndSortedUsers.length > 0}
@@ -1065,29 +1098,22 @@ export default function UserManagement() {
                       className="w-4 h-4 rounded border-zinc-300 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-900 text-emerald-500 focus:ring-emerald-500 focus:ring-offset-zinc-950"
                     />
                   </th>
-                  <th className="px-4 md:px-6 py-4 cursor-pointer hover:text-zinc-900 dark:text-white transition-colors whitespace-nowrap" onClick={() => toggleSort('displayName')}>
+                  <th className="px-3 md:px-4 py-4 cursor-pointer hover:text-zinc-900 dark:text-white transition-colors whitespace-nowrap max-w-[200px] md:max-w-[250px]" onClick={() => toggleSort('displayName')}>
                     User Info <SortIcon field="displayName" />
                   </th>
-                <th className="px-4 md:px-6 py-4 whitespace-nowrap">Role</th>
-                <th className="px-4 md:px-6 py-4 cursor-pointer hover:text-zinc-900 dark:text-white transition-colors whitespace-nowrap" onClick={() => toggleSort('expiryDate')}>
-                  Expiry Date <SortIcon field="expiryDate" />
+                <th className="px-3 md:px-4 py-4 cursor-pointer hover:text-zinc-900 dark:text-white transition-colors whitespace-nowrap" onClick={() => toggleSort('lastActive')}>
+                  Role & Last <SortIcon field="lastActive" />
                 </th>
-                <th className="px-4 md:px-6 py-4 cursor-pointer hover:text-zinc-900 dark:text-white transition-colors whitespace-nowrap" onClick={() => toggleSort('lastActive')}>
-                  Last Active <SortIcon field="lastActive" />
+                <th className="px-3 md:px-4 py-4 cursor-pointer hover:text-zinc-900 dark:text-white transition-colors whitespace-nowrap" onClick={() => toggleSort('expiryDate')}>
+                  Expiry <SortIcon field="expiryDate" />
                 </th>
-                {(profile?.role === 'admin' || profile?.role === 'owner') && (
-                  <th className="px-4 md:px-6 py-4 whitespace-nowrap">Managed By</th>
-                )}
-                <th className="px-4 md:px-6 py-4 cursor-pointer hover:text-zinc-900 dark:text-white transition-colors whitespace-nowrap" onClick={() => toggleSort('createdAt')}>
-                  Joined <SortIcon field="createdAt" />
-                </th>
-                <th className="px-4 md:px-6 py-4 text-right whitespace-nowrap">Actions</th>
+                <th className="px-3 md:px-4 py-4 text-right whitespace-nowrap">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-zinc-800">
               {filteredAndSortedUsers.map((user) => (
                 <tr key={user.uid} onClick={(e) => handleRowClick(user, e)} className="hover:bg-zinc-200 dark:hover:bg-zinc-800/50 transition-colors cursor-pointer">
-                  <td className="px-4 py-4" onClick={(e) => e.stopPropagation()}>
+                  <td className="px-3 md:px-4 py-4" onClick={(e) => e.stopPropagation()}>
                     {user.role !== 'owner' && (
                       <input 
                         type="checkbox" 
@@ -1100,28 +1126,28 @@ export default function UserManagement() {
                       />
                     )}
                   </td>
-                  <td className="px-4 md:px-6 py-4">
+                  <td className="px-3 md:px-4 py-4 max-w-[200px] md:max-w-[250px]">
                     <div className="flex items-center gap-3">
                       {user.photoURL && user.photoURL.trim() !== "" ? (
-                        <img src={user.photoURL} alt={user.displayName || 'User'} className="w-10 h-10 rounded-full object-cover" referrerPolicy="no-referrer" />
+                        <img src={user.photoURL} alt={user.displayName || 'User'} className="w-10 h-10 rounded-full object-cover shrink-0" referrerPolicy="no-referrer" />
                       ) : (
                         <div className="w-10 h-10 rounded-full bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center text-zinc-500 dark:text-zinc-400 font-bold shrink-0">
                           {(user.displayName || user.email || '?').charAt(0).toUpperCase()}
                         </div>
                       )}
-                      <div>
-                        <div className="font-medium text-zinc-900 dark:text-white flex items-center gap-2">
+                      <div className="min-w-0 flex-1">
+                        <div className="font-medium text-zinc-900 dark:text-white flex items-center gap-2 truncate">
                           {user.displayName || 'No Name'}
                         </div>
-                        <div className="text-zinc-500 dark:text-zinc-400 text-xs mt-0.5">{user.email}</div>
-                        <div className="text-zinc-500 text-xs mt-0.5 flex items-center gap-1">
-                          <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"></path></svg>
+                        <div className="text-zinc-500 dark:text-zinc-400 text-xs mt-0.5 truncate" title={user.email}>{user.email}</div>
+                        <div className="text-zinc-500 text-xs mt-0.5 flex items-center gap-1 truncate">
+                          <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"></path></svg>
                           {user.phone || 'No phone'}
                         </div>
                       </div>
                     </div>
                   </td>
-                  <td className="px-4 md:px-6 py-4 whitespace-nowrap">
+                  <td className="px-3 md:px-4 py-4 whitespace-nowrap">
                     <div className="flex flex-col gap-1 items-start">
                       <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium capitalize
                         ${user.role === 'admin' ? 'bg-purple-500/10 text-purple-500' : 
@@ -1147,55 +1173,43 @@ export default function UserManagement() {
                           {user.status}
                         </span>
                       )}
-                    </div>
-                  </td>
-                  <td className="px-4 md:px-6 py-4">
-                    <span className="text-zinc-600 dark:text-zinc-300">
-                      {user.role === 'owner' ? 'Lifetime' : user.expiryDate ? format(new Date(user.expiryDate), 'MMM dd, yyyy') : '-'}
-                    </span>
-                  </td>
-                  <td className="px-4 md:px-6 py-4">
-                    <div className="flex flex-col gap-1">
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 mt-0.5">
                         {isUserOnline(user.lastActive) && (
                           <span className="relative flex h-2 w-2">
                             <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
                             <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
                           </span>
                         )}
-                        <span className={`text-xs font-medium ${isUserOnline(user.lastActive) ? 'text-emerald-500' : 'text-zinc-500 dark:text-zinc-400'}`}>
+                        <span className={`text-[10px] font-medium ${isUserOnline(user.lastActive) ? 'text-emerald-500' : 'text-zinc-500 dark:text-zinc-400'}`}>
                           {isUserOnline(user.lastActive) ? 'Online' : (user.lastActive ? formatDistanceToNow(new Date(user.lastActive), { addSuffix: true }) : 'Never')}
                         </span>
                       </div>
-                      {isUserOnline(user.lastActive) && user.lastActive && (
-                        <span className="text-[10px] text-zinc-500 dark:text-zinc-500">
-                          Active {formatDistanceToNow(new Date(user.lastActive), { addSuffix: true })}
+                    </div>
+                  </td>
+                  <td className="px-3 md:px-4 py-4">
+                    <div className="flex flex-col gap-1">
+                      <span className="text-zinc-600 dark:text-zinc-300 font-medium">
+                        {user.role === 'owner' ? 'Lifetime' : user.expiryDate ? format(new Date(user.expiryDate), 'MMM dd, yyyy') : '-'}
+                      </span>
+                      {(profile?.role === 'admin' || profile?.role === 'owner') && user.managedBy && (
+                        <span className="text-zinc-500 dark:text-zinc-400 text-xs">
+                          {managers[user.managedBy] || ''}
                         </span>
                       )}
                     </div>
                   </td>
-                  {(profile?.role === 'admin' || profile?.role === 'owner') && (
-                    <td className="px-4 md:px-6 py-4">
-                      <span className="text-zinc-500 dark:text-zinc-400 text-sm">
-                        {user.managedBy ? managers[user.managedBy] || 'Unknown Manager' : '-'}
-                      </span>
-                    </td>
-                  )}
-                  <td className="px-4 md:px-6 py-4 whitespace-nowrap text-zinc-500 dark:text-zinc-400">
-                    {format(new Date(user.createdAt), 'MMM dd, yyyy')}
-                  </td>
-                  <td className="px-4 md:px-6 py-4 text-right">
-                    <div className="flex items-center justify-end gap-2">
+                  <td className="px-3 md:px-4 py-4 text-right">
+                    <div className="flex items-center justify-end gap-1">
                       <button 
                         onClick={(e) => {
                           e.stopPropagation();
                           sendWhatsAppReminder(user);
                         }}
-                        className="p-2 text-emerald-500 hover:bg-emerald-500/10 rounded-lg transition-colors disabled:opacity-50"
+                        className="p-1.5 text-emerald-500 hover:bg-emerald-500/10 rounded-lg transition-colors disabled:opacity-50"
                         title="Send WhatsApp Reminder"
                         disabled={processing[`reminder_${user.uid}`]}
                       >
-                        {processing[`reminder_${user.uid}`] ? <Loader2 className="w-5 h-5 animate-spin" /> : <MessageCircle className="w-5 h-5" />}
+                        {processing[`reminder_${user.uid}`] ? <Loader2 className="w-4 h-4 animate-spin" /> : <MessageCircle className="w-4 h-4" />}
                       </button>
                       {user.role !== 'owner' && user.uid !== profile?.uid && (
                         <>
@@ -1204,9 +1218,9 @@ export default function UserManagement() {
                               e.stopPropagation();
                               handleEdit(user);
                             }} 
-                            className="p-2 text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:text-white hover:bg-zinc-200 dark:hover:bg-zinc-800 rounded-lg transition-colors"
+                            className="p-1.5 text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:text-white hover:bg-zinc-200 dark:hover:bg-zinc-800 rounded-lg transition-colors"
                           >
-                            <Edit2 className="w-5 h-5" />
+                            <Edit2 className="w-4 h-4" />
                           </button>
                           {(profile?.role === 'admin' || profile?.role === 'owner') && (
                             <button 
@@ -1214,9 +1228,9 @@ export default function UserManagement() {
                                 e.stopPropagation();
                                 setDeleteConfirm(user.uid);
                               }} 
-                              className="p-2 text-red-500 hover:bg-red-500/10 rounded-lg transition-colors"
+                              className="p-1.5 text-red-500 hover:bg-red-500/10 rounded-lg transition-colors"
                             >
-                              <Trash2 className="w-5 h-5" />
+                              <Trash2 className="w-4 h-4" />
                             </button>
                           )}
                         </>
@@ -1242,7 +1256,7 @@ export default function UserManagement() {
           <div className="bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl w-full max-w-md overflow-hidden flex flex-col max-h-[90vh]">
             <div className="p-4 md:p-6 border-b border-zinc-200 dark:border-zinc-800 flex justify-between items-center shrink-0">
               <h2 className="text-xl font-bold">{isEditingOverlay ? 'Edit User' : 'User Details'}</h2>
-              <button onClick={() => { setSelectedUser(null); setIsEditingOverlay(false); }} className="text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:text-white transition-colors">
+              <button onClick={() => { setSelectedUser(null); setIsEditingOverlay(false); setEditingId(null); }} className="text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:text-white transition-colors">
                 <X className="w-6 h-6" />
               </button>
             </div>
@@ -1552,19 +1566,19 @@ export default function UserManagement() {
                             </div>
                             <div className="text-right">
                               <div className="flex items-center justify-end gap-2">
-                                {isUserOnline(selectedUser.lastActive) && (
+                                {isUserOnline(userAnalytics.lastActive || selectedUser.lastActive) && (
                                   <span className="relative flex h-2 w-2">
                                     <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
                                     <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
                                   </span>
                                 )}
-                                <div className={`font-bold text-xs ${isUserOnline(selectedUser.lastActive) ? 'text-emerald-500' : 'text-zinc-900 dark:text-white'}`}>
-                                  {isUserOnline(selectedUser.lastActive) ? 'Online' : (selectedUser.lastActive ? format(new Date(selectedUser.lastActive), 'MMM dd, HH:mm') : 'Never')}
+                                <div className={`font-bold text-xs ${isUserOnline(userAnalytics.lastActive || selectedUser.lastActive) ? 'text-emerald-500' : 'text-zinc-900 dark:text-white'}`}>
+                                  {isUserOnline(userAnalytics.lastActive || selectedUser.lastActive) ? 'Online' : ((userAnalytics.lastActive || selectedUser.lastActive) ? format(new Date((userAnalytics.lastActive || selectedUser.lastActive)!), 'MMM dd, HH:mm') : 'Never')}
                                 </div>
                               </div>
-                              {selectedUser.lastActive && (
+                              {(userAnalytics.lastActive || selectedUser.lastActive) && (
                                 <div className="text-[10px] text-zinc-500">
-                                  {formatDistanceToNow(new Date(selectedUser.lastActive), { addSuffix: true })}
+                                  {formatDistanceToNow(new Date((userAnalytics.lastActive || selectedUser.lastActive)!), { addSuffix: true })}
                                 </div>
                               )}
                             </div>
@@ -1574,7 +1588,7 @@ export default function UserManagement() {
                               <Clock className="w-4 h-4 text-emerald-500" />
                               <span className="text-xs font-medium">Time in App</span>
                             </div>
-                            <span className="font-bold text-zinc-900 dark:text-white text-xs">{selectedUser.timeSpent || 0} mins</span>
+                            <span className="font-bold text-zinc-900 dark:text-white text-xs">{userAnalytics.timeSpent || 0} mins</span>
                           </div>
                           <div className="bg-white dark:bg-zinc-950 p-3 rounded-xl border border-zinc-200 dark:border-zinc-800">
                             <div className="flex items-center justify-between mb-1">
@@ -1610,7 +1624,7 @@ export default function UserManagement() {
                                 <Heart className="w-4 h-4 text-emerald-500" />
                                 <span className="text-xs font-medium">Favorites</span>
                               </div>
-                              <span className="font-bold text-zinc-900 dark:text-white text-xs">{(selectedUser.favorites || []).length}</span>
+                              <span className="font-bold text-zinc-900 dark:text-white text-xs">{userAnalytics.favoritesCount || 0}</span>
                             </div>
                           </div>
                           <div className="bg-white dark:bg-zinc-950 p-3 rounded-xl border border-zinc-200 dark:border-zinc-800">
@@ -1619,7 +1633,7 @@ export default function UserManagement() {
                                 <Bookmark className="w-4 h-4 text-emerald-500" />
                                 <span className="text-xs font-medium">Watch Later</span>
                               </div>
-                              <span className="font-bold text-zinc-900 dark:text-white text-xs">{(selectedUser.watchLater || []).length}</span>
+                              <span className="font-bold text-zinc-900 dark:text-white text-xs">{userAnalytics.watchLaterCount || 0}</span>
                             </div>
                           </div>
                         </div>
@@ -1634,7 +1648,7 @@ export default function UserManagement() {
               {isEditingOverlay ? (
                 <>
                   <Button
-                    onClick={() => { setIsEditingOverlay(false); setSelectedUser(null); }}
+                    onClick={() => { setIsEditingOverlay(false); setEditingId(null); }}
                     variant="secondary"
                     className="px-5 py-2.5 text-sm"
                   >
@@ -1656,6 +1670,8 @@ export default function UserManagement() {
                     onClick={() => {
                       sendWhatsAppReminder(selectedUser);
                       setSelectedUser(null);
+                      setIsEditingOverlay(false);
+                      setEditingId(null);
                     }}
                     variant="emerald"
                     className="px-5 py-2.5 text-sm"

@@ -333,11 +333,11 @@ export default function OrdersManagement() {
           <table className="w-full text-left text-sm text-zinc-500 dark:text-zinc-400">
             <thead className="bg-white/50 dark:bg-zinc-950/50 text-xs uppercase font-semibold text-zinc-600 dark:text-zinc-300">
               <tr>
-                <th className="px-6 py-4 whitespace-nowrap">Order ID & Date</th>
-                <th className="px-6 py-4 whitespace-nowrap">User</th>
-                <th className="px-6 py-4 whitespace-nowrap">Status & Type</th>
-                <th className="px-6 py-4 whitespace-nowrap">Details & Amount</th>
-                <th className="px-6 py-4 whitespace-nowrap text-right">Actions</th>
+                <th className="px-3 py-4 whitespace-nowrap">Order Info</th>
+                <th className="px-3 py-4 whitespace-nowrap">User</th>
+                <th className="px-3 py-4 whitespace-nowrap">Status & Type</th>
+                <th className="px-3 py-4 whitespace-nowrap">Details</th>
+                <th className="px-3 py-4 whitespace-nowrap text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-zinc-800">
@@ -354,18 +354,18 @@ export default function OrdersManagement() {
                     onClick={() => setSelectedOrder(order)}
                     className="hover:bg-zinc-200 dark:hover:bg-zinc-800/50 transition-colors cursor-pointer"
                   >
-                    <td className="px-6 py-4">
+                    <td className="px-3 py-4">
                       <div className="font-mono text-xs text-zinc-600 dark:text-zinc-300 mb-1">{order.id}</div>
                       <div className="text-xs text-zinc-500">
                         {order.createdAt ? format(new Date((order.createdAt as any).seconds ? (order.createdAt as any).seconds * 1000 : order.createdAt), 'MMM dd, yyyy HH:mm') : 'N/A'}
                       </div>
                     </td>
-                    <td className="px-6 py-4">
-                      <div className="font-medium text-zinc-900 dark:text-white">{order.userName}</div>
-                      <div className="text-xs text-zinc-500">{userPhones[order.userId] || order.userEmail}</div>
-                      <div className="text-[10px] uppercase tracking-wider mt-1 text-emerald-500">{order.userRole}</div>
+                    <td className="px-3 py-4 max-w-[150px] md:max-w-[200px]">
+                      <div className="font-medium text-zinc-900 dark:text-white truncate" title={order.userName}>{order.userName}</div>
+                      <div className="text-xs text-zinc-500 truncate" title={userPhones[order.userId] || order.userEmail}>{userPhones[order.userId] || order.userEmail}</div>
+                      <div className="text-[10px] uppercase tracking-wider mt-1 text-emerald-500 truncate">{order.userRole}</div>
                     </td>
-                    <td className="px-6 py-4">
+                    <td className="px-3 py-4">
                       <div className="flex flex-col gap-1.5">
                         <span className={clsx(
                           "flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider w-fit",
@@ -383,7 +383,7 @@ export default function OrdersManagement() {
                         </span>
                       </div>
                     </td>
-                    <td className="px-6 py-4">
+                    <td className="px-3 py-4">
                       <div className="flex flex-col">
                         <span className="text-zinc-600 dark:text-zinc-300 text-xs font-medium">
                           {order.type === 'membership' ? `${order.months} Month(s)` : `${order.items?.length || 0} Items`}
@@ -393,7 +393,7 @@ export default function OrdersManagement() {
                         </span>
                       </div>
                     </td>
-                    <td className="px-6 py-4 text-right">
+                    <td className="px-3 py-4 text-right">
                       <div className="flex items-center justify-end gap-2">
                         {order.status === 'pending' && (
                           <>
