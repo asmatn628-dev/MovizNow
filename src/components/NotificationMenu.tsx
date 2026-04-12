@@ -7,6 +7,7 @@ import { AppNotification } from '../types';
 import { formatDistanceToNow } from 'date-fns';
 import { Link } from 'react-router-dom';
 import { useModalBehavior } from '../hooks/useModalBehavior';
+import { motion, AnimatePresence } from 'motion/react';
 
 interface NotificationMenuProps {}
 
@@ -81,99 +82,112 @@ export const NotificationMenu = React.memo(() => {
         )}
       </button>
 
-      {isOpen && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-          <div 
-            ref={menuRef}
-            className="w-full max-w-md bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl shadow-2xl overflow-hidden flex flex-col max-h-[80vh]"
+      <AnimatePresence>
+        {isOpen && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.15 }}
+            className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm"
           >
-            <div className="p-4 border-b border-zinc-200 dark:border-zinc-800 flex items-center justify-between bg-white dark:bg-zinc-950 shrink-0">
-              <div className="flex items-center gap-3">
-                <h3 className="font-bold text-zinc-900 dark:text-white">Notifications</h3>
-                {unreadCount > 0 && (
-                  <span className="text-xs font-medium text-emerald-500 bg-emerald-500/10 px-2 py-0.5 rounded-full">{unreadCount} new</span>
-                )}
-              </div>
-              <button 
-                onClick={() => setIsOpen(false)}
-                className="p-1.5 rounded-full text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-            
-            <div className="overflow-y-auto flex-1">
-              {notifications.length === 0 ? (
-                <div className="p-12 text-center text-zinc-500">
-                  <Bell className="w-12 h-12 mx-auto mb-4 opacity-20" />
-                  <p className="text-lg">No notifications yet</p>
+            <motion.div 
+              ref={menuRef}
+              initial={{ scale: 0.95, opacity: 0, y: 10 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.95, opacity: 0, y: 10 }}
+              transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
+              style={{ willChange: 'transform, opacity' }}
+              className="w-full max-w-md bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl shadow-2xl overflow-hidden flex flex-col max-h-[80vh]"
+            >
+              <div className="p-4 border-b border-zinc-200 dark:border-zinc-800 flex items-center justify-between bg-white dark:bg-zinc-950 shrink-0">
+                <div className="flex items-center gap-3">
+                  <h3 className="font-bold text-zinc-900 dark:text-white">Notifications</h3>
+                  {unreadCount > 0 && (
+                    <span className="text-xs font-medium text-emerald-500 bg-emerald-500/10 px-2 py-0.5 rounded-full">{unreadCount} new</span>
+                  )}
                 </div>
-              ) : (
-                <div className="divide-y divide-zinc-200 dark:divide-zinc-800/50">
-                  {notifications.map(notification => {
-                    const isNew = new Date(notification.createdAt) > lastCheck;
-                    const targetUrl = notification.buttonUrl || (notification.contentId ? `/movie/${notification.contentId}` : null);
-                    const actionLabel = notification.buttonLabel || (notification.contentId ? (notification.type === 'series' ? 'View Series' : 'View Movie') : null);
-
-                    const content = (
-                      <div className="flex gap-4">
-                        {notification.posterUrl ? (
-                          <img 
-                            src={notification.posterUrl} 
-                            alt="Poster" 
-                            className="w-12 h-16 object-cover rounded-md shrink-0 border border-zinc-200 dark:border-zinc-800"
-                            referrerPolicy="no-referrer"
-                          />
-                        ) : (
-                          <div className="w-12 h-16 bg-zinc-100 dark:bg-zinc-800 rounded-md shrink-0 flex items-center justify-center">
-                            <Bell className="w-5 h-5 text-zinc-600" />
-                          </div>
-                        )}
-                        <div className="flex-1 min-w-0">
-                          <h4 className="text-sm font-bold text-zinc-900 dark:text-white mb-1 leading-tight">{notification.title}</h4>
-                          <p className="text-xs text-zinc-500 dark:text-zinc-400 line-clamp-2 mb-2">{notification.body}</p>
-                          <div className="flex items-center justify-between">
-                            <span className="text-[10px] text-zinc-500 font-medium">
-                              {formatDistanceToNow(new Date(notification.createdAt), { addSuffix: true })}
-                            </span>
-                            {actionLabel && (
-                              <span className="text-[10px] font-bold text-emerald-500 uppercase tracking-wider">
-                                {actionLabel}
+                <button 
+                  onClick={() => setIsOpen(false)}
+                  className="p-1.5 rounded-full text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+              
+              <div className="overflow-y-auto flex-1">
+                {notifications.length === 0 ? (
+                  <div className="p-12 text-center text-zinc-500">
+                    <Bell className="w-12 h-12 mx-auto mb-4 opacity-20" />
+                    <p className="text-lg">No notifications yet</p>
+                  </div>
+                ) : (
+                  <div className="divide-y divide-zinc-200 dark:divide-zinc-800/50">
+                    {notifications.map(notification => {
+                      const isNew = new Date(notification.createdAt) > lastCheck;
+                      const targetUrl = notification.buttonUrl || (notification.contentId ? `/movie/${notification.contentId}` : null);
+                      const actionLabel = notification.buttonLabel || (notification.contentId ? (notification.type === 'series' ? 'View Series' : 'View Movie') : null);
+  
+                      const content = (
+                        <div className="flex gap-4">
+                          {notification.posterUrl ? (
+                            <img 
+                              src={notification.posterUrl} 
+                              alt="Poster" 
+                              className="w-12 h-16 object-cover rounded-md shrink-0 border border-zinc-200 dark:border-zinc-800"
+                              referrerPolicy="no-referrer"
+                            />
+                          ) : (
+                            <div className="w-12 h-16 bg-zinc-100 dark:bg-zinc-800 rounded-md shrink-0 flex items-center justify-center">
+                              <Bell className="w-5 h-5 text-zinc-600" />
+                            </div>
+                          )}
+                          <div className="flex-1 min-w-0">
+                            <h4 className="text-sm font-bold text-zinc-900 dark:text-white mb-1 leading-tight">{notification.title}</h4>
+                            <p className="text-xs text-zinc-500 dark:text-zinc-400 line-clamp-2 mb-2">{notification.body}</p>
+                            <div className="flex items-center justify-between">
+                              <span className="text-[10px] text-zinc-500 font-medium">
+                                {formatDistanceToNow(new Date(notification.createdAt), { addSuffix: true })}
                               </span>
-                            )}
+                              {actionLabel && (
+                                <span className="text-[10px] font-bold text-emerald-500 uppercase tracking-wider">
+                                  {actionLabel}
+                                </span>
+                              )}
+                            </div>
                           </div>
                         </div>
-                      </div>
-                    );
-
-                    if (targetUrl) {
+                      );
+  
+                      if (targetUrl) {
+                        return (
+                          <Link 
+                            key={notification.id}
+                            to={targetUrl}
+                            onClick={() => setIsOpen(false)}
+                            className={`block p-4 hover:bg-zinc-100 dark:hover:bg-zinc-800/50 transition-colors ${isNew ? 'bg-emerald-500/5' : ''}`}
+                          >
+                            {content}
+                          </Link>
+                        );
+                      }
+  
                       return (
-                        <Link 
+                        <div 
                           key={notification.id}
-                          to={targetUrl}
-                          onClick={() => setIsOpen(false)}
                           className={`block p-4 hover:bg-zinc-100 dark:hover:bg-zinc-800/50 transition-colors ${isNew ? 'bg-emerald-500/5' : ''}`}
                         >
                           {content}
-                        </Link>
+                        </div>
                       );
-                    }
-
-                    return (
-                      <div 
-                        key={notification.id}
-                        className={`block p-4 hover:bg-zinc-100 dark:hover:bg-zinc-800/50 transition-colors ${isNew ? 'bg-emerald-500/5' : ''}`}
-                      >
-                        {content}
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
+                    })}
+                  </div>
+                )}
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </>
   );
 });
