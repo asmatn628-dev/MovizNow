@@ -104,7 +104,28 @@ export default function Home({ onOpenMediaModal }: { onOpenMediaModal: () => voi
     setSelectedQuality('');
     setSelectedYear('');
     setSearch('');
+    setCurrentPage(1);
+    
+    // Also clear session storage explicitly to be safe
+    sessionStorage.removeItem('home_sort');
+    sessionStorage.removeItem('home_genre');
+    sessionStorage.removeItem('home_language');
+    sessionStorage.removeItem('home_type');
+    sessionStorage.removeItem('home_quality');
+    sessionStorage.removeItem('home_year');
+    sessionStorage.removeItem('home_page');
+    sessionStorage.removeItem('home_search');
   };
+
+  const hasFiltersOrPagination = 
+    sort !== 'default' || 
+    selectedType !== '' || 
+    selectedGenre !== '' || 
+    selectedLanguage !== '' || 
+    selectedQuality !== '' || 
+    selectedYear !== '' || 
+    search !== '' || 
+    currentPage > 1;
 
   useEffect(() => {
     if (profile && !profile.phone && profile.role !== 'admin' && profile.role !== 'content_manager' && profile.role !== 'manager' && profile.role !== 'owner' && !hasDismissedSession) {
@@ -394,7 +415,7 @@ export default function Home({ onOpenMediaModal }: { onOpenMediaModal: () => voi
         )}
 
         {/* Recently Viewed Section */}
-        {!search && selectedType === '' && selectedGenre === '' && selectedLanguage === '' && selectedQuality === '' && selectedYear === '' && recentlyViewed.length > 0 && (
+        {recentlyViewed.length > 0 && (
           <div className="mb-6">
             <div className="flex items-center justify-between mb-3">
               <h2 className="text-[10px] font-bold text-zinc-500 flex items-center gap-2 uppercase tracking-wider">
@@ -535,10 +556,12 @@ export default function Home({ onOpenMediaModal }: { onOpenMediaModal: () => voi
             )}
           </div>
           
-          <div className="flex gap-3 overflow-x-auto pb-2 md:pb-0 flex-nowrap">
-            <button onClick={clearFilters} className="bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-300 dark:hover:bg-zinc-700 text-zinc-900 dark:text-white rounded-lg px-2 py-1 text-xs flex items-center gap-1">
-              <X className="w-3 h-3" />
-            </button>
+          <div className="flex gap-3 overflow-x-auto pb-2 md:pb-0 flex-nowrap relative">
+            {hasFiltersOrPagination && (
+              <button onClick={clearFilters} className="sticky left-0 z-10 bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-300 dark:hover:bg-zinc-700 text-zinc-900 dark:text-white rounded-lg px-2 py-1 text-xs flex items-center gap-1 shadow-[4px_0_8px_-4px_rgba(0,0,0,0.1)] dark:shadow-[4px_0_8px_-4px_rgba(0,0,0,0.5)]">
+                <X className="w-3 h-3" />
+              </button>
+            )}
             <select
               value={sort}
               onChange={(e) => setSort(e.target.value as any)}
