@@ -103,6 +103,9 @@ export default function Notifications() {
         uid: doc.data().uid,
         displayName: doc.data().displayName,
         email: doc.data().email,
+        phone: doc.data().phone,
+        role: doc.data().role,
+        status: doc.data().status,
         createdAt: doc.data().createdAt
       } as UserProfile));
       
@@ -663,6 +666,13 @@ export default function Notifications() {
                             <div className="flex-1">
                               <div className="font-bold text-sm text-zinc-900 dark:text-white">{u.displayName || 'No Name'}</div>
                               <div className="text-xs text-zinc-500">{u.email}</div>
+                              <div className="text-[10px] text-zinc-400 mt-0.5 flex items-center gap-2">
+                                <span>{u.phone || 'No Phone'}</span>
+                                <span className="w-1 h-1 bg-zinc-300 dark:bg-zinc-700 rounded-full" />
+                                <span className="uppercase">{u.role}</span>
+                                <span className="w-1 h-1 bg-zinc-300 dark:bg-zinc-700 rounded-full" />
+                                <span className="capitalize">{u.status}</span>
+                              </div>
                             </div>
                             {isSelected ? <Check className="w-4 h-4 text-emerald-500" /> : <Plus className="w-4 h-4 text-zinc-400" />}
                           </button>
