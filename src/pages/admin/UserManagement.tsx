@@ -116,22 +116,30 @@ export default function UserManagement() {
       const standardizedPhone = newUserForm.phone ? standardizePhone(newUserForm.phone) : '';
       const usersRef = collection(db, 'users');
       
-      let q;
+      let user: any = null;
+
       if (standardizedPhone) {
-        q = query(usersRef, where('phone', '==', standardizedPhone));
-      } else {
-        q = query(usersRef, where('email', '==', newUserForm.email));
+        const qPhone = query(usersRef, where('phone', '==', standardizedPhone));
+        const snapPhone = await getDocs(qPhone);
+        snapPhone.forEach((doc) => {
+          const data = doc.data() as UserProfile;
+          if (data.status === 'pending') {
+            user = { id: doc.id, ...data };
+          }
+        });
       }
       
-      const querySnapshot = await getDocs(q);
-      
-      let user: any = null;
-      querySnapshot.forEach((doc) => {
-        const data = doc.data() as UserProfile;
-        if (data.status === 'pending') {
-          user = { id: doc.id, ...data };
-        }
-      });
+      if (!user && newUserForm.email) {
+        const searchEmail = newUserForm.email.trim().toLowerCase();
+        const qEmail = query(usersRef, where('email', '==', searchEmail));
+        const snapEmail = await getDocs(qEmail);
+        snapEmail.forEach((doc) => {
+          const data = doc.data() as UserProfile;
+          if (data.status === 'pending') {
+            user = { id: doc.id, ...data };
+          }
+        });
+      }
 
       if (user) {
         setFoundUser(user);
@@ -847,8 +855,8 @@ export default function UserManagement() {
   }, [users, searchTerm, filterRole, filterStatus, sortField, sortOrder]);
 
   const handleAddUser = async () => {
-    if (!foundUser && !newUserForm.phone) {
-      setAlertConfig({ isOpen: true, title: 'Error', message: 'Please provide a WhatsApp / Phone Number.' });
+    if (!foundUser && !newUserForm.phone && !newUserForm.email) {
+      setAlertConfig({ isOpen: true, title: 'Error', message: 'Please provide a WhatsApp / Phone Number or Email.' });
       return;
     }
 
@@ -856,17 +864,23 @@ export default function UserManagement() {
     try {
       if (foundUser) {
         // Claim existing pending user
-        await updateDoc(doc(db, 'users', (foundUser as any).id), {
+        const updateData: any = {
           managedBy: profile?.uid,
           role: newUserForm.role,
           status: newUserForm.status,
           displayName: newUserForm.displayName || foundUser.displayName
-        });
+        };
+        
+        if (newUserForm.expiryDate) {
+          updateData.expiryDate = new Date(newUserForm.expiryDate).toISOString();
+        }
+        
+        await updateDoc(doc(db, 'users', (foundUser as any).id), updateData);
         setAlertConfig({ isOpen: true, title: 'Success', message: 'Pending user claimed successfully.' });
       } else {
-        const standardizedPhone = standardizePhone(newUserForm.phone);
+        const standardizedPhone = newUserForm.phone ? standardizePhone(newUserForm.phone) : '';
         const digits = standardizedPhone.replace(/\D/g, '');
-        const emailToMatch = newUserForm.email || `${digits}@moviznow.com`;
+        const emailToMatch = newUserForm.email ? newUserForm.email.trim().toLowerCase() : `${digits}@moviznow.com`;
 
         // Check if user is allowed to add new users
         if ((profile?.role as string) === 'user_manager' || (profile?.role as string) === 'manager') {
@@ -1067,7 +1081,7 @@ export default function UserManagement() {
                   Role & Last <SortIcon field="lastActive" />
                 </th>
                 <th className="px-3 md:px-4 py-4 cursor-pointer hover:text-zinc-900 dark:text-white transition-colors whitespace-nowrap" onClick={() => toggleSort('expiryDate')}>
-                  Expiry <SortIcon field="expiryDate" />
+                  Expiry Date <SortIcon field="expiryDate" />
                 </th>
                 <th className="px-3 md:px-4 py-4 text-right whitespace-nowrap">Actions</th>
               </tr>
@@ -1291,7 +1305,7 @@ export default function UserManagement() {
                     <ArrowRight className="w-4 h-4 text-zinc-600 shrink-0 mt-5" />
 
                     <div className="flex-1">
-                      <label className="block text-[10px] font-bold text-zinc-500 uppercase mb-1">Expiry</label>
+                      <label className="block text-[10px] font-bold text-zinc-500 uppercase mb-1">Expiry Date</label>
                       <input
                         type="date"
                         value={editForm.expiryDate || ''}
@@ -1820,7 +1834,7 @@ export default function UserManagement() {
                   ) : (
                     <>
                       <div>
-                        <label className="block text-sm font-medium text-zinc-500 dark:text-zinc-400 mb-1">WhatsApp / Phone Number *</label>
+                        <label className="block text-sm font-medium text-zinc-500 dark:text-zinc-400 mb-1">WhatsApp / Phone Number</label>
                         <div className="flex gap-2">
                           <input
                             type="text"
@@ -1833,6 +1847,16 @@ export default function UserManagement() {
                             {searchStatus === 'searching' ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Search'}
                           </Button>
                         </div>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-zinc-500 dark:text-zinc-400 mb-1">Email</label>
+                        <input
+                          type="email"
+                          value={newUserForm.email}
+                          onChange={(e) => setNewUserForm({ ...newUserForm, email: e.target.value })}
+                          className="w-full p-2 rounded-xl border border-zinc-300 dark:border-zinc-700 bg-transparent"
+                          placeholder="user@example.com"
+                        />
                       </div>
                       <div>
                         <label className="block text-sm font-medium text-zinc-500 dark:text-zinc-400 mb-1">Display Name</label>
@@ -1892,7 +1916,7 @@ export default function UserManagement() {
               ) : (
                 <div className="space-y-4">
                   <div>
-                    <label className="block text-sm font-medium text-zinc-500 dark:text-zinc-400 mb-1">WhatsApp / Phone Number *</label>
+                    <label className="block text-sm font-medium text-zinc-500 dark:text-zinc-400 mb-1">WhatsApp / Phone Number</label>
                     <div className="flex gap-2">
                       <input
                         type="text"
@@ -1902,6 +1926,16 @@ export default function UserManagement() {
                         placeholder="+92..."
                       />
                     </div>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-zinc-500 dark:text-zinc-400 mb-1">Email</label>
+                    <input
+                      type="email"
+                      value={newUserForm.email}
+                      onChange={(e) => setNewUserForm({ ...newUserForm, email: e.target.value })}
+                      className="w-full p-2 rounded-xl border border-zinc-300 dark:border-zinc-700 bg-transparent"
+                      placeholder="user@example.com"
+                    />
                   </div>
                 </div>
               )}

@@ -7,10 +7,11 @@ import { Content, QualityLinks, Season, Trailer } from '../../types';
 import { useAuth } from '../../contexts/AuthContext';
 import { useContent } from '../../contexts/ContentContext';
 import { useCart } from '../../contexts/CartContext';
-import { Film, ArrowLeft, Play, Clock, Heart, MessageCircle, AlertCircle, Download, Share2, Chrome, Copy, Youtube, X, Edit2, Trash2, Settings, Lock, ChevronDown, ChevronUp, Loader2, Search, AlertTriangle, Globe, ShoppingCart } from 'lucide-react';
+import { Film, ArrowLeft, Play, Clock, Heart, MessageCircle, AlertCircle, Download, Share2, Chrome, Copy, Youtube, X, Edit2, Trash2, Settings, Lock, ChevronDown, ChevronUp, Loader2, Search, AlertTriangle, Globe, ShoppingCart, RefreshCw } from 'lucide-react';
 import { logEvent } from '../../services/analytics';
 import AlertModal from '../../components/AlertModal';
 import ConfirmModal from '../../components/ConfirmModal';
+import { clsx } from 'clsx';
 import { motion, AnimatePresence } from 'motion/react';
 import { formatContentTitle, formatReleaseDate, formatRuntime, getContrastColor } from '../../utils/contentUtils';
 import { generateTinyUrl } from '../../utils/tinyurl';
@@ -67,29 +68,10 @@ export default function MovieDetails() {
     price: number;
   } | null>(null);
   const [expandedEpisodes, setExpandedEpisodes] = useState<Record<string, boolean>>({});
-  const [cachedMetadata, setCachedMetadata] = useState<{id: string, data: Partial<Content>}>(() => {
-    const cachedMeta = localStorage.getItem(`content_cache_${id}`);
-    let data = {};
-    if (cachedMeta) {
-      try {
-        data = JSON.parse(cachedMeta);
-      } catch (e) {}
-    }
-    return { id: id || '', data };
-  });
+  const [cachedMetadata, setCachedMetadata] = useState<{id: string, data: Partial<Content>}>(() => ({ id: '', data: {} }));
 
-  if (cachedMetadata.id !== id) {
-    const cachedMeta = localStorage.getItem(`content_cache_${id}`);
-    let data = {};
-    if (cachedMeta) {
-      try {
-        data = JSON.parse(cachedMeta);
-      } catch (e) {}
-    }
-    setCachedMetadata({ id: id || '', data });
-  }
   const [isReporting, setIsReporting] = useState(false);
-  const [imdbData, setImdbData] = useState<any>(null);
+  const [liveRating, setLiveRating] = useState<string | null>(null);
   const [fetchingImdb, setFetchingImdb] = useState(false);
 
   useModalBehavior(alertConfig.isOpen, () => setAlertConfig(prev => ({ ...prev, isOpen: false })));
@@ -160,7 +142,9 @@ export default function MovieDetails() {
       setFullContent(null);
       setCachedMetadata({ id: '', data: {} });
     }
+    setLiveRating(null);
     setFetchFailed(false);
+    setFetchingImdb(false);
     hasLoggedView.current = false;
     hasAttemptedRatingFetch.current = {};
     hasAttemptedStaticFetch.current = {};
@@ -271,27 +255,48 @@ export default function MovieDetails() {
   const imageUrl = mergedContent?.posterUrl || settings?.defaultAppImage || 'https://Moviz-Now.vercel.app/logo.svg';
   const pageUrl = window.location.href;
 
-  // Initialize IMDb data from mergedContent
-  useEffect(() => {
-    if (mergedContent) {
-      const initialData = {
-        title: mergedContent.title,
-        year: mergedContent.year,
-        description: mergedContent.description,
-        cast: mergedContent.cast?.join(', '),
-        posterUrl: mergedContent.posterUrl,
-        genres: genres.filter(g => mergedContent.genreIds?.includes(g.id)).map(g => g.name).join(', '),
-        releaseDate: mergedContent.releaseDate,
-        duration: mergedContent.runtime,
-        country: mergedContent.country,
-        type: mergedContent.type,
-        rating: mergedContent.imdbRating,
-        isFetched: !!mergedContent.imdbRating
-      };
+  const displayData = useMemo(() => {
+    if (!mergedContent) return null;
+    
+    // Helper to handle cast which could be string or array
+    const getCastArray = () => {
+      const cast = mergedContent.cast as any;
+      if (Array.isArray(cast)) return cast;
+      if (typeof cast === 'string') return cast.split(',').map(s => s.trim()).filter(Boolean);
+      return [];
+    };
 
-      setImdbData(initialData);
-    }
-  }, [mergedContent, genres]);
+    const castArray = getCastArray();
+
+    const getGenresString = () => {
+      // 1. Try to map genreIds to names
+      if (mergedContent.genreIds && Array.isArray(mergedContent.genreIds)) {
+        const names = genres.filter(g => mergedContent.genreIds?.includes(g.id)).map(g => g.name);
+        if (names.length > 0) return names.join(', ');
+      }
+      // 2. Fallback to genres property if it's an array of names
+      if ((mergedContent as any).genres && Array.isArray((mergedContent as any).genres)) {
+        return (mergedContent as any).genres.join(', ');
+      }
+      return '';
+    };
+
+    return {
+      title: mergedContent.title,
+      year: mergedContent.year,
+      description: mergedContent.description,
+      cast: castArray.join(', '),
+      castArray: castArray,
+      posterUrl: mergedContent.posterUrl,
+      genres: getGenresString(),
+      releaseDate: mergedContent.releaseDate,
+      duration: mergedContent.runtime,
+      country: mergedContent.country,
+      type: mergedContent.type,
+      rating: liveRating || mergedContent.imdbRating,
+      isFetched: !!(liveRating || mergedContent.imdbRating)
+    };
+  }, [mergedContent, genres, liveRating]);
 
   const recommendedMovies = useMemo(() => {
     if (!mergedContent || contentList.length === 0) return [];
@@ -393,7 +398,7 @@ export default function MovieDetails() {
       
       // Show cached immediately if available
       if (hasLiveRating) {
-        setImdbData(prev => ({ ...prev, rating: hasLiveRating, isFetched: true }));
+        setLiveRating(hasLiveRating);
         if (mergedContent.imdbRating !== hasLiveRating) {
           setCachedMetadata(prev => {
             const newCache = { ...prev.data, imdbRating: hasLiveRating };
@@ -419,7 +424,7 @@ export default function MovieDetails() {
         if (omdbData.imdbRating && omdbData.imdbRating !== 'N/A') {
           const newRating = `${omdbData.imdbRating}/10`;
           sessionStorage.setItem(ratingCacheKey, newRating);
-          setImdbData(prev => ({ ...prev, rating: newRating, isFetched: true }));
+          setLiveRating(newRating);
           
           if (mergedContent.imdbRating !== newRating) {
             setCachedMetadata(prev => {
@@ -439,204 +444,224 @@ export default function MovieDetails() {
     fetchRating();
   }, [mergedContent?.id, mergedContent?.imdbLink, id, isOffline]);
 
-  useEffect(() => {
-    if (!mergedContent || !id || hasAttemptedStaticFetch.current[id] || isOffline) return;
+  const fetchMissingData = async (force = false) => {
+    if (!mergedContent || !id || isOffline) return;
+    if (!force && hasAttemptedStaticFetch.current[id]) return;
 
     // If we are currently fetching the full document from Firebase, wait for it
     if (isMinimal && (!fullContent || fullContent.id !== id) && !fetchFailed) return;
 
-    const fetchMissingData = async () => {
-      let seasons: any[] = [];
-      try {
-        // Prioritize seasons from database (fullContent) to ensure links are preserved
-        const validFullContent = fullContent?.id === id ? fullContent : null;
-        const seasonsSource = (validFullContent?.type === 'series' && validFullContent.seasons) ? validFullContent.seasons : mergedContent?.seasons;
-        seasons = mergedContent?.type === 'series' && seasonsSource ? (Array.isArray(seasonsSource) ? seasonsSource : JSON.parse(seasonsSource || '[]')) : [];
-      } catch (e) {
-        console.error("Error parsing seasons in fetchMissingData:", e);
-      }
-      const needsEpisodeData = mergedContent?.type === 'series' && seasons.some((s: any) => !s.episodes || s.episodes.length <= 1 || s.episodes.some((ep: any) => !ep.description || !ep.duration));
+    let seasons: any[] = [];
+    try {
+      // Prioritize seasons from database (fullContent) to ensure links are preserved
+      const validFullContent = fullContent?.id === id ? fullContent : null;
+      const seasonsSource = (validFullContent?.type === 'series' && validFullContent.seasons) ? validFullContent.seasons : mergedContent?.seasons;
+      seasons = mergedContent?.type === 'series' && seasonsSource ? (Array.isArray(seasonsSource) ? seasonsSource : JSON.parse(seasonsSource || '[]')) : [];
+    } catch (e) {
+      console.error("Error parsing seasons in fetchMissingData:", e);
+    }
+    const needsEpisodeData = mergedContent?.type === 'series' && seasons.some((s: any) => !s.episodes || s.episodes.length <= 1 || s.episodes.some((ep: any) => !ep.description || !ep.duration));
+    
+    const needsStaticData = force || !mergedContent.runtime || !mergedContent.description || (!mergedContent.cast || mergedContent.cast.length === 0) || !mergedContent.releaseDate || !mergedContent.posterUrl || !mergedContent.country || !mergedContent.trailerUrl || !mergedContent.imdbLink || (!mergedContent.genreIds || mergedContent.genreIds.length === 0) || needsEpisodeData;
+
+    if (!needsStaticData) {
+      return;
+    }
+
+    hasAttemptedStaticFetch.current[id] = true;
+    setFetchingImdb(true);
+
+    try {
+      const TMDB_API_KEY = import.meta.env.VITE_TMDB_API_KEY || 'f71c2391161526fa9d19bd0b2759efaf';
       
-      const needsStaticData = !mergedContent.runtime || !mergedContent.description || (!mergedContent.cast || mergedContent.cast.length === 0) || !mergedContent.releaseDate || !mergedContent.posterUrl || !mergedContent.country || !mergedContent.trailerUrl || !mergedContent.imdbLink || (!mergedContent.genreIds || mergedContent.genreIds.length === 0) || needsEpisodeData;
+      let tmdbData: any = null;
+      let imdbId = mergedContent.imdbLink?.match(/tt\d+/)?.[0];
 
-      if (!needsStaticData) {
-        return;
+      // 1. Try IMDb ID first
+      if (imdbId) {
+        const findRes = await fetch(`https://api.themoviedb.org/3/find/${imdbId}?api_key=${TMDB_API_KEY}&external_source=imdb_id`);
+        const findData = await findRes.json();
+        // Try the expected type first, but fall back to the other type if not found
+        let results = mergedContent.type === 'series' ? findData.tv_results : findData.movie_results;
+        let foundType = mergedContent.type === 'series' ? 'tv' : 'movie';
+        
+        if (!results || results.length === 0) {
+          results = mergedContent.type === 'series' ? findData.movie_results : findData.tv_results;
+          foundType = mergedContent.type === 'series' ? 'movie' : 'tv';
+        }
+        
+        if (results && results.length > 0) {
+          tmdbData = results[0];
+          tmdbData.media_type = foundType; // Store the actual found type
+        }
       }
 
-      hasAttemptedStaticFetch.current[id] = true;
-
-      try {
-        const TMDB_API_KEY = import.meta.env.VITE_TMDB_API_KEY || 'f71c2391161526fa9d19bd0b2759efaf';
-        
-        let tmdbData: any = null;
-        let imdbId = mergedContent.imdbLink?.match(/tt\d+/)?.[0];
-
-        // 1. Try IMDb ID first
-        if (imdbId && needsStaticData) {
-          const findRes = await fetch(`https://api.themoviedb.org/3/find/${imdbId}?api_key=${TMDB_API_KEY}&external_source=imdb_id`);
-          const findData = await findRes.json();
-          const results = mergedContent.type === 'series' ? findData.tv_results : findData.movie_results;
-          if (results && results.length > 0) {
-            tmdbData = results[0];
-          }
+      // 2. Try Title + Year if not found
+      if (!tmdbData && mergedContent.title) {
+        const searchType = mergedContent.type === 'series' ? 'tv' : 'movie';
+        let searchUrl = `https://api.themoviedb.org/3/search/${searchType}?api_key=${TMDB_API_KEY}&query=${encodeURIComponent(mergedContent.title)}`;
+        if (mergedContent.year) {
+          searchUrl += mergedContent.type === 'series' ? `&first_air_date_year=${mergedContent.year}` : `&primary_release_year=${mergedContent.year}`;
         }
-
-        // 2. Try Title + Year if not found
-        if (!tmdbData && needsStaticData && mergedContent.title) {
-          const searchType = mergedContent.type === 'series' ? 'tv' : 'movie';
-          let searchUrl = `https://api.themoviedb.org/3/search/${searchType}?api_key=${TMDB_API_KEY}&query=${encodeURIComponent(mergedContent.title)}`;
-          if (mergedContent.year) {
-            searchUrl += mergedContent.type === 'series' ? `&first_air_date_year=${mergedContent.year}` : `&primary_release_year=${mergedContent.year}`;
+        const searchRes = await fetch(searchUrl);
+        const searchData = await searchRes.json();
+        if (searchData.results && searchData.results.length > 0) {
+          tmdbData = searchData.results[0];
+          tmdbData.media_type = searchType;
+          // If we found it by title, try to get the IMDb ID for OMDB
+          const detailsRes = await fetch(`https://api.themoviedb.org/3/${searchType}/${tmdbData.id}?api_key=${TMDB_API_KEY}&append_to_response=external_ids`);
+          const detailsData = await detailsRes.json();
+          if (detailsData.external_ids?.imdb_id) {
+            imdbId = detailsData.external_ids.imdb_id;
           }
-          const searchRes = await fetch(searchUrl);
-          const searchData = await searchRes.json();
-          if (searchData.results && searchData.results.length > 0) {
-            tmdbData = searchData.results[0];
-            // If we found it by title, try to get the IMDb ID for OMDB
-            const detailsRes = await fetch(`https://api.themoviedb.org/3/${searchType}/${tmdbData.id}?api_key=${TMDB_API_KEY}&append_to_response=external_ids`);
+        } else {
+          // Fallback to the other type if title search fails
+          const fallbackType = searchType === 'tv' ? 'movie' : 'tv';
+          let fallbackUrl = `https://api.themoviedb.org/3/search/${fallbackType}?api_key=${TMDB_API_KEY}&query=${encodeURIComponent(mergedContent.title)}`;
+          if (mergedContent.year) {
+            fallbackUrl += fallbackType === 'tv' ? `&first_air_date_year=${mergedContent.year}` : `&primary_release_year=${mergedContent.year}`;
+          }
+          const fallbackRes = await fetch(fallbackUrl);
+          const fallbackData = await fallbackRes.json();
+          if (fallbackData.results && fallbackData.results.length > 0) {
+            tmdbData = fallbackData.results[0];
+            tmdbData.media_type = fallbackType;
+            const detailsRes = await fetch(`https://api.themoviedb.org/3/${fallbackType}/${tmdbData.id}?api_key=${TMDB_API_KEY}&append_to_response=external_ids`);
             const detailsData = await detailsRes.json();
             if (detailsData.external_ids?.imdb_id) {
               imdbId = detailsData.external_ids.imdb_id;
             }
           }
         }
-
-        const updates: Partial<Content> = {};
-        let hasUpdates = false;
-
-        if (tmdbData && needsStaticData) {
-          const typePath = mergedContent.type === 'series' ? 'tv' : 'movie';
-          const detailsRes = await fetch(`https://api.themoviedb.org/3/${typePath}/${tmdbData.id}?api_key=${TMDB_API_KEY}&append_to_response=credits,external_ids,videos`);
-          const details = await detailsRes.json();
-
-          if (!mergedContent.description && details.overview) { updates.description = details.overview; hasUpdates = true; }
-          if (!mergedContent.releaseDate && (details.release_date || details.first_air_date)) { updates.releaseDate = details.release_date || details.first_air_date; hasUpdates = true; }
-          if (!mergedContent.posterUrl && details.poster_path) { updates.posterUrl = `https://image.tmdb.org/t/p/w500${details.poster_path}`; hasUpdates = true; }
-          
-          if (!mergedContent.trailerUrl && details.videos?.results) {
-            const trailer = details.videos.results.find((v: any) => v.site === 'YouTube' && v.type === 'Trailer');
-            if (trailer) {
-              updates.trailerUrl = `https://www.youtube.com/watch?v=${trailer.key}`;
-              hasUpdates = true;
-            }
-          }
-
-          if (!mergedContent.runtime) {
-            if (details.runtime) { updates.runtime = `${details.runtime} min`; hasUpdates = true; }
-            else if (details.episode_run_time && details.episode_run_time.length > 0) { updates.runtime = `${details.episode_run_time[0]} min/episode`; hasUpdates = true; }
-          }
-
-          if (!mergedContent.country) {
-            const countryStr = details.production_countries?.map((c: any) => c.name).join(', ') || (details.origin_country ? details.origin_country.join(', ') : '');
-            if (countryStr) {
-              updates.country = countryStr;
-              hasUpdates = true;
-            }
-          }
-
-          if ((!mergedContent.cast || mergedContent.cast.length === 0) && details.credits?.cast) {
-            updates.cast = details.credits.cast.slice(0, 5).map((a: any) => a.name);
-            hasUpdates = true;
-          }
-
-          if (!mergedContent.imdbLink && details.external_ids?.imdb_id) {
-            updates.imdbLink = `https://www.imdb.com/title/${details.external_ids.imdb_id}`;
-            imdbId = details.external_ids.imdb_id;
-            hasUpdates = true;
-          }
-          
-          if ((!mergedContent.genreIds || mergedContent.genreIds.length === 0) && details.genres) {
-            const matchedGenreIds: string[] = [];
-            details.genres.forEach((tg: any) => {
-              const match = genres.find(g => g.name.toLowerCase() === tg.name.toLowerCase());
-              if (match) matchedGenreIds.push(match.id);
-            });
-            if (matchedGenreIds.length > 0) {
-              updates.genreIds = matchedGenreIds;
-              hasUpdates = true;
-            }
-          }
-
-          // Episode Data Fetching for Series
-          if (mergedContent.type === 'series' && mergedContent.seasons) {
-            try {
-              let seasonsUpdated = false;
-              const currentSeasons = [...seasons];
-
-              for (let i = 0; i < currentSeasons.length; i++) {
-                const season = currentSeasons[i];
-                const missingEpData = !season.episodes || season.episodes.length <= 1 || season.episodes.some((ep: any) => !ep.description || !ep.duration) || !season.year;
-
-                if (missingEpData) {
-                  const seasonRes = await fetch(`https://api.themoviedb.org/3/tv/${tmdbData.id}/season/${season.seasonNumber}?api_key=${TMDB_API_KEY}`);
-                  const seasonData = await seasonRes.json();
-
-                  if (seasonData.air_date && !season.year) {
-                    season.year = parseInt(seasonData.air_date.split('-')[0]);
-                    seasonsUpdated = true;
-                  }
-
-                  if (seasonData.episodes) {
-                    const existingEpisodes = season.episodes || [];
-                    
-                    // Map TMDB episodes to our format, preserving existing links if they exist
-                    const mergedEpisodes = seasonData.episodes.map((tmdbEp: any) => {
-                      const existingEp = existingEpisodes.find((ep: any) => ep.episodeNumber === tmdbEp.episode_number);
-                      if (existingEp) {
-                        return {
-                          ...existingEp,
-                          description: existingEp.description || tmdbEp.overview || '',
-                          duration: existingEp.duration || (tmdbEp.runtime ? `${tmdbEp.runtime} min` : '')
-                        };
-                      }
-                      return {
-                        id: `e${tmdbEp.episode_number}`,
-                        episodeNumber: tmdbEp.episode_number,
-                        title: tmdbEp.name || `Episode ${tmdbEp.episode_number}`,
-                        description: tmdbEp.overview || '',
-                        duration: tmdbEp.runtime ? `${tmdbEp.runtime} min` : '',
-                        links: []
-                      };
-                    });
-                    
-                    // Add any existing episodes that weren't in TMDB (just in case)
-                    const existingOnly = existingEpisodes.filter((ep: any) => !seasonData.episodes.some((te: any) => te.episode_number === ep.episodeNumber));
-                    
-                    season.episodes = [...mergedEpisodes, ...existingOnly].sort((a, b) => a.episodeNumber - b.episodeNumber);
-                    seasonsUpdated = true;
-                  }
-                }
-              }
-
-              if (seasonsUpdated) {
-                updates.seasons = JSON.stringify(currentSeasons);
-                hasUpdates = true;
-              }
-            } catch (e) {
-              console.error("Error auto-fetching episode data:", e);
-            }
-          }
-        }
-
-        if (hasUpdates) {
-          // Instead of updating Firestore, we update local cache only
-          setCachedMetadata(prev => {
-            if (prev.id !== id) return prev;
-            const newCache = { ...prev.data, ...updates };
-            localStorage.setItem(`content_cache_${id}`, JSON.stringify(newCache));
-            return { ...prev, data: newCache };
-          });
-        }
-
-      } catch (err) {
-        console.error("Auto-fetch failed:", err);
-      } finally {
-        setFetchingImdb(false);
       }
-    };
 
+      const updates: Partial<Content> = {};
+      let hasUpdates = false;
+
+      if (tmdbData) {
+        const typePath = tmdbData.media_type || (mergedContent.type === 'series' ? 'tv' : 'movie');
+        const detailsRes = await fetch(`https://api.themoviedb.org/3/${typePath}/${tmdbData.id}?api_key=${TMDB_API_KEY}&append_to_response=credits,external_ids,videos`);
+        const details = await detailsRes.json();
+
+        if ((force || !mergedContent.description) && details.overview) { updates.description = details.overview; hasUpdates = true; }
+        if ((force || !mergedContent.releaseDate) && (details.release_date || details.first_air_date)) { updates.releaseDate = details.release_date || details.first_air_date; hasUpdates = true; }
+        if ((force || !mergedContent.posterUrl) && details.poster_path) { updates.posterUrl = `https://image.tmdb.org/t/p/w500${details.poster_path}`; hasUpdates = true; }
+        
+        if ((force || !mergedContent.trailerUrl) && details.videos?.results) {
+          const trailer = details.videos.results.find((v: any) => v.site === 'YouTube' && v.type === 'Trailer');
+          if (trailer) {
+            updates.trailerUrl = `https://www.youtube.com/watch?v=${trailer.key}`;
+            hasUpdates = true;
+          }
+        }
+
+        if (force || !mergedContent.runtime) {
+          if (details.runtime) { updates.runtime = `${details.runtime} min`; hasUpdates = true; }
+          else if (details.episode_run_time && details.episode_run_time.length > 0) { updates.runtime = `${details.episode_run_time[0]} min/episode`; hasUpdates = true; }
+        }
+
+        if (force || !mergedContent.country) {
+          const countryStr = details.production_countries?.map((c: any) => c.name).join(', ') || (details.origin_country ? details.origin_country.join(', ') : '');
+          if (countryStr) {
+            updates.country = countryStr;
+            hasUpdates = true;
+          }
+        }
+
+        if ((force || !mergedContent.cast || mergedContent.cast.length === 0) && details.credits?.cast) {
+          updates.cast = details.credits.cast.slice(0, 5).map((a: any) => a.name);
+          hasUpdates = true;
+        }
+
+        if ((force || !mergedContent.imdbLink) && details.external_ids?.imdb_id) {
+          updates.imdbLink = `https://www.imdb.com/title/${details.external_ids.imdb_id}`;
+          imdbId = details.external_ids.imdb_id;
+          hasUpdates = true;
+        }
+        
+        if ((force || !mergedContent.genreIds || mergedContent.genreIds.length === 0) && details.genres) {
+          const matchedGenreIds: string[] = [];
+          details.genres.forEach((tg: any) => {
+            const match = genres.find(g => g.name.toLowerCase() === tg.name.toLowerCase());
+            if (match) matchedGenreIds.push(match.id);
+          });
+          if (matchedGenreIds.length > 0) {
+            updates.genreIds = matchedGenreIds;
+            hasUpdates = true;
+          }
+        }
+
+        // Episode Data Fetching for Series
+        if (mergedContent.type === 'series' && mergedContent.seasons) {
+          try {
+            let seasonsUpdated = false;
+            const currentSeasons = [...seasons];
+
+            for (let i = 0; i < currentSeasons.length; i++) {
+              const season = currentSeasons[i];
+              const seasonRes = await fetch(`https://api.themoviedb.org/3/tv/${tmdbData.id}/season/${season.seasonNumber}?api_key=${TMDB_API_KEY}`);
+              const seasonData = await seasonRes.json();
+
+              if (seasonData.air_date && !season.year) {
+                season.year = parseInt(seasonData.air_date.split('-')[0]);
+                seasonsUpdated = true;
+              }
+
+              if (seasonData.episodes) {
+                const existingEpisodes = season.episodes || [];
+                const mergedEpisodes = seasonData.episodes.map((tmdbEp: any) => {
+                  const existingEp = existingEpisodes.find((ep: any) => ep.episodeNumber === tmdbEp.episode_number);
+                  if (existingEp) {
+                    return {
+                      ...existingEp,
+                      description: existingEp.description || tmdbEp.overview || '',
+                      duration: existingEp.duration || (tmdbEp.runtime ? `${tmdbEp.runtime} min` : '')
+                    };
+                  }
+                  return {
+                    id: `e${tmdbEp.episode_number}`,
+                    episodeNumber: tmdbEp.episode_number,
+                    title: tmdbEp.name || `Episode ${tmdbEp.episode_number}`,
+                    description: tmdbEp.overview || '',
+                    duration: tmdbEp.runtime ? `${tmdbEp.runtime} min` : '',
+                    links: []
+                  };
+                });
+                const existingOnly = existingEpisodes.filter((ep: any) => !seasonData.episodes.some((te: any) => te.episode_number === ep.episodeNumber));
+                season.episodes = [...mergedEpisodes, ...existingOnly].sort((a, b) => a.episodeNumber - b.episodeNumber);
+                seasonsUpdated = true;
+              }
+            }
+
+            if (seasonsUpdated) {
+              updates.seasons = JSON.stringify(currentSeasons);
+              hasUpdates = true;
+            }
+          } catch (e) {
+            console.error("Error auto-fetching episode data:", e);
+          }
+        }
+      }
+
+      if (hasUpdates) {
+        setCachedMetadata(prev => {
+          if (prev.id !== id) return prev;
+          const newCache = { ...prev.data, ...updates };
+          localStorage.setItem(`content_cache_${id}`, JSON.stringify(newCache));
+          return { ...prev, data: newCache };
+        });
+      }
+
+    } catch (err) {
+      console.error("Auto-fetch failed:", err);
+    } finally {
+      setFetchingImdb(false);
+    }
+  };
+
+  useEffect(() => {
     fetchMissingData();
-  }, [mergedContent?.id, id, genres, cachedMetadata, isOffline]);
+  }, [mergedContent, id, genres, isOffline]);
 
   const getYouTubeEmbedUrl = (url?: string) => {
     if (!url) return null;
@@ -652,36 +677,36 @@ export default function MovieDetails() {
     };
   }, []);
 
-  if (loading) {
+  if (loading || profileLoading) {
     return <div className="min-h-screen bg-white dark:bg-zinc-950 flex items-center justify-center"><div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-emerald-500"></div></div>;
   }
 
-  const isAuthorized = content ? (
+  const isAuthorized = mergedContent ? (
     profile?.role === 'admin' || 
     profile?.role === 'owner' || 
     profile?.role === 'content_manager' || 
     profile?.role === 'manager' || 
-    content.status !== 'draft'
+    mergedContent.status !== 'draft'
   ) : false;
 
-  if (!content || !isAuthorized) {
+  if (!mergedContent || !isAuthorized) {
     return <div className="min-h-screen bg-white dark:bg-zinc-950 flex items-center justify-center text-zinc-900 dark:text-white">Content not found</div>;
   }
 
   const isPending = profile?.status === 'pending';
   const isExpired = profile?.status === 'expired';
   const isSelectedContent = profile?.role === 'selected_content';
-  const isAssigned = profile?.assignedContent?.some(id => id === content.id || id.startsWith(`${content.id}:`));
-  const canPlay = profile?.role === 'admin' || profile?.role === 'owner' || profile?.role === 'content_manager' || profile?.role === 'manager' || (profile?.status === 'active' && (!(isSelectedContent || content.status === 'selected_content') || isAssigned));
+  const isAssigned = profile?.assignedContent?.some(id => id === mergedContent.id || id.startsWith(`${mergedContent.id}:`));
+  const canPlay = profile?.role === 'admin' || profile?.role === 'owner' || profile?.role === 'content_manager' || profile?.role === 'manager' || (profile?.status === 'active' && (!(isSelectedContent || mergedContent.status === 'selected_content') || isAssigned));
 
-  const allowedSeasons = profile?.assignedContent?.filter(id => id.startsWith(`${content.id}:`)).map(id => id.split(':')[1]) || [];
-  const hasFullAccess = profile?.role === 'admin' || profile?.role === 'owner' || profile?.role === 'content_manager' || profile?.role === 'manager' || (profile && profile.status === 'active' && (!(isSelectedContent || content.status === 'selected_content'))) || profile?.assignedContent?.includes(content.id);
+  const allowedSeasons = profile?.assignedContent?.filter(id => id.startsWith(`${mergedContent.id}:`)).map(id => id.split(':')[1]) || [];
+  const hasFullAccess = profile?.role === 'admin' || profile?.role === 'owner' || profile?.role === 'content_manager' || profile?.role === 'manager' || (profile && profile.status === 'active' && (!(isSelectedContent || mergedContent.status === 'selected_content'))) || profile?.assignedContent?.includes(mergedContent.id);
 
   const toggleWatchLater = async () => {
     if (!profile) return;
     setIsWatchLaterLoading(true);
     try {
-      await authToggleWatchLater(content.id);
+      await authToggleWatchLater(mergedContent.id);
     } catch (error) {
       console.error("Error toggling watch later:", error);
     } finally {
@@ -693,7 +718,7 @@ export default function MovieDetails() {
     if (!profile) return;
     setIsFavoriteLoading(true);
     try {
-      await authToggleFavorite(content.id);
+      await authToggleFavorite(mergedContent.id);
     } catch (error) {
       console.error("Error toggling favorite:", error);
     } finally {
@@ -789,8 +814,8 @@ export default function MovieDetails() {
     
     if (profile?.uid) {
       logEvent('link_click', profile.uid, {
-        contentId: content.id,
-        contentTitle: content.title,
+        contentId: mergedContent.id,
+        contentTitle: mergedContent.title,
         linkId: linkPopup.id,
         linkName: linkPopup.name,
         playerType: player
@@ -900,7 +925,7 @@ export default function MovieDetails() {
       const urlObj = new URL(videoUrl);
       const scheme = urlObj.protocol.replace(':', '');
       const hostAndPath = urlObj.host + urlObj.pathname + urlObj.search + urlObj.hash;
-      const title = encodeURIComponent(content.title);
+      const title = encodeURIComponent(mergedContent.title);
       
       let intentUrl = '';
       if (player === 'vlc') {
@@ -953,9 +978,9 @@ export default function MovieDetails() {
       await addDoc(collection(db, 'reported_links'), {
         userId: profile.uid,
         userName: profile.displayName || profile.email || 'Unknown User',
-        contentId: content.id,
-        contentTitle: content.title,
-        contentType: content.type,
+        contentId: mergedContent.id,
+        contentTitle: mergedContent.title,
+        contentType: mergedContent.type,
         linkId: linkPopup.id,
         linkName: linkPopup.name,
         linkUrl: linkPopup.url,
@@ -977,8 +1002,8 @@ export default function MovieDetails() {
     
     if (profile?.uid) {
       logEvent('link_click', profile.uid, {
-        contentId: content.id,
-        contentTitle: content.title,
+        contentId: mergedContent.id,
+        contentTitle: mergedContent.title,
         linkId: linkPopup.id,
         linkName: linkPopup.name
       });
@@ -1006,8 +1031,8 @@ export default function MovieDetails() {
     closeLinkPopup();
   };
 
-  const contentGenres = genres.filter(g => content.genreIds?.includes(g.id)).map(g => g.name).join(', ');
-  const contentLangs = languages.filter(l => content.languageIds?.includes(l.id)).map(l => l.name).join(', ');
+  const contentGenres = genres.filter(g => mergedContent.genreIds?.includes(g.id)).map(g => g.name).join(', ');
+  const contentLangs = languages.filter(l => mergedContent.languageIds?.includes(l.id)).map(l => l.name).join(', ');
 
   const renderLinks = (links: QualityLinks, isZip?: boolean, contextName?: string, isLocked?: boolean, seasonInfo?: { id: string; number: number; title?: string }) => {
     if (!Array.isArray(links)) return null;
@@ -1052,7 +1077,7 @@ export default function MovieDetails() {
   };
 
   const handleShare = async () => {
-    if (!content) return;
+    if (!mergedContent) return;
     setIsShareLoading(true);
     
     let shareUrl = window.location.href;
@@ -1060,9 +1085,9 @@ export default function MovieDetails() {
     // Try to shorten the URL without the number alias
     shareUrl = await generateTinyUrl(shareUrl, false);
 
-    const contentQuality = qualities.find(q => q.id === content.qualityId)?.name || 'N/A';
+    const contentQuality = qualities.find(q => q.id === mergedContent.qualityId)?.name || 'N/A';
     
-    const baseText = `🎬 ${formatContentTitle(content)} (${content.year})\n\n` +
+    const baseText = `🎬 ${formatContentTitle(mergedContent)} (${mergedContent.year})\n\n` +
                      `🗣️ Language: ${contentLangs || 'N/A'}\n` +
                      `🎭 Genre: ${contentGenres || 'N/A'}\n` +
                      `🖨️ Print Quality: ${contentQuality}\n\n` +
@@ -1072,15 +1097,15 @@ export default function MovieDetails() {
     const textForClipboard = baseText;
 
     const shareData: ShareData = {
-      title: `${formatContentTitle(content)} (${content.year})`,
+      title: `${formatContentTitle(mergedContent)} (${mergedContent.year})`,
       text: textForShare,
     };
 
     try {
       // Try to include poster image
-      if (content.posterUrl && navigator.canShare && navigator.canShare({ files: [] })) {
+      if (mergedContent.posterUrl && navigator.canShare && navigator.canShare({ files: [] })) {
         try {
-          const response = await fetch(content.posterUrl);
+          const response = await fetch(mergedContent.posterUrl);
           const blob = await response.blob();
           const file = new File([blob], 'poster.jpg', { type: blob.type });
           shareData.files = [file];
@@ -1351,59 +1376,61 @@ export default function MovieDetails() {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           <div className="lg:col-span-2 space-y-8">
             <section>
-              {imdbData ? (
+              {displayData ? (
                 <div className="bg-cyan-500/10 border border-cyan-500/30 rounded-2xl p-6 md:p-8 flex flex-col md:flex-row gap-8 relative overflow-hidden group">
-                  {fetchingImdb && (
-                    <div className="absolute top-4 right-4 animate-spin rounded-full h-4 w-4 border-t-2 border-b-2 border-cyan-500"></div>
-                  )}
                   <div className="flex-1 space-y-4">
                     <div className="relative">
-                      {imdbData.rating && (
-                        <div className="float-right ml-4 mb-2 bg-[#f5c518] text-black px-2 py-1 rounded flex items-center gap-1.5 font-black text-xs shadow-[0_0_15px_rgba(245,197,24,0.3)] whitespace-nowrap">
-                          <span className="bg-black text-[#f5c518] px-1 rounded-sm text-[10px] tracking-tighter">IMDb</span>
-                          <div className="flex items-center gap-0.5">
-                            <span className="text-[10px]">⭐</span>
-                            <span>{imdbData.rating.replace('/10', '')}</span>
+                      <div className="float-right flex items-center gap-2 mb-2">
+                        {displayData.rating && (
+                          <div className="bg-[#f5c518] text-black px-2 py-1 rounded flex items-center gap-1.5 font-black text-xs shadow-[0_0_15px_rgba(245,197,24,0.3)] whitespace-nowrap">
+                            <span className="bg-black text-[#f5c518] px-1 rounded-sm text-[10px] tracking-tighter">IMDb</span>
+                            <div className="flex items-center gap-0.5">
+                              <span className="text-[10px]">⭐</span>
+                              <span>{displayData.rating.replace('/10', '')}</span>
+                            </div>
                           </div>
-                        </div>
-                      )}
+                        )}
+                        {fetchingImdb && (
+                          <RefreshCw className="w-4 h-4 text-cyan-500 animate-spin" />
+                        )}
+                      </div>
                       <h3 className="text-3xl font-bold text-cyan-700 dark:text-cyan-400 leading-tight">
-                        {imdbData.title} {imdbData.year ? `(${imdbData.year})` : ''}
+                        {displayData.title} {displayData.year ? `(${displayData.year})` : ''}
                       </h3>
                     </div>
                     
                     <div className="flex flex-wrap gap-6 text-sm font-medium text-cyan-700/80 dark:text-cyan-400/80">
-                      {imdbData.releaseDate && (
+                      {displayData.releaseDate && (
                         <div className="flex flex-col">
                           <span className="text-zinc-500 text-[10px] uppercase tracking-wider">Release Date</span>
-                          <span>{formatReleaseDate(imdbData.releaseDate)}</span>
+                          <span>{formatReleaseDate(displayData.releaseDate)}</span>
                         </div>
                       )}
-                      {imdbData.duration && mergedContent.type !== 'series' && (
+                      {displayData.duration && mergedContent.type !== 'series' && (
                         <div className="flex flex-col">
                           <span className="text-zinc-500 text-[10px] uppercase tracking-wider">Runtime</span>
-                          <span>{formatRuntime(imdbData.duration)}</span>
+                          <span>{formatRuntime(displayData.duration)}</span>
                         </div>
                       )}
-                      {imdbData.country && !imdbData.country.includes(',') && (
+                      {displayData.country && !displayData.country.includes(',') && (
                         <div className="flex flex-col">
                           <span className="text-zinc-500 text-[10px] uppercase tracking-wider">Country</span>
-                          <span>{imdbData.country}</span>
+                          <span>{displayData.country}</span>
                         </div>
                       )}
                     </div>
 
                     <div className="flex flex-col gap-2 pt-2 border-t border-cyan-500/10">
-                      {imdbData.country && imdbData.country.includes(',') && (
+                      {displayData.country && displayData.country.includes(',') && (
                         <div className="flex items-baseline gap-2">
                           <span className="text-zinc-500 text-xs font-medium">Country</span>
-                          <span className="text-sm font-medium text-cyan-700/80 dark:text-cyan-400/80">{imdbData.country}</span>
+                          <span className="text-sm font-medium text-cyan-700/80 dark:text-cyan-400/80">{displayData.country}</span>
                         </div>
                       )}
-                      {imdbData.genres && (
+                      {displayData.genres && (
                         <div className="flex items-baseline gap-2">
                           <span className="text-zinc-500 text-xs font-medium">Genre</span>
-                          <span className="text-sm font-medium text-cyan-700/80 dark:text-cyan-400/80">{imdbData.genres}</span>
+                          <span className="text-sm font-medium text-cyan-700/80 dark:text-cyan-400/80">{displayData.genres}</span>
                         </div>
                       )}
                       {contentLangs && (
@@ -1420,11 +1447,11 @@ export default function MovieDetails() {
                       )}
                     </div>
                     
-                    {(imdbData.cast || (mergedContent.cast && mergedContent.cast.length > 0)) && (
+                    {(displayData.castArray && displayData.castArray.length > 0) && (
                       <div className="pt-2">
                         <h4 className="text-sm font-bold text-cyan-700 dark:text-cyan-400 mb-2 uppercase tracking-wider opacity-70">Cast</h4>
                         <div className="flex flex-wrap gap-1.5">
-                          {(imdbData.cast ? imdbData.cast.split(',').map(c => c.trim()) : mergedContent.cast).map((actor, idx) => (
+                          {displayData.castArray.map((actor, idx) => (
                             <span key={idx} className="bg-cyan-500/5 border border-cyan-500/10 px-2 py-1 rounded-md text-[11px] text-zinc-500 dark:text-zinc-400">
                               {actor}
                             </span>
@@ -1433,10 +1460,10 @@ export default function MovieDetails() {
                       </div>
                     )}
 
-                    {(imdbData.description || mergedContent.description) && (
+                    {(displayData.description || mergedContent.description) && (
                       <div className="pt-2">
                         <h4 className="text-sm font-bold text-cyan-700 dark:text-cyan-400 mb-1 uppercase tracking-wider opacity-70">Synopsis</h4>
-                        <p className="text-zinc-500 dark:text-zinc-400 text-xs leading-relaxed">{imdbData.description || mergedContent.description}</p>
+                        <p className="text-zinc-500 dark:text-zinc-400 text-xs leading-relaxed">{displayData.description || mergedContent.description}</p>
                       </div>
                     )}
                   </div>
@@ -2016,6 +2043,24 @@ export default function MovieDetails() {
             try {
               const contentRef = doc(db, 'content', mergedContent.id);
               const updateData: any = { ...data };
+              
+              // Map genre names to IDs if genres are provided
+              if (data.genres && Array.isArray(data.genres)) {
+                const matchedGenreIds: string[] = [];
+                data.genres.forEach((gName: string) => {
+                  const match = genres.find(g => g.name.toLowerCase() === gName.toLowerCase());
+                  if (match) matchedGenreIds.push(match.id);
+                });
+                if (matchedGenreIds.length > 0) {
+                  updateData.genreIds = matchedGenreIds;
+                  delete updateData.genres;
+                }
+              }
+
+              // Map cast string to array if provided
+              if (data.cast && typeof data.cast === 'string') {
+                updateData.cast = data.cast.split(',').map((s: string) => s.trim()).filter(Boolean);
+              }
               
               // Handle seasons if they are in the data
               if (data.seasons && Array.isArray(data.seasons)) {
