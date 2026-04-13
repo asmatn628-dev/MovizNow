@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useMemo, useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   CheckCircle2,
@@ -388,8 +388,12 @@ export const LinkCheckerModal: React.FC<Props> = ({
     }
   };
 
-  // Removed automatic paste
-  
+  useEffect(() => {
+    if (isOpen) {
+      pasteFromClipboard(true);
+    }
+  }, [isOpen]);
+
   const reset = () => {
     setInput("");
     setResults([]);

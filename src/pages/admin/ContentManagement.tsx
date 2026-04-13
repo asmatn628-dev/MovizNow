@@ -849,31 +849,8 @@ export default function ContentManagement() {
       // Series logic
       const updatedSeasons = [...seasons];
       
-      // Identify which seasons/episodes are being targeted and clear them first
-      const targets = new Set<string>();
-      links.forEach(link => {
-        const s = link.season || metadata?.season || 1;
-        const e = (link.isFullSeasonMKV || link.isFullSeasonZIP || (link.episode === undefined && metadata?.episode === undefined)) ? 'full' : (link.episode || metadata?.episode);
-        targets.add(`${s}-${e}`);
-      });
-
-      targets.forEach(target => {
-        const [sStr, eStr] = target.split('-');
-        const sNum = parseInt(sStr);
-        const seasonIdx = updatedSeasons.findIndex(s => s.seasonNumber === sNum);
-        if (seasonIdx !== -1) {
-          if (eStr === 'full') {
-            updatedSeasons[seasonIdx].mkvLinks = [];
-            updatedSeasons[seasonIdx].zipLinks = [];
-          } else {
-            const eNum = parseInt(eStr);
-            const epIdx = updatedSeasons[seasonIdx].episodes.findIndex(e => e.episodeNumber === eNum);
-            if (epIdx !== -1) {
-              updatedSeasons[seasonIdx].episodes[epIdx].links = [];
-            }
-          }
-        }
-      });
+      // Track which episodes/seasons we've already cleared to avoid clearing them multiple times for each link
+      const clearedEpisodes = new Set<string>();
 
       links.forEach(link => {
         const targetSeason = link.season || metadata?.season || 1;
@@ -893,17 +870,21 @@ export default function ContentManagement() {
           seasonIdx = updatedSeasons.findIndex(s => s.seasonNumber === targetSeason);
         }
 
+        const episodeKey = `${targetSeason}-${targetEpisode ?? 'full'}`;
+
         if (targetEpisode === undefined || link.isFullSeasonMKV || link.isFullSeasonZIP) {
           // Full season
           const isZip = link.isFullSeasonZIP || link.url.toLowerCase().includes('.zip');
-          const targetLinks = isZip ? (updatedSeasons[seasonIdx].zipLinks || []) : (updatedSeasons[seasonIdx].mkvLinks || []);
-          targetLinks.push(link);
-
-          if (isZip) {
-            updatedSeasons[seasonIdx].zipLinks = [...targetLinks];
-          } else {
-            updatedSeasons[seasonIdx].mkvLinks = [...targetLinks];
+          
+          // Clear previous links for this season if not already cleared
+          if (!clearedEpisodes.has(episodeKey + (isZip ? '-zip' : '-mkv'))) {
+            if (isZip) updatedSeasons[seasonIdx].zipLinks = [];
+            else updatedSeasons[seasonIdx].mkvLinks = [];
+            clearedEpisodes.add(episodeKey + (isZip ? '-zip' : '-mkv'));
           }
+
+          const targetLinks = isZip ? updatedSeasons[seasonIdx].zipLinks : (updatedSeasons[seasonIdx].mkvLinks || []);
+          targetLinks.push(link);
         } else {
           // Episode logic
           let epIdx = updatedSeasons[seasonIdx].episodes.findIndex(e => e.episodeNumber === targetEpisode);
@@ -917,6 +898,12 @@ export default function ContentManagement() {
             updatedSeasons[seasonIdx].episodes.push(newEpisode);
             updatedSeasons[seasonIdx].episodes.sort((a, b) => a.episodeNumber - b.episodeNumber);
             epIdx = updatedSeasons[seasonIdx].episodes.findIndex(e => e.episodeNumber === targetEpisode);
+          }
+
+          // Clear previous links for this episode if not already cleared
+          if (!clearedEpisodes.has(episodeKey)) {
+            updatedSeasons[seasonIdx].episodes[epIdx].links = [];
+            clearedEpisodes.add(episodeKey);
           }
 
           updatedSeasons[seasonIdx].episodes[epIdx].links.push(link);
