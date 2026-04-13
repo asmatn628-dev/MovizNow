@@ -350,6 +350,7 @@ export const LinkCheckerModal: React.FC<Props> = ({
       season: detectedSeason,
       episode: detectedEpisode,
     });
+    reset();
     onClose();
   };
 
@@ -387,15 +388,12 @@ export const LinkCheckerModal: React.FC<Props> = ({
     }
   };
 
-  React.useEffect(() => {
-    if (isOpen) {
-      pasteFromClipboard(true);
-    }
-  }, [isOpen]);
-
+  // Removed automatic paste
+  
   const reset = () => {
     setInput("");
     setResults([]);
+    setSelectedUrls(new Set());
     setError(null);
     setExpanded({});
   };

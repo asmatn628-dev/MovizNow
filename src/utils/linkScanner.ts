@@ -52,19 +52,19 @@ export function normalizeUrl(input: string) {
     const url = new URL(trimmed);
     const host = url.hostname.toLowerCase().replace(/^www\./, "");
     
-    if (host.includes("pixeldrain.com") || host.includes("pixeldrain.dev")) {
+    if (host.includes("pixeldrain.com") || host.includes("pixeldrain.dev") || host.includes("pixeldrain.net")) {
       // Pixeldrain conversion
       const fileIdMatch = url.pathname.match(/\/(?:u|api\/file)\/([^/?#]+)/i);
       const listIdMatch = url.pathname.match(/\/(?:l|api\/list)\/([^/?#]+)/i);
       
       if (fileIdMatch?.[1]) {
-        return `https://pixeldrain.dev/u/${fileIdMatch[1]}`;
+        return `https://pixeldrain.com/u/${fileIdMatch[1]}`;
       } else if (listIdMatch?.[1]) {
-        return `https://pixeldrain.dev/l/${listIdMatch[1]}`;
+        return `https://pixeldrain.com/l/${listIdMatch[1]}`;
       }
       
       // Fallback for other pixeldrain paths
-      url.hostname = "pixeldrain.dev";
+      url.hostname = "pixeldrain.com";
       url.search = "";
       url.hash = "";
       return url.toString().replace(/\/$/, "");
@@ -76,12 +76,12 @@ export function normalizeUrl(input: string) {
     }
   } catch (e) {
     // Fallback logic if URL is invalid
-    if (trimmed.includes("pixeldrain.com/") || trimmed.includes("pixeldrain.dev/")) {
+    if (trimmed.includes("pixeldrain.com/") || trimmed.includes("pixeldrain.dev/") || trimmed.includes("pixeldrain.net/")) {
       trimmed = trimmed.replace(/\?download$/i, "");
       trimmed = trimmed.replace(/\/api\/file\//i, "/u/");
-      trimmed = trimmed.replace(/pixeldrain\.com\//i, "pixeldrain.dev/");
+      trimmed = trimmed.replace(/pixeldrain\.(dev|net)\//i, "pixeldrain.com/");
     }
-    if (trimmed.includes("pixeldrain.com/api/list/") || trimmed.includes("pixeldrain.dev/api/list/")) {
+    if (trimmed.includes("pixeldrain.com/api/list/") || trimmed.includes("pixeldrain.dev/api/list/") || trimmed.includes("pixeldrain.net/api/list/")) {
       trimmed = trimmed.replace(/\/api\/list\//i, "/l/");
     }
     return trimmed.replace(/\/$/, "");
@@ -95,7 +95,7 @@ export function splitLinks(text: string) {
 
 export function guessLinkType(url: string) {
   const lower = url.toLowerCase();
-  if (lower.includes("pixeldrain.com") || lower.includes("pixeldrain.dev")) return "Pixeldrain";
+  if (lower.includes("pixeldrain.com") || lower.includes("pixeldrain.dev") || lower.includes("pixeldrain.net")) return "Pixeldrain";
   if (lower.includes("raj.lat") || lower.includes("hub.")) return "Direct download gate";
   if (/\.(zip|rar|7z|tar|gz|mp4|mkv|avi|mov|pdf|docx?|xlsx?|pptx?|apk|exe|srt|ass|mp3|wav|png|jpe?g|webp)(\?|#|$)/i.test(lower)) {
     return "Direct file";

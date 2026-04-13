@@ -825,8 +825,7 @@ export default function ContentManagement() {
     }
 
     if (activeType === 'movie') {
-      setMovieLinks(prev => {
-        const updated = [...prev];
+      setMovieLinks(() => {
         const newLinks: QualityLinks = [];
 
         const parseSizeInMB = (size: string, unit: string) => {
@@ -838,58 +837,43 @@ export default function ContentManagement() {
           return num;
         };
 
-        const extractQuality = (name: string) => {
-          const match = name.match(/\b(2160p|4k|1440p|1080p|720p|480p|360p|540p)\b/i);
-          return match ? match[1].toLowerCase() : name.toLowerCase();
-        };
-
         links.forEach(newLink => {
-          const newQuality = extractQuality(newLink.name);
-          const isHEVC = newLink.name.toUpperCase().includes("HEVC");
-          
-          // Find an existing link with the same quality that has an empty URL
-          // ONLY if the new link is NOT HEVC (don't fill "720p" with "720p HEVC")
-          const existingIdx = !isHEVC ? updated.findIndex(l => {
-            const existingQuality = extractQuality(l.name);
-            const existingIsHEVC = l.name.toUpperCase().includes("HEVC");
-            return existingQuality === newQuality && !existingIsHEVC && !l.url;
-          }) : -1;
-
-          if (existingIdx !== -1) {
-            // Fill the existing link but keep its original name (e.g., "480p")
-            updated[existingIdx] = {
-              ...updated[existingIdx],
-              url: newLink.url,
-              size: newLink.size,
-              unit: newLink.unit
-            };
-          } else {
-            // Check if this specific quality (and HEVC status) already exists with a URL
-            const alreadyExistsWithUrl = updated.some(l => {
-              const existingQuality = extractQuality(l.name);
-              const existingIsHEVC = l.name.toUpperCase().includes("HEVC");
-              return existingQuality === newQuality && existingIsHEVC === isHEVC && l.url;
-            });
-            
-            if (!alreadyExistsWithUrl) {
-              newLinks.push(newLink);
-            }
-          }
+          newLinks.push(newLink);
         });
 
-        const combined = [...updated, ...newLinks];
-        combined.sort((a, b) => parseSizeInMB(a.size, a.unit) - parseSizeInMB(b.size, b.unit));
-        return combined;
+        newLinks.sort((a, b) => parseSizeInMB(a.size, a.unit) - parseSizeInMB(b.size, b.unit));
+        return newLinks;
       });
-      setAlertConfig({ isOpen: true, title: 'Success', message: `Processed ${links.length} links for movie.` });
+      setAlertConfig({ isOpen: true, title: 'Success', message: `Replaced movie links with ${links.length} new links.` });
     } else {
       // Series logic
       const updatedSeasons = [...seasons];
       
-      const extractQuality = (name: string) => {
-        const match = name.match(/\b(2160p|4k|1440p|1080p|720p|480p|360p|540p)\b/i);
-        return match ? match[1].toLowerCase() : name.toLowerCase();
-      };
+      // Identify which seasons/episodes are being targeted and clear them first
+      const targets = new Set<string>();
+      links.forEach(link => {
+        const s = link.season || metadata?.season || 1;
+        const e = (link.isFullSeasonMKV || link.isFullSeasonZIP || (link.episode === undefined && metadata?.episode === undefined)) ? 'full' : (link.episode || metadata?.episode);
+        targets.add(`${s}-${e}`);
+      });
+
+      targets.forEach(target => {
+        const [sStr, eStr] = target.split('-');
+        const sNum = parseInt(sStr);
+        const seasonIdx = updatedSeasons.findIndex(s => s.seasonNumber === sNum);
+        if (seasonIdx !== -1) {
+          if (eStr === 'full') {
+            updatedSeasons[seasonIdx].mkvLinks = [];
+            updatedSeasons[seasonIdx].zipLinks = [];
+          } else {
+            const eNum = parseInt(eStr);
+            const epIdx = updatedSeasons[seasonIdx].episodes.findIndex(e => e.episodeNumber === eNum);
+            if (epIdx !== -1) {
+              updatedSeasons[seasonIdx].episodes[epIdx].links = [];
+            }
+          }
+        }
+      });
 
       links.forEach(link => {
         const targetSeason = link.season || metadata?.season || 1;
@@ -900,16 +884,8 @@ export default function ContentManagement() {
           const newSeason: Season = {
             id: Math.random().toString(36).substr(2, 9),
             seasonNumber: targetSeason,
-            zipLinks: [
-              { id: Math.random().toString(36).substr(2, 9), name: '480p', url: '', size: '', unit: 'GB' },
-              { id: Math.random().toString(36).substr(2, 9), name: '720p', url: '', size: '', unit: 'GB' },
-              { id: Math.random().toString(36).substr(2, 9), name: '1080p', url: '', size: '', unit: 'GB' }
-            ],
-            mkvLinks: [
-              { id: Math.random().toString(36).substr(2, 9), name: '480p', url: '', size: '', unit: 'GB' },
-              { id: Math.random().toString(36).substr(2, 9), name: '720p', url: '', size: '', unit: 'GB' },
-              { id: Math.random().toString(36).substr(2, 9), name: '1080p', url: '', size: '', unit: 'GB' }
-            ],
+            zipLinks: [],
+            mkvLinks: [],
             episodes: []
           };
           updatedSeasons.push(newSeason);
@@ -920,32 +896,8 @@ export default function ContentManagement() {
         if (targetEpisode === undefined || link.isFullSeasonMKV || link.isFullSeasonZIP) {
           // Full season
           const isZip = link.isFullSeasonZIP || link.url.toLowerCase().includes('.zip');
-          const targetLinks = isZip ? updatedSeasons[seasonIdx].zipLinks : (updatedSeasons[seasonIdx].mkvLinks || []);
-          const newQuality = extractQuality(link.name);
-
-          const existingIdx = targetLinks.findIndex(l => {
-            const existingQuality = extractQuality(l.name);
-            return existingQuality === newQuality && !l.url;
-          });
-
-          if (existingIdx !== -1) {
-            const isFullSeasonMKV = !isZip && (targetEpisode === undefined || link.isFullSeasonMKV);
-            targetLinks[existingIdx] = {
-              ...targetLinks[existingIdx],
-              name: isFullSeasonMKV ? link.name : targetLinks[existingIdx].name,
-              url: link.url,
-              size: link.size,
-              unit: link.unit
-            };
-          } else {
-            const alreadyExistsWithUrl = targetLinks.some(l => {
-              const existingQuality = extractQuality(l.name);
-              return existingQuality === newQuality && l.url;
-            });
-            if (!alreadyExistsWithUrl) {
-              targetLinks.push(link);
-            }
-          }
+          const targetLinks = isZip ? (updatedSeasons[seasonIdx].zipLinks || []) : (updatedSeasons[seasonIdx].mkvLinks || []);
+          targetLinks.push(link);
 
           if (isZip) {
             updatedSeasons[seasonIdx].zipLinks = [...targetLinks];
@@ -953,45 +905,21 @@ export default function ContentManagement() {
             updatedSeasons[seasonIdx].mkvLinks = [...targetLinks];
           }
         } else {
-          // Specific episode
-          let episodeIdx = updatedSeasons[seasonIdx].episodes.findIndex(e => e.episodeNumber === targetEpisode);
-          if (episodeIdx === -1) {
-            updatedSeasons[seasonIdx].episodes.push({
+          // Episode logic
+          let epIdx = updatedSeasons[seasonIdx].episodes.findIndex(e => e.episodeNumber === targetEpisode);
+          if (epIdx === -1) {
+            const newEpisode: Episode = {
               id: Math.random().toString(36).substr(2, 9),
               episodeNumber: targetEpisode,
               title: `Episode ${targetEpisode}`,
-              links: [] // No placeholders for episodes as requested
-            });
-            updatedSeasons[seasonIdx].episodes.sort((a, b) => a.episodeNumber - b.episodeNumber);
-            episodeIdx = updatedSeasons[seasonIdx].episodes.findIndex(e => e.episodeNumber === targetEpisode);
-          }
-
-          const targetLinks = updatedSeasons[seasonIdx].episodes[episodeIdx].links;
-          const newQuality = extractQuality(link.name);
-
-          const existingIdx = targetLinks.findIndex(l => {
-            const existingQuality = extractQuality(l.name);
-            return existingQuality === newQuality && !l.url;
-          });
-
-          if (existingIdx !== -1) {
-            targetLinks[existingIdx] = {
-              ...targetLinks[existingIdx],
-              // Keep original name for episodes
-              url: link.url,
-              size: link.size,
-              unit: link.unit
+              links: []
             };
-          } else {
-            const alreadyExistsWithUrl = targetLinks.some(l => {
-              const existingQuality = extractQuality(l.name);
-              return existingQuality === newQuality && l.url;
-            });
-            if (!alreadyExistsWithUrl) {
-              targetLinks.push(link);
-            }
+            updatedSeasons[seasonIdx].episodes.push(newEpisode);
+            updatedSeasons[seasonIdx].episodes.sort((a, b) => a.episodeNumber - b.episodeNumber);
+            epIdx = updatedSeasons[seasonIdx].episodes.findIndex(e => e.episodeNumber === targetEpisode);
           }
-          updatedSeasons[seasonIdx].episodes[episodeIdx].links = [...targetLinks];
+
+          updatedSeasons[seasonIdx].episodes[epIdx].links.push(link);
         }
       });
 
@@ -1014,7 +942,7 @@ export default function ContentManagement() {
       });
       
       setSeasons(updatedSeasons);
-      setAlertConfig({ isOpen: true, title: 'Success', message: `Added ${links.length} links to series.` });
+      setAlertConfig({ isOpen: true, title: 'Success', message: `Replaced specific episode/season links with ${links.length} new links.` });
     }
   };
 
@@ -1418,7 +1346,7 @@ export default function ContentManagement() {
 
       const isBadTinyUrl = link.tinyUrl && link.tinyUrl.toLowerCase().includes('<html');
       
-      if (!link.url.includes('pixeldrain.com') && !link.url.includes('pixeldrain.dev') && (!link.tinyUrl || isBadTinyUrl)) {
+      if (!link.url.includes('pixeldrain.com') && !link.url.includes('pixeldrain.dev') && !link.url.includes('pixeldrain.net') && (!link.tinyUrl || isBadTinyUrl)) {
         const tinyUrl = await generateTinyUrl(link.url, true, settings?.supportNumber || '3363284466');
         if (tinyUrl && tinyUrl !== link.url && !tinyUrl.toLowerCase().includes('<html')) {
           hasUpdates = true;
