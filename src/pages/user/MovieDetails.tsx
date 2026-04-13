@@ -221,9 +221,10 @@ export default function MovieDetails() {
     if (!content && !fullContent) return null;
     // Prioritize cachedMetadata (TMDB updates/local edits), then fresh fullContent from DB, then partial content from list
     const metadata = cachedMetadata.id === id ? cachedMetadata.data : {};
+    const validFullContent = fullContent?.id === id ? fullContent : {};
     return {
       ...(content || {}),
-      ...(fullContent || {}),
+      ...validFullContent,
       ...metadata
     } as Content;
   }, [content, cachedMetadata, fullContent, id]);
@@ -344,7 +345,7 @@ export default function MovieDetails() {
         setLoading(false);
       } 
       // If not in list, wait for the full fetch to complete or fail
-      else if (fullContent || fetchFailed || isOffline) {
+      else if ((fullContent && fullContent.id === id) || fetchFailed || isOffline) {
         setLoading(false);
       }
 
@@ -442,13 +443,14 @@ export default function MovieDetails() {
     if (!mergedContent || !id || hasAttemptedStaticFetch.current[id] || isOffline) return;
 
     // If we are currently fetching the full document from Firebase, wait for it
-    if (isMinimal && !fullContent && !fetchFailed) return;
+    if (isMinimal && (!fullContent || fullContent.id !== id) && !fetchFailed) return;
 
     const fetchMissingData = async () => {
       let seasons: any[] = [];
       try {
         // Prioritize seasons from database (fullContent) to ensure links are preserved
-        const seasonsSource = (fullContent?.type === 'series' && fullContent.seasons) ? fullContent.seasons : mergedContent?.seasons;
+        const validFullContent = fullContent?.id === id ? fullContent : null;
+        const seasonsSource = (validFullContent?.type === 'series' && validFullContent.seasons) ? validFullContent.seasons : mergedContent?.seasons;
         seasons = mergedContent?.type === 'series' && seasonsSource ? (Array.isArray(seasonsSource) ? seasonsSource : JSON.parse(seasonsSource || '[]')) : [];
       } catch (e) {
         console.error("Error parsing seasons in fetchMissingData:", e);
