@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
-import { useParams, Link, useNavigate, useLocation } from 'react-router-dom';
+import { useParams, Link, useNavigate, useLocation, useNavigationType } from 'react-router-dom';
 import { Helmet } from 'react-helmet-async';
 import { db } from '../../firebase';
 import { doc, getDoc, updateDoc, arrayUnion, arrayRemove, deleteDoc, addDoc, collection, serverTimestamp, query, where, getDocs } from 'firebase/firestore';
@@ -86,11 +86,15 @@ export default function MovieDetails() {
   const hasLoggedView = useRef(false);
   const navigate = useNavigate();
   const location = useLocation();
+  const navigationType = useNavigationType();
 
-  // Scroll to top on mount or ID change
+  // Scroll to top on mount or ID change, but only if it's a new navigation (PUSH/REPLACE)
+  // If it's a POP navigation (back button), we want to preserve the scroll position
   useEffect(() => {
-    window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
-  }, [id]);
+    if (navigationType !== 'POP') {
+      window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
+    }
+  }, [id, navigationType]);
 
   const [fullContent, setFullContent] = useState<Content | null>(() => {
     if (id) {
