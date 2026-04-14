@@ -80,6 +80,18 @@ service cloud.firestore {
              );
     }
 
+    function isTrialActivation(userId) {
+      return isOwner(userId) &&
+             resource.data.role == 'user' &&
+             resource.data.status == 'pending' &&
+             request.resource.data.role == 'trial' &&
+             request.resource.data.status == 'active' &&
+             request.resource.data.get('expiryDate', '') != '' &&
+             request.resource.data.get('managedBy', '') == resource.data.get('managedBy', '') &&
+             request.resource.data.get('permissions', []) == resource.data.get('permissions', []) &&
+             request.resource.data.get('assignedContent', []) == resource.data.get('assignedContent', []);
+    }
+
     match /users/{userId} {
       // Protect PII: Only owner and authorized staff can read full profiles by ID
       allow get: if isOwner(userId) || isAdminOrEditor() || isUserManager();
@@ -97,6 +109,7 @@ service cloud.firestore {
                        (isManager() && request.resource.data.managedBy == request.auth.uid && request.resource.data.role in ['user', 'trial', 'selected_content'] && request.resource.data.status != 'suspended' && isValidUser(request.resource.data));
       allow update: if (isAdmin() && isValidUser(request.resource.data)) || 
                        (isOwner(userId) && protectedUserFieldsUnchanged() && isValidUser(request.resource.data)) ||
+                       (isTrialActivation(userId) && isValidUser(request.resource.data)) ||
                        (isUserManager() && resource.data.managedBy == request.auth.uid && request.resource.data.managedBy == request.auth.uid && request.resource.data.role in ['user', 'trial', 'selected_content'] && request.resource.data.status != 'suspended' && isValidUser(request.resource.data)) ||
                        (isUserManager() && resource.data.status == 'pending' && request.resource.data.managedBy == request.auth.uid && request.resource.data.role in ['user', 'trial', 'selected_content'] && request.resource.data.status != 'suspended' && isValidUser(request.resource.data)) ||
                        (isManager() && resource.data.managedBy == request.auth.uid && request.resource.data.managedBy == request.auth.uid && request.resource.data.role in ['user', 'trial', 'selected_content'] && request.resource.data.status != 'suspended' && isValidUser(request.resource.data)) ||
@@ -122,7 +135,26 @@ service cloud.firestore {
     match /content/{contentId} {
       // Allow read for all authenticated users, or for unauthenticated users if content is published
       allow read: if isAuthenticated() || resource.data.status == 'published';
-      allow write: if isAdminOrEditor();
+      
+      // Allow admins/editors to create anything.
+      // Allow unauthenticated (other app) to create ONLY drafts with strict validation.
+      allow create: if isAdminOrEditor() || (
+        request.resource.data.status == 'draft' &&
+        request.resource.data.title is string && 
+        request.resource.data.title.size() > 0 && 
+        request.resource.data.title.size() < 200 &&
+        (request.resource.data.type == 'movie' || request.resource.data.type == 'series')
+      );
+      
+      // Allow admins/editors to update anything.
+      // Allow unauthenticated (other app) to update ONLY if it stays a draft.
+      allow update: if isAdminOrEditor() || (
+        resource.data.status == 'draft' && 
+        request.resource.data.status == 'draft' &&
+        (!('title' in request.resource.data) || (request.resource.data.title is string && request.resource.data.title.size() < 200))
+      );
+      
+      allow delete: if isAdminOrEditor();
     }
 
     match /metadata/{docId} {

@@ -20,6 +20,7 @@ const MovieDetails = lazy(() => import('./pages/user/MovieDetails'));
 const WatchLater = lazy(() => import('./pages/user/WatchLater'));
 const Favorites = lazy(() => import('./pages/user/Favorites'));
 const MovieRequests = lazy(() => import('./pages/user/MovieRequests'));
+const Trial = lazy(() => import('./pages/user/Trial'));
 const TopUp = lazy(() => import('./pages/user/TopUp'));
 const Cart = lazy(() => import('./pages/user/Cart'));
 const Settings = lazy(() => import('./pages/user/Settings'));
@@ -85,6 +86,7 @@ export default function App() {
                     <Route path="/watch-later" element={<ProtectedRoute><WatchLater /></ProtectedRoute>} />
                     <Route path="/favorites" element={<ProtectedRoute><Favorites /></ProtectedRoute>} />
                     <Route path="/requests" element={<ProtectedRoute><MovieRequests /></ProtectedRoute>} />
+                    <Route path="/trial" element={<Trial />} />
                     <Route path="/top-up" element={<ProtectedRoute><TopUp /></ProtectedRoute>} />
                     <Route path="/cart" element={<ProtectedRoute><Cart /></ProtectedRoute>} />
                     <Route path="/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />

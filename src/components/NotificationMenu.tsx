@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Bell, X } from 'lucide-react';
-import { collection, query, orderBy, onSnapshot, doc, updateDoc } from 'firebase/firestore';
+import { collection, query, orderBy, onSnapshot, doc, updateDoc, limit } from 'firebase/firestore';
 import { db } from '../firebase';
 import { useAuth } from '../contexts/AuthContext';
 import { AppNotification } from '../types';
@@ -28,7 +28,7 @@ export const NotificationMenu = React.memo(() => {
 
   useEffect(() => {
     if (!profile) return;
-    const q = query(collection(db, 'notifications'), orderBy('createdAt', 'desc'));
+    const q = query(collection(db, 'notifications'), orderBy('createdAt', 'desc'), limit(50));
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const notifs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as AppNotification))
         .filter(n => !n.targetUserId && (!n.targetUserIds || n.targetUserIds.length === 0) || (n.targetUserId === profile.uid) || (n.targetUserIds?.includes(profile.uid)));

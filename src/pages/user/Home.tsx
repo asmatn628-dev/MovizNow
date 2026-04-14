@@ -6,7 +6,8 @@ import { Content, Role } from '../../types';
 import { useAuth } from '../../contexts/AuthContext';
 import { useContent } from '../../contexts/ContentContext';
 import { useCart } from '../../contexts/CartContext';
-import { Film, Search, Filter, MessageCircle, Clock, Heart, LogOut, User, Users, Lock, LayoutDashboard, X, ShoppingCart, Plus, ChevronLeft, ChevronRight } from 'lucide-react';
+import { usePWA } from '../../contexts/PWAContext';
+import { Film, Search, Filter, MessageCircle, Clock, Heart, LogOut, User, Users, Lock, LayoutDashboard, X, ShoppingCart, Plus, ChevronLeft, ChevronRight, Download } from 'lucide-react';
 import { clsx } from 'clsx';
 import { format } from 'date-fns';
 import ConfirmModal from '../../components/ConfirmModal';
@@ -29,6 +30,7 @@ export default function Home({ onOpenMediaModal }: { onOpenMediaModal: () => voi
   const { contentList, genres, languages, qualities, loading, isOffline } = useContent();
   const { cart } = useCart();
   const { settings } = useSettings();
+  const { isInstallable, installApp } = usePWA();
   const navigate = useNavigate();
   
   const [search, setSearch] = useState(() => sessionStorage.getItem('home_search') || '');
@@ -363,6 +365,15 @@ export default function Home({ onOpenMediaModal }: { onOpenMediaModal: () => voi
           </Link>
 
           <div className="flex items-center gap-2">
+            {isInstallable && (
+              <button
+                onClick={installApp}
+                className="w-8 h-8 rounded-full bg-emerald-500/10 text-emerald-500 flex items-center justify-center border border-emerald-500/20 hover:bg-emerald-500/20 transition-colors"
+                title="Install App"
+              >
+                <Download className="w-4 h-4" />
+              </button>
+            )}
             <AdminButtons profile={profile} />
             {profile && <NotificationMenu />}
             <CartButton />

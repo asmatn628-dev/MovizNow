@@ -2,9 +2,10 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
+import { usePWA } from '../contexts/PWAContext';
 import { 
   User, Settings, LogOut, Heart, Clock, MessageCircle, 
-  Sun, Moon, Monitor, LayoutDashboard, Film, Users, Plus
+  Sun, Moon, Monitor, LayoutDashboard, Film, Users, Plus, Download
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { format } from 'date-fns';
@@ -14,6 +15,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 export const UserProfileMenu = React.memo(({ onOpenLogoutModal }: { onOpenLogoutModal?: () => void }) => {
   const { profile, logout } = useAuth();
   const { theme, setTheme } = useTheme();
+  const { isInstallable, installApp } = usePWA();
   const navigate = useNavigate();
   const [isOpen, setIsOpen] = useState(false);
   const [isLogoutModalOpen, setIsLogoutModalOpen] = useState(false);
@@ -191,6 +193,18 @@ export const UserProfileMenu = React.memo(({ onOpenLogoutModal }: { onOpenLogout
                 <Link to="/requests" onClick={() => setIsOpen(false)} className="flex items-center gap-3 px-3 py-2 rounded-xl text-sm font-medium text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors">
                   <MessageCircle className="w-4 h-4 text-zinc-400" /> Movie Requests
                 </Link>
+              )}
+
+              {isInstallable && (
+                <button 
+                  onClick={() => {
+                    setIsOpen(false);
+                    installApp();
+                  }} 
+                  className="w-full flex items-center gap-3 px-3 py-2 rounded-xl text-sm font-medium text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-500/10 transition-colors"
+                >
+                  <Download className="w-4 h-4" /> Install App
+                </button>
               )}
 
               <div className="h-px bg-zinc-200 dark:bg-zinc-800 my-1"></div>

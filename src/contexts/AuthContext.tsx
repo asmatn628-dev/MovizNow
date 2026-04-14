@@ -15,7 +15,7 @@ import {
   updateProfile,
   updatePassword
 } from 'firebase/auth';
-import { doc, getDoc, setDoc, onSnapshot, updateDoc, query, collection, where, getDocs, deleteDoc, limit, writeBatch, orderBy } from 'firebase/firestore';
+import { doc, getDoc, setDoc, onSnapshot, updateDoc, query, collection, where, getDocs, deleteDoc, limit, writeBatch, orderBy, increment } from 'firebase/firestore';
 import { UserProfile } from '../types';
 import { logEvent, updateTimeSpent } from '../services/analytics';
 import { handleFirestoreError, OperationType } from '../utils/firestoreErrorHandler';
@@ -287,18 +287,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
     });
 
-    // Track time spent periodically (every 1 minute)
+    // Track time spent periodically (every 5 minutes to reduce Firestore writes)
     const timeTrackerInterval = setInterval(() => {
       if (auth.currentUser && sessionStartTimeRef.current) {
-        updateTimeSpent(auth.currentUser.uid, 1);
-        
-        // Update lastActive every 2 minutes
-        const minutesSinceStart = Math.floor((Date.now() - sessionStartTimeRef.current) / 60000);
-        if (minutesSinceStart % 2 === 0) {
-          updateDoc(doc(db, 'users', auth.currentUser.uid), { lastActive: new Date().toISOString() }).catch(console.error);
-        }
+        // Combine updates into a single write
+        const userRef = doc(db, 'users', auth.currentUser.uid);
+        updateDoc(userRef, {
+          timeSpent: increment(5),
+          lastActive: new Date().toISOString()
+        }).then(() => {
+          // Also log to GA4
+          logEvent('time_spent', auth.currentUser!.uid, { duration: 5 });
+        }).catch(console.error);
       }
-    }, 60000);
+    }, 5 * 60000);
 
     // Also track time spent when window unloads
     const handleBeforeUnload = () => {
