@@ -55,7 +55,8 @@ export function normalizeUrl(input: string) {
     const isPixeldrain = host.includes("pixeldrain.com") || 
                         host.includes("pixeldrain.dev") || 
                         host.includes("pixeldrain.net") || 
-                        host === "pixel.drain";
+                        host === "pixel.drain" ||
+                        host === "pixeldra.in";
 
     if (isPixeldrain) {
       // Pixeldrain conversion
@@ -82,7 +83,8 @@ export function normalizeUrl(input: string) {
     const isPixeldrain = trimmed.includes("pixeldrain.com/") || 
                         trimmed.includes("pixeldrain.dev/") || 
                         trimmed.includes("pixeldrain.net/") ||
-                        trimmed.includes("pixel.drain/");
+                        trimmed.includes("pixel.drain/") ||
+                        trimmed.includes("pixeldra.in/");
 
     if (isPixeldrain) {
       trimmed = trimmed.replace(/\?download$/i, "");
@@ -100,7 +102,7 @@ export function splitLinks(text: string) {
 
 export function guessLinkType(url: string) {
   const lower = url.toLowerCase();
-  if (lower.includes("pixeldrain.com") || lower.includes("pixeldrain.dev") || lower.includes("pixeldrain.net") || lower.includes("pixel.drain")) return "Pixeldrain";
+  if (lower.includes("pixeldrain.com") || lower.includes("pixeldrain.dev") || lower.includes("pixeldrain.net") || lower.includes("pixel.drain") || lower.includes("pixeldra.in")) return "Pixeldrain";
   if (lower.includes("raj.lat") || lower.includes("hub.")) return "Direct download gate";
   if (/\.(zip|rar|7z|tar|gz|mp4|mkv|avi|mov|pdf|docx?|xlsx?|pptx?|apk|exe|srt|ass|mp3|wav|png|jpe?g|webp)(\?|#|$)/i.test(lower)) {
     return "Direct file";
@@ -570,7 +572,8 @@ export async function performFullLinkScan(
     } catch (e) {
       // Fallback for invalid URL objects that are still Pixeldrain
       const devUrl = url.replace(/pixeldrain\.(com|net)/i, "pixeldrain.dev")
-                        .replace(/pixel\.drain/i, "pixeldrain.dev");
+                        .replace(/pixel\.drain/i, "pixeldrain.dev")
+                        .replace(/pixeldra\.in/i, "pixeldrain.dev");
       if (devUrl !== url) {
         try {
           const devBase = await serverCheckLink(devUrl, signal);

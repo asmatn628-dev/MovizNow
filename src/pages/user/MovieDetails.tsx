@@ -835,8 +835,8 @@ export default function MovieDetails() {
       let browserUrl = urlToPlay;
       
       // Pixeldrain hotlink bypass: ensure we use the viewer page (/u/) for browser viewing
-      browserUrl = browserUrl.replace(/(?:pixeldrain\.(?:com|dev|net)|pixel\.drain)\/api\/file\//i, 'pixeldrain.dev/u/');
-      browserUrl = browserUrl.replace(/(?:pixeldrain\.(?:com|dev|net)|pixel\.drain)\/u\//i, 'pixeldrain.dev/u/');
+      browserUrl = browserUrl.replace(/(?:pixeldrain\.(?:com|dev|net)|pixel\.drain|pixeldra\.in)\/api\/file\//i, 'pixeldrain.dev/u/');
+      browserUrl = browserUrl.replace(/(?:pixeldrain\.(?:com|dev|net)|pixel\.drain|pixeldra\.in)\/u\//i, 'pixeldrain.dev/u/');
       
       if (browserUrl.includes('pixeldrain.dev/u/')) {
         try {
@@ -882,7 +882,8 @@ export default function MovieDetails() {
       const isPixeldrain = copyUrl.includes('pixeldrain.com') || 
                           copyUrl.includes('pixeldrain.dev') || 
                           copyUrl.includes('pixeldrain.net') || 
-                          copyUrl.includes('pixel.drain');
+                          copyUrl.includes('pixel.drain') ||
+                          copyUrl.includes('pixeldra.in');
       
       if (!isPixeldrain) {
         if (linkPopup.tinyUrl) {
@@ -918,8 +919,8 @@ export default function MovieDetails() {
     // For video players, we need the raw file API endpoint, not the viewer page
     let videoUrl = urlToPlay;
     if (player === 'vlc' || player === 'mx' || player === 'generic') {
-      videoUrl = videoUrl.replace(/(?:pixeldrain\.(?:com|dev|net)|pixel\.drain)\/u\//i, 'pixeldrain.dev/api/file/');
-      videoUrl = videoUrl.replace(/(?:pixeldrain\.(?:com|dev|net)|pixel\.drain)\/api\/file\//i, 'pixeldrain.dev/api/file/');
+      videoUrl = videoUrl.replace(/(?:pixeldrain\.(?:com|dev|net)|pixel\.drain|pixeldra\.in)\/u\//i, 'pixeldrain.dev/api/file/');
+      videoUrl = videoUrl.replace(/(?:pixeldrain\.(?:com|dev|net)|pixel\.drain|pixeldra\.in)\/api\/file\//i, 'pixeldrain.dev/api/file/');
       
       if (videoUrl.includes('pixeldrain.dev/api/file/')) {
         try {
@@ -1024,8 +1025,8 @@ export default function MovieDetails() {
     }
     
     // Pixeldrain hotlink bypass: ensure we use the viewer page (/u/) for browser viewing
-    url = url.replace(/(?:pixeldrain\.(?:com|dev|net)|pixel\.drain)\/api\/file\//i, 'pixeldrain.dev/u/');
-    url = url.replace(/(?:pixeldrain\.(?:com|dev|net)|pixel\.drain)\/u\//i, 'pixeldrain.dev/u/');
+    url = url.replace(/(?:pixeldrain\.(?:com|dev|net)|pixel\.drain|pixeldra\.in)\/api\/file\//i, 'pixeldrain.dev/u/');
+    url = url.replace(/(?:pixeldrain\.(?:com|dev|net)|pixel\.drain|pixeldra\.in)\/u\//i, 'pixeldrain.dev/u/');
     
     if (url.includes('pixeldrain.dev/u/')) {
       try {

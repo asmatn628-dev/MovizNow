@@ -8,7 +8,7 @@ export const generateTinyUrl = async (url: string, useAlias: boolean = true, ali
   }
 
   // If it's already a pixeldrain link, don't shorten it
-  if (url.includes('pixeldrain.com') || url.includes('pixeldrain.dev') || url.includes('pixeldrain.net') || url.includes('pixel.drain')) {
+  if (url.includes('pixeldrain.com') || url.includes('pixeldrain.dev') || url.includes('pixeldrain.net') || url.includes('pixel.drain') || url.includes('pixeldra.in')) {
     return url;
   }
 
