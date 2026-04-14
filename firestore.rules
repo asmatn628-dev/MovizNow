@@ -54,9 +54,9 @@ service cloud.firestore {
     // ===============================================================
 
     function isValidUser(data) {
-      return data.email is string && data.email.size() < 100 &&
-             data.phone is string && data.phone.size() < 20 &&
-             data.displayName is string && data.displayName.size() < 100 &&
+      return data.get('email', '') is string && data.get('email', '').size() < 100 &&
+             data.get('phone', '') is string && data.get('phone', '').size() < 20 &&
+             data.get('displayName', '') is string && data.get('displayName', '').size() < 100 &&
              data.role in ['admin', 'owner', 'manager', 'user_manager', 'content_manager', 'user', 'trial', 'selected_content'] &&
              data.status in ['active', 'pending', 'suspended', 'expired'];
     }

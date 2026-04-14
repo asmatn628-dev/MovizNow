@@ -497,8 +497,9 @@ export default function UserManagement() {
       });
     } catch (error) {
       console.error('Error updating user:', error);
-      handleFirestoreError(error, OperationType.UPDATE, `users/${editingId}`);
       setAlertConfig({ isOpen: true, title: 'Error', message: 'Failed to update user' });
+      setProcessing(prev => ({ ...prev, save: false }));
+      handleFirestoreError(error, OperationType.UPDATE, `users/${editingId}`);
     } finally {
       setProcessing(prev => ({ ...prev, save: false }));
     }
@@ -574,6 +575,8 @@ export default function UserManagement() {
     } catch (error) {
       console.error('Error in delete/suspend action:', error);
       setAlertConfig({ isOpen: true, title: 'Error', message: 'Failed to complete action' });
+      setProcessing(prev => ({ ...prev, delete: false }));
+      handleFirestoreError(error, OperationType.DELETE, `users/${currentDeleteConfirm}`);
     } finally {
       setProcessing(prev => ({ ...prev, delete: false }));
     }
@@ -651,6 +654,7 @@ export default function UserManagement() {
 
   const handleSaveAccess = async () => {
     if (!selectedUser || selectedUser.role === 'owner') return;
+    setProcessing(prev => ({ ...prev, saveAccess: true }));
     try {
       const nextAssigned = Array.from(assignedIds);
       await updateDoc(doc(db, 'users', selectedUser.uid), {
@@ -672,6 +676,10 @@ export default function UserManagement() {
     } catch (error) {
       console.error('Error updating access:', error);
       setAlertConfig({ isOpen: true, title: 'Error', message: 'Failed to update access' });
+      setProcessing(prev => ({ ...prev, saveAccess: false }));
+      handleFirestoreError(error, OperationType.UPDATE, `users/${selectedUser.uid}`);
+    } finally {
+      setProcessing(prev => ({ ...prev, saveAccess: false }));
     }
   };
 
@@ -786,8 +794,9 @@ export default function UserManagement() {
       await batch.commit();
     } catch (error) {
       console.error('Error updating users:', error);
-      handleFirestoreError(error, OperationType.UPDATE, 'users/bulk');
       setAlertConfig({ isOpen: true, title: 'Error', message: 'Failed to update users' });
+      setProcessing(prev => ({ ...prev, bulk: false }));
+      handleFirestoreError(error, OperationType.UPDATE, 'users/bulk');
     } finally {
       setProcessing(prev => ({ ...prev, bulk: false }));
     }

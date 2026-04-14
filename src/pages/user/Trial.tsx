@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { doc, updateDoc } from 'firebase/firestore';
@@ -7,23 +7,25 @@ import { Loader2, CheckCircle, AlertCircle } from 'lucide-react';
 import { Helmet } from 'react-helmet-async';
 
 export default function Trial() {
-  const { user, profile, loading } = useAuth();
+  const { user, profile, loading, authLoading } = useAuth();
   const navigate = useNavigate();
-  const [status, setStatus] = useState<'loading' | 'success' | 'error' | 'unauthorized'>('loading');
+  const [status, setStatus] = useState<'loading' | 'success' | 'error'>('loading');
   const [message, setMessage] = useState('Activating your trial...');
+  const hasActivatedRef = useRef(false);
 
   useEffect(() => {
-    if (loading) return;
+    if (loading || authLoading) return;
 
     if (!user || !profile) {
-      setStatus('unauthorized');
-      setMessage('Please log in to claim your trial.');
+      navigate('/login', { state: { from: '/trial' }, replace: true });
       return;
     }
 
+    if (hasActivatedRef.current) return;
+
     if (profile.status === 'active') {
       setStatus('error');
-      setMessage('Your account is already active.');
+      setMessage(profile.role === 'trial' ? 'You already have an active trial.' : 'Your account is already active.');
       setTimeout(() => navigate('/'), 3000);
       return;
     }
@@ -36,6 +38,7 @@ export default function Trial() {
     }
 
     const activateTrial = async () => {
+      hasActivatedRef.current = true;
       try {
         const now = new Date();
         const expiry = new Date(now);
@@ -59,13 +62,14 @@ export default function Trial() {
         setTimeout(() => navigate('/'), 3000);
       } catch (error) {
         console.error('Error activating trial:', error);
+        hasActivatedRef.current = false;
         setStatus('error');
         setMessage('Failed to activate trial. Please try again.');
       }
     };
 
     activateTrial();
-  }, [user, profile, loading, navigate]);
+  }, [user, profile, loading, authLoading, navigate]);
 
   return (
     <div className="min-h-screen bg-gray-900 flex items-center justify-center p-4">
@@ -76,7 +80,7 @@ export default function Trial() {
       <div className="bg-gray-800 rounded-xl p-8 max-w-md w-full text-center shadow-2xl border border-gray-700">
         {status === 'loading' && (
           <div className="flex flex-col items-center">
-            <Loader2 className="w-16 h-16 text-blue-500 animate-spin mb-4" />
+            <Loader2 className="w-16 h-16 text-emerald-500 animate-spin mb-4" />
             <h2 className="text-2xl font-bold text-white mb-2">Activating Trial</h2>
             <p className="text-gray-400">{message}</p>
           </div>
@@ -84,7 +88,7 @@ export default function Trial() {
 
         {status === 'success' && (
           <div className="flex flex-col items-center">
-            <CheckCircle className="w-16 h-16 text-green-500 mb-4" />
+            <CheckCircle className="w-16 h-16 text-emerald-500 mb-4" />
             <h2 className="text-2xl font-bold text-white mb-2">Success!</h2>
             <p className="text-gray-400 mb-6">{message}</p>
             <p className="text-sm text-gray-500">Redirecting to home...</p>
@@ -97,20 +101,6 @@ export default function Trial() {
             <h2 className="text-2xl font-bold text-white mb-2">Cannot Activate Trial</h2>
             <p className="text-gray-400 mb-6">{message}</p>
             <p className="text-sm text-gray-500">Redirecting to home...</p>
-          </div>
-        )}
-
-        {status === 'unauthorized' && (
-          <div className="flex flex-col items-center">
-            <AlertCircle className="w-16 h-16 text-yellow-500 mb-4" />
-            <h2 className="text-2xl font-bold text-white mb-2">Login Required</h2>
-            <p className="text-gray-400 mb-6">{message}</p>
-            <button
-              onClick={() => navigate('/login', { state: { from: '/trial' } })}
-              className="bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-6 rounded-lg transition-colors"
-            >
-              Go to Login
-            </button>
           </div>
         )}
       </div>
