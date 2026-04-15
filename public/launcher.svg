@@ -5,6 +5,5 @@
       <stop offset="100%" stop-color="#3F51B5" />
     </linearGradient>
   </defs>
-  <rect width="512" height="512" fill="#ffffff" />
   <text x="256" y="280" font-family="system-ui, -apple-system, sans-serif" font-size="90" font-weight="900" text-anchor="middle" fill="url(#launcherGrad)" letter-spacing="-2">MovizNow</text>
 </svg>
