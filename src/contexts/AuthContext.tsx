@@ -71,6 +71,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [error, setError] = useState<string | null>(null);
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   const sessionStartTimeRef = useRef<number | null>(null);
+  const justLoggedInRef = useRef(false);
+
+  const getLocalSessionId = () => {
+    try {
+      let id = localStorage.getItem('device_session_id');
+      if (!id) {
+        id = Math.random().toString(36).substring(2) + Date.now().toString(36);
+        localStorage.setItem('device_session_id', id);
+      }
+      return id;
+    } catch (e) {
+      // Fallback for incognito/strict privacy modes where localStorage throws
+      if (!(window as any)._fallbackSessionId) {
+        (window as any)._fallbackSessionId = Math.random().toString(36).substring(2) + Date.now().toString(36);
+      }
+      return (window as any)._fallbackSessionId;
+    }
+  };
 
   useEffect(() => {
     const handleOnline = () => setIsOnline(true);
@@ -183,7 +201,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               
               const isOwner = currentUser.email === 'asmatn628@gmail.com';
               const isAdmin = currentUser.email === 'asmatullah9327@gmail.com';
+              const hasAdminPrivileges = isOwner || isAdmin || data.role === 'owner' || data.role === 'admin';
               
+              // 1-Device Lock Check
+              const localSessionId = getLocalSessionId();
+              if (!hasAdminPrivileges && !justLoggedInRef.current) {
+                if (data.sessionId && data.sessionId !== localSessionId) {
+                  console.log("Logged in from another device. Logging out.");
+                  signOut(auth);
+                  setError("You have been logged out because your account was accessed from another device.");
+                  return;
+                } else if (!data.sessionId) {
+                  updateDoc(userRef, { sessionId: localSessionId }).catch(console.error);
+                  data.sessionId = localSessionId;
+                }
+              }
+
               // Auto-expire logic
               const now = new Date();
               if (data.status === 'active' && data.expiryDate && data.role !== 'owner') {
@@ -251,6 +284,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 timeSpent: 0,
                 expiryDate: isOwner ? 'Lifetime' : null,
                 hasPassword: hasPassword,
+                sessionId: getLocalSessionId(),
               };
 
               try {
@@ -332,19 +366,28 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const signInWithGoogle = async () => {
     try {
       setError(null);
+      justLoggedInRef.current = true;
       const provider = new GoogleAuthProvider();
       const result = await signInWithPopup(auth, provider);
       
       // Check if we need to link phone/email in Firestore
       const userRef = doc(db, 'users', result.user.uid);
       const snap = await getDoc(userRef);
+      const localSessionId = getLocalSessionId();
+      
       if (snap.exists()) {
         const data = snap.data();
+        const updates: any = { sessionId: localSessionId };
         if (!data.email && result.user.email) {
-          await updateDoc(userRef, { email: result.user.email });
+          updates.email = result.user.email;
         }
+        try {
+          await updateDoc(userRef, updates);
+        } catch (e) {}
       }
+      setTimeout(() => { justLoggedInRef.current = false; }, 10000);
     } catch (err: any) {
+      justLoggedInRef.current = false;
       console.error("Login error:", err);
       setError(err.message || "Failed to login");
     }
@@ -353,8 +396,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const signInWithEmail = async (email: string, password: string) => {
     try {
       setError(null);
-      await signInWithEmailAndPassword(auth, email, password);
+      justLoggedInRef.current = true;
+      const result = await signInWithEmailAndPassword(auth, email, password);
+      try {
+        await updateDoc(doc(db, 'users', result.user.uid), { sessionId: getLocalSessionId() });
+      } catch (e) {}
+      setTimeout(() => { justLoggedInRef.current = false; }, 10000);
     } catch (err: any) {
+      justLoggedInRef.current = false;
       console.error("Email login error:", err);
       if (err.code === 'auth/invalid-credential' || err.code === 'auth/wrong-password') {
         setError("Invalid password. Try again or reset your password.");
@@ -390,6 +439,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         throw new Error("Phone number is required for new account creation.");
       }
 
+      justLoggedInRef.current = true;
       const userCredential = await createUserWithEmailAndPassword(auth, email, password);
       await updateProfile(userCredential.user, { displayName });
       
@@ -400,7 +450,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           } catch (e) {}
         }, 2000);
       }
+      setTimeout(() => { justLoggedInRef.current = false; }, 10000);
     } catch (err: any) {
+      justLoggedInRef.current = false;
       console.error("Email signup error:", err);
       setError(err.message || "Failed to sign up");
       throw err;
@@ -437,11 +489,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
       }
 
+      justLoggedInRef.current = true;
       const userCredential = await createUserWithEmailAndPassword(auth, signupEmail, password);
       await updateProfile(userCredential.user, { displayName });
       
-      // The onAuthStateChanged listener will handle profile creation in Firestore
-      // Wait a moment for it to create, then update with phone if available
       if (standardizedPhone) {
         setTimeout(async () => {
           try {
@@ -449,7 +500,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           } catch (e) {}
         }, 2000);
       }
+      setTimeout(() => { justLoggedInRef.current = false; }, 10000);
     } catch (err: any) {
+      justLoggedInRef.current = false;
       console.error("Signup error:", err);
       if (err.code === 'auth/email-already-in-use') {
         setError("This account is already registered.");

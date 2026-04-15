@@ -24,6 +24,7 @@ export interface UserProfile {
   lastActive?: string; // ISO string
   requirePasswordReset?: boolean;
   hasPassword?: boolean;
+  sessionId?: string;
 }
 
 export interface AppNotification {
