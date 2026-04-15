@@ -240,7 +240,7 @@ const QualityInputs: React.FC<QualityInputsProps> = ({ links, onChange, droppabl
 export default function ContentManagement() {
   const { profile, user } = useAuth();
   const { settings } = useSettings();
-  const { contentList, genres, languages, qualities, loading: contextLoading } = useContent();
+  const { contentList, genres, languages, qualities, loading: contextLoading, updateSearchIndex } = useContent();
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -707,6 +707,9 @@ export default function ContentManagement() {
         await addDoc(collection(db, 'content'), data);
       }
       
+      // Trigger search index update
+      updateSearchIndex();
+      
       setIsModalOpen(false);
       resetForm();
     } catch (error) {
@@ -825,8 +828,8 @@ export default function ContentManagement() {
     }
 
     if (activeType === 'movie') {
-      setMovieLinks(() => {
-        const newLinks: QualityLinks = [];
+      setMovieLinks(prev => {
+        const currentLinks = [...prev];
 
         const parseSizeInMB = (size: string, unit: string) => {
           if (!size) return 0;
@@ -838,20 +841,23 @@ export default function ContentManagement() {
         };
 
         links.forEach(newLink => {
-          newLinks.push(newLink);
+          // Find an existing link with same name and empty URL
+          const emptyIdx = currentLinks.findIndex(l => l.name === newLink.name && (!l.url || !l.url.trim()));
+          if (emptyIdx !== -1) {
+            currentLinks[emptyIdx] = newLink;
+          } else {
+            currentLinks.push(newLink);
+          }
         });
 
-        newLinks.sort((a, b) => parseSizeInMB(a.size, a.unit) - parseSizeInMB(b.size, b.unit));
-        return newLinks;
+        currentLinks.sort((a, b) => parseSizeInMB(a.size, a.unit) - parseSizeInMB(b.size, b.unit));
+        return currentLinks;
       });
-      setAlertConfig({ isOpen: true, title: 'Success', message: `Replaced movie links with ${links.length} new links.` });
+      setAlertConfig({ isOpen: true, title: 'Success', message: `Added/Merged ${links.length} movie links.` });
     } else {
       // Series logic
       const updatedSeasons = [...seasons];
       
-      // Track which episodes/seasons we've already cleared to avoid clearing them multiple times for each link
-      const clearedEpisodes = new Set<string>();
-
       links.forEach(link => {
         const targetSeason = link.season || metadata?.season || 1;
         const targetEpisode = link.episode || metadata?.episode; // if undefined, it's a full season
@@ -870,21 +876,32 @@ export default function ContentManagement() {
           seasonIdx = updatedSeasons.findIndex(s => s.seasonNumber === targetSeason);
         }
 
-        const episodeKey = `${targetSeason}-${targetEpisode ?? 'full'}`;
-
         if (targetEpisode === undefined || link.isFullSeasonMKV || link.isFullSeasonZIP) {
           // Full season
           const isZip = link.isFullSeasonZIP || link.url.toLowerCase().includes('.zip');
           
-          // Clear previous links for this season if not already cleared
-          if (!clearedEpisodes.has(episodeKey + (isZip ? '-zip' : '-mkv'))) {
-            if (isZip) updatedSeasons[seasonIdx].zipLinks = [];
-            else updatedSeasons[seasonIdx].mkvLinks = [];
-            clearedEpisodes.add(episodeKey + (isZip ? '-zip' : '-mkv'));
+          const updatedSeason = { ...updatedSeasons[seasonIdx] };
+          const targetLinks = isZip ? [...updatedSeason.zipLinks] : [...(updatedSeason.mkvLinks || [])];
+          
+          // Merge logic: replace if name matches and URL is empty, otherwise add
+          // Special case for MKV Full Season: match "720p" if new is "720p HEVC"
+          const emptyIdx = targetLinks.findIndex(l => {
+            const isEmpty = !l.url || !l.url.trim();
+            if (!isEmpty) return false;
+            if (l.name === link.name) return true;
+            if (!isZip && link.name.endsWith(' HEVC') && l.name === link.name.replace(' HEVC', '')) return true;
+            return false;
+          });
+          if (emptyIdx !== -1) {
+            targetLinks[emptyIdx] = link;
+          } else {
+            targetLinks.push(link);
           }
 
-          const targetLinks = isZip ? updatedSeasons[seasonIdx].zipLinks : (updatedSeasons[seasonIdx].mkvLinks || []);
-          targetLinks.push(link);
+          if (isZip) updatedSeason.zipLinks = targetLinks;
+          else updatedSeason.mkvLinks = targetLinks;
+          
+          updatedSeasons[seasonIdx] = updatedSeason;
         } else {
           // Episode logic
           let epIdx = updatedSeasons[seasonIdx].episodes.findIndex(e => e.episodeNumber === targetEpisode);
@@ -895,18 +912,31 @@ export default function ContentManagement() {
               title: `Episode ${targetEpisode}`,
               links: []
             };
-            updatedSeasons[seasonIdx].episodes.push(newEpisode);
-            updatedSeasons[seasonIdx].episodes.sort((a, b) => a.episodeNumber - b.episodeNumber);
-            epIdx = updatedSeasons[seasonIdx].episodes.findIndex(e => e.episodeNumber === targetEpisode);
+            const updatedEpisodes = [...updatedSeasons[seasonIdx].episodes, newEpisode];
+            updatedEpisodes.sort((a, b) => a.episodeNumber - b.episodeNumber);
+            
+            const updatedSeason = { ...updatedSeasons[seasonIdx], episodes: updatedEpisodes };
+            updatedSeasons[seasonIdx] = updatedSeason;
+            epIdx = updatedEpisodes.findIndex(e => e.episodeNumber === targetEpisode);
           }
 
-          // Clear previous links for this episode if not already cleared
-          if (!clearedEpisodes.has(episodeKey)) {
-            updatedSeasons[seasonIdx].episodes[epIdx].links = [];
-            clearedEpisodes.add(episodeKey);
+          const updatedSeason = { ...updatedSeasons[seasonIdx] };
+          const updatedEpisodes = [...updatedSeason.episodes];
+          const updatedEpisode = { ...updatedEpisodes[epIdx] };
+          const targetLinks = [...updatedEpisode.links];
+          
+          // Merge logic: replace if name matches and URL is empty, otherwise add
+          const emptyIdx = targetLinks.findIndex(l => l.name === link.name && (!l.url || !l.url.trim()));
+          if (emptyIdx !== -1) {
+            targetLinks[emptyIdx] = link;
+          } else {
+            targetLinks.push(link);
           }
 
-          updatedSeasons[seasonIdx].episodes[epIdx].links.push(link);
+          updatedEpisode.links = targetLinks;
+          updatedEpisodes[epIdx] = updatedEpisode;
+          updatedSeason.episodes = updatedEpisodes;
+          updatedSeasons[seasonIdx] = updatedSeason;
         }
       });
 
@@ -929,7 +959,7 @@ export default function ContentManagement() {
       });
       
       setSeasons(updatedSeasons);
-      setAlertConfig({ isOpen: true, title: 'Success', message: `Replaced specific episode/season links with ${links.length} new links.` });
+      setAlertConfig({ isOpen: true, title: 'Success', message: `Added/Merged ${links.length} episode/season links.` });
     }
   };
 

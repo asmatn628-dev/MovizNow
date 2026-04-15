@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { db } from '../../firebase';
-import { collection, addDoc, deleteDoc, doc, updateDoc, onSnapshot, writeBatch, getDocs } from 'firebase/firestore';
+import { collection, addDoc, deleteDoc, doc, updateDoc, writeBatch } from 'firebase/firestore';
 import { Quality } from '../../types';
 import { Plus, Edit2, Trash2, X, Check, Search, GripVertical, Loader2 } from 'lucide-react';
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
@@ -8,8 +8,10 @@ import ConfirmModal from '../../components/ConfirmModal';
 import { handleFirestoreError, OperationType } from '../../utils/firestoreErrorHandler';
 import { useModalBehavior } from '../../hooks/useModalBehavior';
 
+import { useContent } from '../../contexts/ContentContext';
+
 export default function QualityManagement() {
-  const [qualities, setQualities] = useState<Quality[]>([]);
+  const { qualities, updateSearchIndex } = useContent();
   const [newQuality, setNewQuality] = useState('');
   const [newColor, setNewColor] = useState('#10b981');
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -22,33 +24,7 @@ export default function QualityManagement() {
   useModalBehavior(!!deleteId, () => setDeleteId(null));
 
   useEffect(() => {
-    // Load from cache initially
-    const cachedQualities = localStorage.getItem('qualities_cache');
-    if (cachedQualities) {
-      setQualities(JSON.parse(cachedQualities));
-      setLoading(false);
-    }
-
-    const unsub = onSnapshot(collection(db, 'qualities'), (snapshot) => {
-      const data = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() } as Quality));
-      const sortedData = data.sort((a, b) => {
-        if (a.order !== undefined && b.order !== undefined) return a.order - b.order;
-        if (a.order !== undefined) return -1;
-        if (b.order !== undefined) return 1;
-        return a.name.localeCompare(b.name);
-      });
-      setQualities(sortedData);
-      localStorage.setItem('qualities_cache', JSON.stringify(sortedData));
-      setLoading(false);
-    }, (error) => {
-      console.error("Qualities snapshot error:", error);
-      setLoading(false);
-      if (navigator.onLine) {
-        handleFirestoreError(error, OperationType.LIST, 'qualities');
-      }
-    });
-
-    return () => unsub();
+    setLoading(false);
   }, []);
 
   const [processing, setProcessing] = useState<Record<string, boolean>>({});
@@ -59,8 +35,7 @@ export default function QualityManagement() {
     setProcessing(prev => ({ ...prev, add: true }));
     try {
       const maxOrder = qualities.length > 0 ? Math.max(...qualities.map(q => q.order || 0)) : 0;
-      const docRef = await addDoc(collection(db, 'qualities'), { name: newQuality.trim(), order: maxOrder + 1, color: newColor });
-      setQualities([...qualities, { id: docRef.id, name: newQuality.trim(), order: maxOrder + 1, color: newColor }]);
+      await addDoc(collection(db, 'qualities'), { name: newQuality.trim(), order: maxOrder + 1, color: newColor });
       setNewQuality('');
       setNewColor('#10b981');
     } finally {
@@ -73,7 +48,6 @@ export default function QualityManagement() {
     setProcessing(prev => ({ ...prev, delete: true }));
     try {
       await deleteDoc(doc(db, 'qualities', deleteId));
-      setQualities(qualities.filter(q => q.id !== deleteId));
     } finally {
       setProcessing(prev => ({ ...prev, delete: false }));
     }
@@ -90,7 +64,6 @@ export default function QualityManagement() {
     setProcessing(prev => ({ ...prev, edit: true }));
     try {
       await updateDoc(doc(db, 'qualities', editingId), { name: editName.trim(), color: editColor });
-      setQualities(qualities.map(q => q.id === editingId ? { ...q, name: editName.trim(), color: editColor } : q));
       setEditingId(null);
       setEditName('');
       setEditColor('#10b981');
@@ -106,9 +79,6 @@ export default function QualityManagement() {
     const items = Array.from<Quality>(qualities);
     const [reorderedItem] = items.splice(result.source.index, 1);
     items.splice(result.destination.index, 0, reorderedItem);
-
-    // Optimistic update
-    setQualities(items);
 
     // Batch update order in Firestore
     const batch = writeBatch(db);

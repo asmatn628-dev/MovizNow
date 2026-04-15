@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { db } from '../../firebase';
+import { useContent } from '../../contexts/ContentContext';
 import { collection, onSnapshot, doc, updateDoc, getDoc } from 'firebase/firestore';
 import { Content, Season, QualityLinks, LinkDef, ErrorLinkInfo, Language, Quality } from '../../types';
 import { AlertTriangle, Edit2, ExternalLink, RefreshCw, X, Save, CheckCircle2, Filter, ArrowUpDown, Search, Trash2, Plus, ClipboardPaste, StopCircle } from 'lucide-react';
@@ -30,7 +31,7 @@ const parseLinks = (linksStr: string | undefined): QualityLinks => {
 };
 
 export default function ErrorLinks() {
-  const [contentList, setContentList] = useState<Content[]>([]);
+  const { contentList, languages, qualities, loading: contentLoading } = useContent();
   const [loading, setLoading] = useState(true);
   
   // Client-side/Deep Scan State
@@ -45,8 +46,6 @@ export default function ErrorLinks() {
     const cached = localStorage.getItem('moviznow_error_links');
     return cached ? JSON.parse(cached) : [];
   });
-  const [languages, setLanguages] = useState<Language[]>([]);
-  const [qualities, setQualities] = useState<Quality[]>([]);
 
   const [isLinkCheckerModalOpen, setIsLinkCheckerModalOpen] = useState(false);
   const [modalInput, setModalInput] = useState('');
@@ -153,28 +152,16 @@ export default function ErrorLinks() {
     });
 
   useEffect(() => {
-    const unsubContent = onSnapshot(collection(db, 'content'), (snapshot) => {
-      const data = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() } as Content));
-      setContentList(data);
-      setLoading(false);
-    }, (error) => {
-      console.error("Content snapshot error:", error);
-      setLoading(false);
-      handleFirestoreError(error, OperationType.LIST, 'content');
-    });
+    setLoading(contentLoading);
+  }, [contentLoading]);
 
-    const unsubLanguages = onSnapshot(collection(db, 'languages'), (snapshot) => {
-      setLanguages(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Language)));
-    });
-
-    const unsubQualities = onSnapshot(collection(db, 'qualities'), (snapshot) => {
-      setQualities(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Quality)));
+  useEffect(() => {
+    const unsubErrorLinks = onSnapshot(collection(db, 'error_links'), (snapshot) => {
+      setErrorLinks(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as any as ErrorLinkInfo)));
     });
 
     return () => {
-      unsubContent();
-      unsubLanguages();
-      unsubQualities();
+      unsubErrorLinks();
     };
   }, []);
 

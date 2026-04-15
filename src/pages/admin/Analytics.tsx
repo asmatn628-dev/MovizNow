@@ -1,23 +1,33 @@
 import { useState, useEffect } from 'react';
-import { collection, getDocs } from 'firebase/firestore';
+import { collection, getDocs, query, orderBy, limit } from 'firebase/firestore';
 import { db } from '../../firebase';
 import { UserProfile } from '../../types';
 import { BarChart3, Users, Clock, ExternalLink, Info } from 'lucide-react';
 import { handleFirestoreError, OperationType } from '../../utils/firestoreErrorHandler';
 
 export default function Analytics() {
-  const [users, setUsers] = useState<UserProfile[]>([]);
+  const [topUsersBySessions, setTopUsersBySessions] = useState<UserProfile[]>([]);
+  const [topUsersByTime, setTopUsersByTime] = useState<UserProfile[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const fetchData = async () => {
       setLoading(true);
       try {
-        // Fetch users for top users (based on lifetime stats stored in user profiles)
         const usersRef = collection(db, 'users');
-        const usersSnapshot = await getDocs(usersRef);
-        const usersData = usersSnapshot.docs.map(doc => ({ uid: doc.id, ...doc.data() } as UserProfile));
-        setUsers(usersData);
+        
+        // Fetch top 10 users by sessions
+        const qSessions = query(usersRef, orderBy('sessionsCount', 'desc'), limit(10));
+        const sessionsSnapshot = await getDocs(qSessions);
+        const sessionsData = sessionsSnapshot.docs.map(doc => ({ uid: doc.id, ...doc.data() } as UserProfile));
+        setTopUsersBySessions(sessionsData);
+
+        // Fetch top 10 users by time spent
+        const qTime = query(usersRef, orderBy('timeSpent', 'desc'), limit(10));
+        const timeSnapshot = await getDocs(qTime);
+        const timeData = timeSnapshot.docs.map(doc => ({ uid: doc.id, ...doc.data() } as UserProfile));
+        setTopUsersByTime(timeData);
+
       } catch (error) {
         console.error('Error fetching analytics:', error);
         handleFirestoreError(error, OperationType.LIST, 'users');
@@ -36,16 +46,6 @@ export default function Analytics() {
       </div>
     );
   }
-
-  // Top Users by lifetime sessions
-  const topUsersBySessions = [...users]
-    .sort((a, b) => (b.sessionsCount || 0) - (a.sessionsCount || 0))
-    .slice(0, 10);
-    
-  // Top Users by lifetime time spent
-  const topUsersByTime = [...users]
-    .sort((a, b) => (b.timeSpent || 0) - (a.timeSpent || 0))
-    .slice(0, 10);
 
   return (
     <div className="space-y-8">

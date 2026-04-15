@@ -3,13 +3,16 @@ import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { ref, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
 import { db, storage, auth } from '../../firebase';
 import { useAuth } from '../../contexts/AuthContext';
-import { Save, AlertCircle, GripVertical, Plus, Trash2, Layout, Wallet, Phone, Image as ImageIcon, Settings as SettingsIcon } from 'lucide-react';
+import { useContent } from '../../contexts/ContentContext';
+import { Save, AlertCircle, GripVertical, Plus, Trash2, Layout, Wallet, Phone, Image as ImageIcon, Settings as SettingsIcon, RefreshCw } from 'lucide-react';
+import { clsx } from 'clsx';
 import { Navigate } from 'react-router-dom';
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
 import { AppSettings, BankAccount } from '../../types';
 
 export default function AdminSettings() {
   const { profile } = useAuth();
+  const { updateSearchIndex } = useContent();
   const [settings, setSettings] = useState<AppSettings>({
     headerText: 'MovizNow',
     membershipFee: 200,
@@ -39,6 +42,7 @@ export default function AdminSettings() {
   const [saving, setSaving] = useState(false);
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [isUpdatingIndex, setIsUpdatingIndex] = useState(false);
 
   useEffect(() => {
     const fetchSettings = async () => {
@@ -80,6 +84,20 @@ export default function AdminSettings() {
       setError('Failed to save settings.');
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleUpdateIndex = async () => {
+    setIsUpdatingIndex(true);
+    try {
+      await updateSearchIndex();
+      setSuccess(true);
+      setTimeout(() => setSuccess(false), 3000);
+    } catch (err) {
+      console.error('Error updating search index:', err);
+      setError('Failed to update search index.');
+    } finally {
+      setIsUpdatingIndex(false);
     }
   };
 
@@ -141,9 +159,20 @@ export default function AdminSettings() {
 
   return (
     <div className="max-w-4xl mx-auto pb-20">
-      <div className="mb-8">
-        <h1 className="text-2xl font-bold text-zinc-900 dark:text-white">App Settings</h1>
-        <p className="text-zinc-500 dark:text-zinc-400 mt-1">Manage global application settings</p>
+      <div className="mb-8 flex justify-between items-center">
+        <div>
+          <h1 className="text-2xl font-bold text-zinc-900 dark:text-white">App Settings</h1>
+          <p className="text-zinc-500 dark:text-zinc-400 mt-1">Manage global application settings</p>
+        </div>
+        <button
+          type="button"
+          onClick={handleUpdateIndex}
+          disabled={isUpdatingIndex}
+          className="flex items-center gap-2 px-4 py-2 bg-emerald-500 hover:bg-emerald-600 disabled:bg-emerald-300 text-white rounded-lg transition-colors text-sm font-medium shadow-sm"
+        >
+          <RefreshCw className={clsx("w-4 h-4", isUpdatingIndex && "animate-spin")} />
+          {isUpdatingIndex ? 'Updating Index...' : 'Update Search Index'}
+        </button>
       </div>
 
       <form onSubmit={handleSave} className="space-y-8">

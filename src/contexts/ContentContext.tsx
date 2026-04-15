@@ -13,6 +13,7 @@ interface ContentContextType {
   qualities: Quality[];
   loading: boolean;
   isOffline: boolean;
+  updateSearchIndex: () => Promise<void>;
 }
 
 const ContentContext = createContext<ContentContextType | undefined>(undefined);
@@ -82,24 +83,6 @@ export function ContentProvider({ children }: { children: React.ReactNode }) {
         unsubContent = onSnapshot(q, (snapshot) => {
           const rawContent = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() } as Content));
           
-          const searchIndex = rawContent.filter(c => c.status === 'published').map(c => {
-            let seasons: any[] = [];
-            if (c.seasons) {
-              try {
-                seasons = Array.isArray(c.seasons) ? c.seasons : JSON.parse(c.seasons as string);
-              } catch (e) {
-                console.error("Failed to parse seasons for search index", e);
-              }
-            }
-            const seasonsInfo = seasons.map(s => {
-              const lastEp = s.episodes && s.episodes.length > 0 ? s.episodes[s.episodes.length - 1].episodeNumber : '';
-              return `${s.seasonNumber}:${lastEp}`;
-            }).join(',') || '';
-            
-            return `${c.id}|${c.title}|${c.year}|${c.posterUrl}|${c.type}|${c.qualityId || ''}|${c.languageIds?.join(',') || ''}|${c.genreIds?.join(',') || ''}|${c.createdAt}|${c.order ?? ''}|${seasonsInfo}`;
-          });
-          setDoc(doc(db, 'metadata', 'search_index'), { data: searchIndex }).catch(e => console.error("Failed to update search_index", e));
-
           try {
             const sanitizedContent = rawContent.map(c => {
               let minimalSeasons: any[] = [];
@@ -258,8 +241,64 @@ export function ContentProvider({ children }: { children: React.ReactNode }) {
     };
   }, []);
 
+  const updateSearchIndex = async () => {
+    if (contentList.length === 0) return;
+    
+    const searchIndex = contentList.filter(c => c.status === 'published').map(c => {
+      let seasons: any[] = [];
+      if (c.seasons) {
+        try {
+          seasons = Array.isArray(c.seasons) ? c.seasons : JSON.parse(c.seasons as string);
+        } catch (e) {
+          console.error("Failed to parse seasons for search index", e);
+        }
+      }
+      const seasonsInfo = seasons.map(s => {
+        const lastEp = s.episodes && s.episodes.length > 0 ? s.episodes[s.episodes.length - 1].episodeNumber : '';
+        return `${s.seasonNumber}:${lastEp}`;
+      }).join(',') || '';
+      
+      return `${c.id}|${c.title}|${c.year}|${c.posterUrl}|${c.type}|${c.qualityId || ''}|${c.languageIds?.join(',') || ''}|${c.genreIds?.join(',') || ''}|${c.createdAt}|${c.order ?? ''}|${seasonsInfo}`;
+    });
+
+    try {
+      await setDoc(doc(db, 'metadata', 'search_index'), { data: searchIndex });
+      console.log("Search index updated successfully");
+    } catch (e) {
+      console.error("Failed to update search_index", e);
+    }
+  };
+
+  // Debounced search index update to prevent excessive writes
+  useEffect(() => {
+    const userId = auth.currentUser?.uid;
+    if (!userId || contentList.length === 0) return;
+
+    let timer: NodeJS.Timeout;
+
+    const checkRoleAndUpdate = async () => {
+      try {
+        const userDoc = await getDoc(doc(db, 'users', userId));
+        if (userDoc.exists()) {
+          const role = userDoc.data().role;
+          if (role === 'admin' || role === 'owner') {
+            // Debounce the update by 30 seconds
+            timer = setTimeout(() => {
+              updateSearchIndex();
+            }, 30000);
+          }
+        }
+      } catch (e) {}
+    };
+
+    checkRoleAndUpdate();
+    return () => {
+      if (timer) clearTimeout(timer);
+    };
+  }, [contentList.length]);
+
   return (
-    <ContentContext.Provider value={{ contentList, genres, languages, qualities, loading, isOffline }}>
+    <ContentContext.Provider value={{ contentList, genres, languages, qualities, loading, isOffline, updateSearchIndex }}>
       {children}
     </ContentContext.Provider>
   );

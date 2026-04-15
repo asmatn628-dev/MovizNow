@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
 import { db } from '../../firebase';
-import { collection, onSnapshot, query, orderBy, deleteDoc, doc, updateDoc, where, getDocs } from 'firebase/firestore';
+import { collection, onSnapshot, query, orderBy, deleteDoc, doc, updateDoc } from 'firebase/firestore';
 import { useAuth } from '../../contexts/AuthContext';
+import { useContent } from '../../contexts/ContentContext';
 import { Film, Search, Clock, CheckCircle2, XCircle, MessageCircle, Trash2, Tv, Filter, User, Mail, Calendar, ArrowUp, ArrowDown, Plus, X, Eye, MessageSquare } from 'lucide-react';
 import { clsx } from 'clsx';
 import { handleFirestoreError, OperationType } from '../../utils/firestoreErrorHandler';
@@ -26,8 +27,8 @@ interface MovieRequest {
 
 export default function MovieRequestsManagement() {
   const { profile } = useAuth();
+  const { contentList: allContent } = useContent();
   const [requests, setRequests] = useState<MovieRequest[]>([]);
-  const [allContent, setAllContent] = useState<any[]>([]);
   const [search, setSearch] = useState(() => sessionStorage.getItem('requests_mgmt_search') || '');
   const [contentSearch, setContentSearch] = useState('');
   const [loading, setLoading] = useState(true);
@@ -69,18 +70,6 @@ export default function MovieRequestsManagement() {
 
     return () => unsub();
   }, [sortBy, sortOrder]);
-
-  useEffect(() => {
-    const fetchContent = async () => {
-      try {
-        const snapshot = await getDocs(collection(db, 'content'));
-        setAllContent(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-      } catch (error) {
-        console.error("Error fetching content:", error);
-      }
-    };
-    fetchContent();
-  }, []);
 
   const handleUpdateStatus = async (requestId: string, status: 'completed' | 'rejected' | 'pending') => {
     try {

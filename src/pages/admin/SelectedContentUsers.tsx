@@ -1,16 +1,17 @@
 import { useState, useEffect, useMemo } from 'react';
 import { db } from '../../firebase';
-import { collection, doc, updateDoc, onSnapshot, getDocs, writeBatch, query } from 'firebase/firestore';
+import { collection, doc, updateDoc, onSnapshot, query } from 'firebase/firestore';
 import { UserProfile, Content, Role, Status } from '../../types';
 import { Settings, X, Check, Search } from 'lucide-react';
 import AlertModal from '../../components/AlertModal';
 import { handleFirestoreError, OperationType } from '../../utils/firestoreErrorHandler';
 import { smartSearch } from '../../utils/searchUtils';
 import { useModalBehavior } from '../../hooks/useModalBehavior';
+import { useContent } from '../../contexts/ContentContext';
 
 export default function SelectedContentUsers() {
   const [users, setUsers] = useState<UserProfile[]>([]);
-  const [contentList, setContentList] = useState<Content[]>([]);
+  const { contentList } = useContent();
   const [selectedUser, setSelectedUser] = useState<UserProfile | null>(null);
   const [assignedIds, setAssignedIds] = useState<Set<string>>(new Set());
   const [userSearchTerm, setUserSearchTerm] = useState('');
@@ -74,18 +75,6 @@ export default function SelectedContentUsers() {
     }, (error) => {
       console.error("Error fetching users:", error);
       handleFirestoreError(error, OperationType.LIST, 'users');
-    });
-    return () => unsubscribe();
-  }, []);
-
-  useEffect(() => {
-    const q = query(collection(db, 'content'));
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const data = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() } as Content));
-      setContentList(data.sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime()));
-    }, (error) => {
-      console.error("Content fetch error:", error);
-      handleFirestoreError(error, OperationType.LIST, 'content');
     });
     return () => unsubscribe();
   }, []);

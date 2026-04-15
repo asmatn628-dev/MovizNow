@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { db } from '../../firebase';
 import { safeStorage } from '../../utils/safeStorage';
-import { collection, doc, updateDoc, onSnapshot, query, where, getDocs, writeBatch, deleteDoc, setDoc } from 'firebase/firestore';
+import { collection, doc, updateDoc, onSnapshot, query, where, getDocs, writeBatch, deleteDoc, setDoc, limit } from 'firebase/firestore';
 import { UserProfile, Role, Status, AnalyticsEvent } from '../../types';
 import { Edit2, MessageCircle, X, Check, Search, ArrowUp, ArrowDown, Clock, Film, Trash2, Tv, Plus, Loader2, ArrowRight, UserPlus, Calendar, Heart, Bookmark, Save, Lock, Layers, Phone } from 'lucide-react';
 import { format, formatDistanceToNow } from 'date-fns';
@@ -15,6 +15,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { smartSearch } from '../../utils/searchUtils';
 import { useModalBehavior } from '../../hooks/useModalBehavior';
 import { useSettings } from '../../contexts/SettingsContext';
+import { useContent } from '../../contexts/ContentContext';
 import { PhoneWhitelistManager } from '../../components/PhoneWhitelistManager';
 
 import { useLocation, useNavigate } from 'react-router-dom';
@@ -43,6 +44,7 @@ const standardizePhone = (phone: string) => {
 export default function UserManagement() {
   const { profile, findUsersByEmailOrPhone } = useAuth();
   const { settings } = useSettings();
+  const { contentList } = useContent();
   const location = useLocation();
   const navigate = useNavigate();
   const searchParams = new URLSearchParams(location.search);
@@ -177,7 +179,7 @@ export default function UserManagement() {
       }
     }
 
-    let q = collection(db, 'users') as any;
+    let q = query(collection(db, 'users')) as any;
     if ((profile?.role as string) === 'user_manager' || (profile?.role as string) === 'manager') {
       q = query(collection(db, 'users'), where('managedBy', '==', profile.uid));
     } else if ((profile?.role === 'admin' || profile?.role === 'owner') && managedByFilter) {
@@ -200,11 +202,14 @@ export default function UserManagement() {
     return () => unsub();
   }, [profile, managedByFilter]);
 
+  const hasRunAutoUpdates = React.useRef(false);
+
   // Separate effect for auto-updates and caching to avoid blocking the main listener
   useEffect(() => {
-    if (loading || users.length === 0) return;
+    if (loading || users.length === 0 || hasRunAutoUpdates.current) return;
 
     const runAutoUpdates = async () => {
+      hasRunAutoUpdates.current = true;
       const now = new Date();
       let batches = [writeBatch(db)];
       let currentBatchIndex = 0;
@@ -252,14 +257,17 @@ export default function UserManagement() {
           console.error("Error committing auto-updates batch:", error);
         }
       }
-
-      // Update cache
-      const cacheKey = `cached_users_${profile?.uid}_${managedByFilter || 'all'}`;
-      safeStorage.setItem(cacheKey, JSON.stringify(users));
     };
 
     const timer = setTimeout(runAutoUpdates, 3000); // Wait 3s after load/change
     return () => clearTimeout(timer);
+  }, [users, loading, profile, managedByFilter]);
+
+  // Separate effect for caching users
+  useEffect(() => {
+    if (loading || users.length === 0) return;
+    const cacheKey = `cached_users_${profile?.uid}_${managedByFilter || 'all'}`;
+    safeStorage.setItem(cacheKey, JSON.stringify(users));
   }, [users, loading, profile, managedByFilter]);
 
   useEffect(() => {
@@ -283,17 +291,10 @@ export default function UserManagement() {
   }, [profile]);
 
   useEffect(() => {
-    const fetchContent = async () => {
-      try {
-        const snapshot = await getDocs(collection(db, 'content'));
-        const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as any));
-        setAllContent(data.sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime()));
-      } catch (error) {
-        console.error("Error fetching content:", error);
-      }
-    };
-    fetchContent();
-  }, []);
+    if (contentList && contentList.length > 0) {
+      setAllContent([...contentList].sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime()));
+    }
+  }, [contentList]);
 
   const fetchUserAnalytics = async (user: UserProfile) => {
     setIsAnalyticsLoading(true);
@@ -301,17 +302,22 @@ export default function UserManagement() {
     setUserRequests([]);
     setAssignedContentTitles([]);
     try {
-      // Parallelize all analytics fetches
-      const [requestsSnapshot, contentSnapshot] = await Promise.all([
-        getDocs(query(collection(db, 'movie_requests'), where('userId', '==', user.uid))),
-        user.role === 'selected_content' && user.assignedContent && user.assignedContent.length > 0
-          ? getDocs(collection(db, 'content'))
-          : Promise.resolve(null)
-      ]);
-
-      // Process Movie Requests
+      // Fetch movie requests
+      const requestsSnapshot = await getDocs(query(collection(db, 'movie_requests'), where('userId', '==', user.uid)));
       const requestsData = requestsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       setUserRequests(requestsData);
+
+      // Process Assigned Content Titles using contentList from context
+      if (user.role === 'selected_content' && user.assignedContent && user.assignedContent.length > 0) {
+        const contentMap = new Map<string, string>();
+        contentList.forEach(c => {
+          contentMap.set(c.id, c.title);
+        });
+        const titles = user.assignedContent.map(id => contentMap.get(id) || 'Unknown Content');
+        setAssignedContentTitles(titles);
+      } else {
+        setAssignedContentTitles([]);
+      }
 
       // Process Analytics (Migrated to GA4)
       const newAnalytics = { 
@@ -324,18 +330,6 @@ export default function UserManagement() {
       setUserAnalytics(newAnalytics);
       safeStorage.setItem(`user_analytics_${user.uid}`, JSON.stringify(newAnalytics));
 
-      // Process Assigned Content Titles
-      if (contentSnapshot) {
-        const titles: string[] = [];
-        contentSnapshot.forEach(doc => {
-          if (user.assignedContent!.includes(doc.id)) {
-            titles.push(doc.data().title);
-          }
-        });
-        setAssignedContentTitles(titles);
-      } else {
-        setAssignedContentTitles([]);
-      }
     } catch (error) {
       console.error("Error fetching user analytics:", error);
       handleFirestoreError(error, OperationType.LIST, 'analytics/content');

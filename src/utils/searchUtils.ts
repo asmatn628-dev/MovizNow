@@ -96,8 +96,31 @@ export const smartSearch = <T extends Record<string, any>>(
 
     let score = 0;
     if (isMatch) {
+      const q = query.toLowerCase();
+      
+      // Check individual fields for exact or startsWith matches to give higher precision
+      let exactFieldMatch = false;
+      let startsWithFieldMatch = false;
+      
+      for (const f of fields) {
+        const val = String(item[f] || '').toLowerCase();
+        if (val === q) {
+          exactFieldMatch = true;
+          break;
+        }
+        if (val.startsWith(q)) {
+          startsWithFieldMatch = true;
+        }
+      }
+
+      if (exactFieldMatch) {
+        score += 50000;
+      } else if (startsWithFieldMatch) {
+        score += 25000;
+      }
+
       // Exact substring match in any field gets highest priority
-      if (searchableText.includes(query.toLowerCase())) {
+      if (searchableText.includes(q)) {
         score += 10000;
       }
       
@@ -109,6 +132,9 @@ export const smartSearch = <T extends Record<string, any>>(
       
       // Boost for match ratio
       score += matchRatio * 500;
+
+      // Penalty for longer text (so shorter, more exact matches bubble up)
+      score -= searchableText.length;
     }
 
     return { item, score, isMatch };

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { db } from '../../firebase';
-import { collection, addDoc, deleteDoc, doc, updateDoc, onSnapshot, writeBatch, getDocs } from 'firebase/firestore';
+import { collection, addDoc, deleteDoc, doc, updateDoc, writeBatch } from 'firebase/firestore';
 import { Language } from '../../types';
 import { Plus, Edit2, Trash2, X, Check, Search, GripVertical, Loader2 } from 'lucide-react';
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
@@ -8,8 +8,10 @@ import ConfirmModal from '../../components/ConfirmModal';
 import { handleFirestoreError, OperationType } from '../../utils/firestoreErrorHandler';
 import { useModalBehavior } from '../../hooks/useModalBehavior';
 
+import { useContent } from '../../contexts/ContentContext';
+
 export default function LanguageManagement() {
-  const [languages, setLanguages] = useState<Language[]>([]);
+  const { languages, updateSearchIndex } = useContent();
   const [newLanguage, setNewLanguage] = useState('');
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editName, setEditName] = useState('');
@@ -20,33 +22,7 @@ export default function LanguageManagement() {
   useModalBehavior(!!deleteId, () => setDeleteId(null));
 
   useEffect(() => {
-    // Load from cache initially
-    const cachedLanguages = localStorage.getItem('languages_cache');
-    if (cachedLanguages) {
-      setLanguages(JSON.parse(cachedLanguages));
-      setLoading(false);
-    }
-
-    const unsub = onSnapshot(collection(db, 'languages'), (snapshot) => {
-      const data = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() } as Language));
-      const sortedData = data.sort((a, b) => {
-        if (a.order !== undefined && b.order !== undefined) return a.order - b.order;
-        if (a.order !== undefined) return -1;
-        if (b.order !== undefined) return 1;
-        return a.name.localeCompare(b.name);
-      });
-      setLanguages(sortedData);
-      localStorage.setItem('languages_cache', JSON.stringify(sortedData));
-      setLoading(false);
-    }, (error) => {
-      console.error("Languages snapshot error:", error);
-      setLoading(false);
-      if (navigator.onLine) {
-        handleFirestoreError(error, OperationType.LIST, 'languages');
-      }
-    });
-
-    return () => unsub();
+    setLoading(false);
   }, []);
 
   const [processing, setProcessing] = useState<Record<string, boolean>>({});
@@ -57,8 +33,7 @@ export default function LanguageManagement() {
     setProcessing(prev => ({ ...prev, add: true }));
     try {
       const maxOrder = languages.length > 0 ? Math.max(...languages.map(l => l.order || 0)) : 0;
-      const docRef = await addDoc(collection(db, 'languages'), { name: newLanguage.trim(), order: maxOrder + 1 });
-      setLanguages([...languages, { id: docRef.id, name: newLanguage.trim(), order: maxOrder + 1 }]);
+      await addDoc(collection(db, 'languages'), { name: newLanguage.trim(), order: maxOrder + 1 });
       setNewLanguage('');
     } finally {
       setProcessing(prev => ({ ...prev, add: false }));
@@ -70,7 +45,6 @@ export default function LanguageManagement() {
     setProcessing(prev => ({ ...prev, delete: true }));
     try {
       await deleteDoc(doc(db, 'languages', deleteId));
-      setLanguages(languages.filter(l => l.id !== deleteId));
     } finally {
       setProcessing(prev => ({ ...prev, delete: false }));
     }
@@ -86,7 +60,6 @@ export default function LanguageManagement() {
     setProcessing(prev => ({ ...prev, edit: true }));
     try {
       await updateDoc(doc(db, 'languages', editingId), { name: editName.trim() });
-      setLanguages(languages.map(l => l.id === editingId ? { ...l, name: editName.trim() } : l));
       setEditingId(null);
       setEditName('');
     } finally {
@@ -101,9 +74,6 @@ export default function LanguageManagement() {
     const items = Array.from<Language>(languages);
     const [reorderedItem] = items.splice(result.source.index, 1);
     items.splice(result.destination.index, 0, reorderedItem);
-
-    // Optimistic update
-    setLanguages(items);
 
     // Batch update order in Firestore
     const batch = writeBatch(db);

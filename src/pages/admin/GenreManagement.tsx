@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { db } from '../../firebase';
-import { collection, addDoc, deleteDoc, doc, updateDoc, onSnapshot, writeBatch, getDocs } from 'firebase/firestore';
+import { collection, addDoc, deleteDoc, doc, updateDoc, writeBatch } from 'firebase/firestore';
 import { Genre } from '../../types';
 import { Plus, Edit2, Trash2, X, Check, Search, GripVertical, Loader2 } from 'lucide-react';
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
@@ -8,8 +8,10 @@ import ConfirmModal from '../../components/ConfirmModal';
 import { handleFirestoreError, OperationType } from '../../utils/firestoreErrorHandler';
 import { useModalBehavior } from '../../hooks/useModalBehavior';
 
+import { useContent } from '../../contexts/ContentContext';
+
 export default function GenreManagement() {
-  const [genres, setGenres] = useState<Genre[]>([]);
+  const { genres, updateSearchIndex } = useContent();
   const [newGenre, setNewGenre] = useState('');
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editName, setEditName] = useState('');
@@ -20,33 +22,7 @@ export default function GenreManagement() {
   useModalBehavior(!!deleteId, () => setDeleteId(null));
 
   useEffect(() => {
-    // Load from cache initially
-    const cachedGenres = localStorage.getItem('genres_cache');
-    if (cachedGenres) {
-      setGenres(JSON.parse(cachedGenres));
-      setLoading(false);
-    }
-
-    const unsub = onSnapshot(collection(db, 'genres'), (snapshot) => {
-      const data = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() } as Genre));
-      const sortedData = data.sort((a, b) => {
-        if (a.order !== undefined && b.order !== undefined) return a.order - b.order;
-        if (a.order !== undefined) return -1;
-        if (b.order !== undefined) return 1;
-        return a.name.localeCompare(b.name);
-      });
-      setGenres(sortedData);
-      localStorage.setItem('genres_cache', JSON.stringify(sortedData));
-      setLoading(false);
-    }, (error) => {
-      console.error("Genres snapshot error:", error);
-      setLoading(false);
-      if (navigator.onLine) {
-        handleFirestoreError(error, OperationType.LIST, 'genres');
-      }
-    });
-
-    return () => unsub();
+    setLoading(false);
   }, []);
 
   const [processing, setProcessing] = useState<Record<string, boolean>>({});
@@ -57,8 +33,7 @@ export default function GenreManagement() {
     setProcessing(prev => ({ ...prev, add: true }));
     try {
       const maxOrder = genres.length > 0 ? Math.max(...genres.map(g => g.order || 0)) : 0;
-      const docRef = await addDoc(collection(db, 'genres'), { name: newGenre.trim(), order: maxOrder + 1 });
-      setGenres([...genres, { id: docRef.id, name: newGenre.trim(), order: maxOrder + 1 }]);
+      await addDoc(collection(db, 'genres'), { name: newGenre.trim(), order: maxOrder + 1 });
       setNewGenre('');
     } finally {
       setProcessing(prev => ({ ...prev, add: false }));
@@ -70,7 +45,6 @@ export default function GenreManagement() {
     setProcessing(prev => ({ ...prev, delete: true }));
     try {
       await deleteDoc(doc(db, 'genres', deleteId));
-      setGenres(genres.filter(g => g.id !== deleteId));
     } finally {
       setProcessing(prev => ({ ...prev, delete: false }));
     }
@@ -86,7 +60,6 @@ export default function GenreManagement() {
     setProcessing(prev => ({ ...prev, edit: true }));
     try {
       await updateDoc(doc(db, 'genres', editingId), { name: editName.trim() });
-      setGenres(genres.map(g => g.id === editingId ? { ...g, name: editName.trim() } : g));
       setEditingId(null);
       setEditName('');
     } finally {
@@ -101,9 +74,6 @@ export default function GenreManagement() {
     const items = Array.from<Genre>(genres);
     const [reorderedItem] = items.splice(result.source.index, 1);
     items.splice(result.destination.index, 0, reorderedItem);
-
-    // Optimistic update
-    setGenres(items);
 
     // Batch update order in Firestore
     const batch = writeBatch(db);
