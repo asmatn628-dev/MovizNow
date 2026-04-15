@@ -44,7 +44,9 @@ import AdminSettings from './pages/admin/AdminSettings';
 const InstallApp = lazy(() => import('./pages/InstallApp'));
 
 const LoadingFallback = () => (
-  <div className="min-h-screen bg-white dark:bg-zinc-950 transition-colors duration-300" />
+  <div className="min-h-screen bg-white dark:bg-zinc-950 transition-colors duration-300 flex items-center justify-center">
+    <img src="/logo.svg" alt="MovizNow" className="w-24 h-24 animate-pulse" />
+  </div>
 );
 
 function MediaModalController({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {

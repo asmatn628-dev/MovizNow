@@ -12,7 +12,11 @@ export function ProtectedRoute({ children, requireAdmin = false }: ProtectedRout
   const location = useLocation();
 
   if (authLoading) {
-    return <div className="min-h-screen bg-white dark:bg-zinc-950" />;
+    return (
+      <div className="min-h-screen bg-white dark:bg-zinc-950 flex items-center justify-center transition-colors duration-300">
+        <img src="/logo.svg" alt="MovizNow" className="w-24 h-24 animate-pulse" />
+      </div>
+    );
   }
 
   if (!user) {
@@ -28,7 +32,11 @@ export function ProtectedRoute({ children, requireAdmin = false }: ProtectedRout
   // If admin is required, we must wait for the profile to check roles
   if (requireAdmin) {
     if (loading || !profile) {
-      return <div className="min-h-screen bg-white dark:bg-zinc-950" />;
+      return (
+        <div className="min-h-screen bg-white dark:bg-zinc-950 flex items-center justify-center transition-colors duration-300">
+          <img src="/logo.svg" alt="MovizNow" className="w-24 h-24 animate-pulse" />
+        </div>
+      );
     }
     if (profile.role !== 'admin' && profile.role !== 'content_manager' && profile.role !== 'user_manager' && profile.role !== 'manager' && profile.role !== 'owner') {
       console.log('ProtectedRoute: Admin required but user is not admin/manager/owner, redirecting to home');
