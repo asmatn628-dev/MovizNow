@@ -16,10 +16,7 @@ export function ProtectedRoute({ children, requireAdmin = false }: ProtectedRout
     return (
       <div className="min-h-screen bg-white dark:bg-zinc-950 flex flex-col items-center justify-center gap-4 transition-colors duration-300">
         <img src="/logo.svg" alt="MovizNow" className="w-32 h-32 animate-pulse" />
-        <div className="flex items-center gap-2 text-zinc-500 dark:text-zinc-400 font-medium">
-          <Loader2 className="w-5 h-5 animate-spin" />
-          <span>Checking access...</span>
-        </div>
+        <Loader2 className="w-6 h-6 animate-spin text-zinc-500 dark:text-zinc-400" />
       </div>
     );
   }
@@ -40,10 +37,7 @@ export function ProtectedRoute({ children, requireAdmin = false }: ProtectedRout
       return (
         <div className="min-h-screen bg-white dark:bg-zinc-950 flex flex-col items-center justify-center gap-4 transition-colors duration-300">
           <img src="/logo.svg" alt="MovizNow" className="w-32 h-32 animate-pulse" />
-          <div className="flex items-center gap-2 text-zinc-500 dark:text-zinc-400 font-medium">
-            <Loader2 className="w-5 h-5 animate-spin" />
-            <span>Verifying permissions...</span>
-          </div>
+          <Loader2 className="w-6 h-6 animate-spin text-zinc-500 dark:text-zinc-400" />
         </div>
       );
     }
